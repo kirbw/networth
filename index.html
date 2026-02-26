@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>Annual Finance Tracker</h1>
+      <p>Track annual income, charitable giving, and net worth in one place. Data is saved to a local SQLite database.</p>
+    </header>
+
+    <section class="card form-card">
+      <h2>Add or Update Annual Data</h2>
+      <form id="finance-form">
+        <div class="form-grid">
+          <label>
+            Tax Year
+            <input id="year" name="year" type="number" min="1900" max="3000" required />
+          </label>
+
+          <label>
+            Total Annual Income ($)
+            <input id="income" name="income" type="number" min="0" step="0.01" required />
+          </label>
+
+          <label>
+            Annual Charitable Donations ($)
+            <input id="donation" name="donation" type="number" min="0" step="0.01" required />
+          </label>
+
+          <label>
+            Net Worth ($)
+            <input id="netWorth" name="netWorth" type="number" step="0.01" required />
+          </label>
+        </div>
+
+        <button type="submit">Save Year</button>
+        <p id="form-message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section class="card chart-card">
+      <div class="section-heading">
+        <h2>Financial Trends</h2>
+      </div>
+      <canvas id="finance-chart" aria-label="A chart showing income, giving, and net worth trends" role="img"></canvas>
+    </section>
+
+    <section class="card table-card">
+      <div class="section-heading">
+        <h2>Saved Annual Records</h2>
+        <button id="clear-data" class="danger" type="button">Clear All Data</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Year</th>
+              <th>Income</th>
+              <th>Donated</th>
+              <th>Net Worth</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="records-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
