@@ -8,12 +8,22 @@ A simple web app for tracking yearly:
 
 ## Release
 
-Current release: **v0.0.2**
+Current release: **v0.0.3**
+
+## Release Notes
+
+### v0.0.3 highlights
+- Added table-based record editing flow.
+- Added year picker suggestions (1970+), while still allowing manual entry.
+- Made giving goal percentage editable (default 10%) with saved preference.
+- Added "needed to reach goal" amount in cumulative progress indicator.
+
+See [CHANGELOG.md](./CHANGELOG.md) for full history.
 
 ## Features
 
 - Save one record per tax year
-- Update an existing year by re-submitting the same year
+- Edit an existing year
 - Income and giving chart by year
 - Separate net worth chart (only plots years where net worth is provided)
 - Cumulative giving progress section with:
