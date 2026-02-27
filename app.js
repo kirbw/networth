@@ -5,11 +5,18 @@ const recordsBody = document.getElementById("records-body");
 const clearButton = document.getElementById("clear-data");
 const formMessage = document.getElementById("form-message");
 const goalIndicator = document.getElementById("goal-indicator");
+const yearInput = document.getElementById("year");
+const yearOptions = document.getElementById("year-options");
+const incomeInput = document.getElementById("income");
+const donationInput = document.getElementById("donation");
+const netWorthInput = document.getElementById("netWorth");
+const saveButton = document.getElementById("save-btn");
 
 let records = [];
 let incomeGivingChart;
 let netWorthChart;
 let goalProgressChart;
+let editingYear = null;
 
 function currency(value) {
   return new Intl.NumberFormat("en-US", {
@@ -27,9 +34,40 @@ function sortRecords() {
   records.sort((a, b) => a.year - b.year);
 }
 
+function populateYearOptions() {
+  const startYear = 1970;
+  const currentYear = new Date().getFullYear();
+  yearOptions.innerHTML = "";
+
+  for (let year = currentYear + 1; year >= startYear; year -= 1) {
+    const option = document.createElement("option");
+    option.value = String(year);
+    yearOptions.appendChild(option);
+  }
+}
+
 function formatNetWorth(value) {
   if (value === null || value === undefined) return "—";
   return currency(value);
+}
+
+function setFormModeDefault() {
+  editingYear = null;
+  saveButton.textContent = "Save Year";
+}
+
+function startEditingRecord(year) {
+  const record = records.find((entry) => entry.year === year);
+  if (!record) return;
+
+  editingYear = year;
+  yearInput.value = String(record.year);
+  incomeInput.value = String(record.income);
+  donationInput.value = String(record.donation);
+  netWorthInput.value = record.netWorth === null || record.netWorth === undefined ? "" : String(record.netWorth);
+  saveButton.textContent = "Update Year";
+  setMessage(`Editing ${year}. Update the fields and click Update Year.`);
+  yearInput.focus();
 }
 
 function renderTable() {
@@ -48,7 +86,10 @@ function renderTable() {
       <td>${currency(record.income)}</td>
       <td>${currency(record.donation)}</td>
       <td>${formatNetWorth(record.netWorth)}</td>
-      <td><button class="delete-btn" data-year="${record.year}" type="button">Delete</button></td>
+      <td>
+        <button class="edit-btn" data-year="${record.year}" type="button">Edit</button>
+        <button class="delete-btn" data-year="${record.year}" type="button">Delete</button>
+      </td>
     `;
     recordsBody.appendChild(row);
   });
@@ -225,6 +266,20 @@ async function loadRecords() {
   }
 }
 
+async function saveRecord(payload) {
+  const response = await fetch("/api/records", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error("save failed");
+  }
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -235,7 +290,7 @@ form.addEventListener("submit", async (event) => {
   const netWorthRaw = String(formData.get("netWorth") ?? "").trim();
   const netWorth = netWorthRaw === "" ? null : Number(netWorthRaw);
 
-  if (!year || income < 0 || donation < 0 || (netWorth !== null && Number.isNaN(netWorth))) {
+  if (!year || year < 1970 || income < 0 || donation < 0 || (netWorth !== null && Number.isNaN(netWorth))) {
     setMessage("Please enter valid values for all fields.");
     return;
   }
@@ -243,20 +298,24 @@ form.addEventListener("submit", async (event) => {
   const existing = records.find((record) => record.year === year);
 
   try {
-    const response = await fetch("/api/records", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ year, income, donation, netWorth }),
-    });
+    await saveRecord({ year, income, donation, netWorth });
 
-    if (!response.ok) {
-      throw new Error("save failed");
+    if (editingYear !== null && editingYear !== year) {
+      const deleteOldResponse = await fetch(`/api/records/${editingYear}`, { method: "DELETE" });
+      if (!deleteOldResponse.ok) {
+        throw new Error("delete old failed");
+      }
     }
 
-    setMessage(existing ? `Updated records for ${year}.` : `Saved records for ${year}.`);
+    const message = editingYear !== null
+      ? `Updated records for ${editingYear}${editingYear !== year ? ` → ${year}` : ""}.`
+      : existing
+        ? `Updated records for ${year}.`
+        : `Saved records for ${year}.`;
+
+    setMessage(message);
     form.reset();
+    setFormModeDefault();
     await loadRecords();
   } catch {
     setMessage("Unable to save record to database.");
@@ -267,15 +326,26 @@ recordsBody.addEventListener("click", async (event) => {
   const target = event.target;
 
   if (!(target instanceof HTMLButtonElement)) return;
-  if (!target.classList.contains("delete-btn")) return;
 
   const year = Number(target.dataset.year);
+
+  if (target.classList.contains("edit-btn")) {
+    startEditingRecord(year);
+    return;
+  }
+
+  if (!target.classList.contains("delete-btn")) return;
 
   try {
     const response = await fetch(`/api/records/${year}`, {
       method: "DELETE",
     });
     if (!response.ok) throw new Error("delete failed");
+
+    if (editingYear === year) {
+      form.reset();
+      setFormModeDefault();
+    }
 
     setMessage(`Deleted records for ${year}.`);
     await loadRecords();
@@ -291,6 +361,8 @@ clearButton.addEventListener("click", async () => {
     });
     if (!response.ok) throw new Error("clear failed");
 
+    form.reset();
+    setFormModeDefault();
     setMessage("Cleared all saved data.");
     await loadRecords();
   } catch {
@@ -298,4 +370,6 @@ clearButton.addEventListener("click", async () => {
   }
 });
 
+populateYearOptions();
+setFormModeDefault();
 loadRecords();

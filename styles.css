@@ -61,6 +61,12 @@ label {
   font-size: 0.95rem;
 }
 
+.label-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
 .optional {
   color: var(--muted);
   font-weight: 400;
@@ -141,10 +147,16 @@ td {
   background: var(--danger);
 }
 
+.edit-btn,
 .delete-btn {
   margin-top: 0;
   padding: 0.45rem 0.7rem;
   font-size: 0.85rem;
+}
+
+.edit-btn {
+  margin-right: 0.4rem;
+  background: #2d6cdf;
 }
 
 @media (max-width: 640px) {

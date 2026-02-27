@@ -20,7 +20,8 @@
         <div class="form-grid">
           <label>
             Tax Year
-            <input id="year" name="year" type="number" min="1900" max="3000" required />
+            <input id="year" name="year" type="number" min="1970" max="3000" list="year-options" required />
+            <datalist id="year-options"></datalist>
           </label>
 
           <label>
@@ -34,12 +35,12 @@
           </label>
 
           <label>
-            Net Worth ($) <span class="optional">(optional)</span>
+            <span class="label-title">Net Worth ($) <span class="optional">(optional)</span></span>
             <input id="netWorth" name="netWorth" type="number" step="0.01" />
           </label>
         </div>
 
-        <button type="submit">Save Year</button>
+        <button id="save-btn" type="submit">Save Year</button>
         <p id="form-message" role="status" aria-live="polite"></p>
       </form>
     </section>
