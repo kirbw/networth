@@ -23,7 +23,7 @@ See [CHANGELOG.md](./CHANGELOG.md) for full history.
 ## Features
 
 - Save one record per tax year
-- Update an existing year by re-submitting the same year
+- Edit an existing year
 - Income and giving chart by year
 - Separate net worth chart (only plots years where net worth is provided)
 - Cumulative giving progress section with:
