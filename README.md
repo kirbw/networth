@@ -13,7 +13,6 @@ A lightweight web app for tracking yearly:
 - Visual trend graph using Chart.js
 - Table view for all saved data
 - Delete individual years or clear all records
-- Data persists in browser local storage
 
 ## Run locally
 
