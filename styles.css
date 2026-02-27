@@ -1,0 +1,182 @@
+:root {
+  --bg: #f4f7fb;
+  --card: #ffffff;
+  --text: #1c2434;
+  --muted: #61708b;
+  --primary: #3956f6;
+  --danger: #d53f3f;
+  --border: #dde4f0;
+  --success-bg: #e8f7ef;
+  --success-text: #146c43;
+  --warning-bg: #fff4e5;
+  --warning-text: #9a5d00;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.container {
+  max-width: 1050px;
+  margin: 2rem auto;
+  padding: 0 1rem 2rem;
+  display: grid;
+  gap: 1rem;
+}
+
+header h1 {
+  margin-bottom: 0.25rem;
+}
+
+header p {
+  margin-top: 0;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(28, 36, 52, 0.08);
+  padding: 1rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.95rem;
+}
+
+.label-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.optional {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+
+input {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem;
+  font-size: 1rem;
+}
+
+button {
+  margin-top: 1rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+#form-message {
+  min-height: 1.2rem;
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+}
+
+.goal-controls {
+  margin-bottom: 0.75rem;
+}
+
+.goal-label {
+  max-width: 220px;
+}
+
+.goal-label input {
+  margin-top: 0.2rem;
+}
+
+.goal-indicator {
+  border-radius: 10px;
+  padding: 0.75rem;
+  margin-bottom: 0.8rem;
+  font-weight: 600;
+}
+
+.goal-indicator.on-track {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.goal-indicator.off-track {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.65rem;
+  text-align: left;
+}
+
+.danger,
+.delete-btn {
+  background: var(--danger);
+}
+
+.edit-btn,
+.delete-btn {
+  margin-top: 0;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.edit-btn {
+  margin-right: 0.4rem;
+  background: #2d6cdf;
+}
+
+@media (max-width: 640px) {
+  .container {
+    margin-top: 1rem;
+  }
+
+  .card {
+    padding: 0.85rem;
+  }
+}
