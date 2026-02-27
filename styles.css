@@ -6,6 +6,10 @@
   --primary: #3956f6;
   --danger: #d53f3f;
   --border: #dde4f0;
+  --success-bg: #e8f7ef;
+  --success-text: #146c43;
+  --warning-bg: #fff4e5;
+  --warning-text: #9a5d00;
 }
 
 * {
@@ -57,6 +61,12 @@ label {
   font-size: 0.95rem;
 }
 
+.optional {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+
 input {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -83,6 +93,23 @@ button:hover {
   min-height: 1.2rem;
   margin: 0.6rem 0 0;
   color: var(--muted);
+}
+
+.goal-indicator {
+  border-radius: 10px;
+  padding: 0.75rem;
+  margin-bottom: 0.8rem;
+  font-weight: 600;
+}
+
+.goal-indicator.on-track {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.goal-indicator.off-track {
+  background: var(--warning-bg);
+  color: var(--warning-text);
 }
 
 .section-heading {

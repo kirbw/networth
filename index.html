@@ -11,7 +11,7 @@
   <main class="container">
     <header>
       <h1>Annual Finance Tracker</h1>
-      <p>Track annual income, charitable giving, and net worth in one place.</p>
+      <p>Track annual income, charitable giving, and net worth in one place. Data is saved to a local SQLite database.</p>
     </header>
 
     <section class="card form-card">
@@ -34,8 +34,8 @@
           </label>
 
           <label>
-            Net Worth ($)
-            <input id="netWorth" name="netWorth" type="number" step="0.01" required />
+            Net Worth ($) <span class="optional">(optional)</span>
+            <input id="netWorth" name="netWorth" type="number" step="0.01" />
           </label>
         </div>
 
@@ -46,9 +46,24 @@
 
     <section class="card chart-card">
       <div class="section-heading">
-        <h2>Financial Trends</h2>
+        <h2>Income & Giving by Year</h2>
       </div>
-      <canvas id="finance-chart" aria-label="A chart showing income, giving, and net worth trends" role="img"></canvas>
+      <canvas id="income-giving-chart" aria-label="A chart showing income and giving trends" role="img"></canvas>
+    </section>
+
+    <section class="card chart-card">
+      <div class="section-heading">
+        <h2>Net Worth by Year</h2>
+      </div>
+      <canvas id="net-worth-chart" aria-label="A chart showing net worth trends" role="img"></canvas>
+    </section>
+
+    <section class="card chart-card">
+      <div class="section-heading">
+        <h2>Cumulative Giving Progress</h2>
+      </div>
+      <div id="goal-indicator" class="goal-indicator" aria-live="polite"></div>
+      <canvas id="goal-progress-chart" aria-label="A chart showing cumulative income, giving, and a 10 percent target" role="img"></canvas>
     </section>
 
     <section class="card table-card">

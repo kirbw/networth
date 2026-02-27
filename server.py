@@ -7,6 +7,38 @@ from urllib.parse import urlparse
 DB_PATH = Path(__file__).with_name("finance.db")
 
 
+def migrate_schema(conn: sqlite3.Connection):
+    table_info = conn.execute("PRAGMA table_info(annual_records)").fetchall()
+    if not table_info:
+        return
+
+    net_worth_column = next((col for col in table_info if col[1] == "netWorth"), None)
+    net_worth_not_null = bool(net_worth_column and net_worth_column[3] == 1)
+
+    if not net_worth_not_null:
+        return
+
+    conn.execute("ALTER TABLE annual_records RENAME TO annual_records_old")
+    conn.execute(
+        """
+        CREATE TABLE annual_records (
+            year INTEGER PRIMARY KEY,
+            income REAL NOT NULL,
+            donation REAL NOT NULL,
+            netWorth REAL
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO annual_records (year, income, donation, netWorth)
+        SELECT year, income, donation, netWorth
+        FROM annual_records_old
+        """
+    )
+    conn.execute("DROP TABLE annual_records_old")
+
+
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
@@ -15,10 +47,11 @@ def init_db():
                 year INTEGER PRIMARY KEY,
                 income REAL NOT NULL,
                 donation REAL NOT NULL,
-                netWorth REAL NOT NULL
+                netWorth REAL
             )
             """
         )
+        migrate_schema(conn)
 
 
 class FinanceHandler(SimpleHTTPRequestHandler):
@@ -59,7 +92,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             year = int(data["year"])
             income = float(data["income"])
             donation = float(data["donation"])
-            net_worth = float(data["netWorth"])
+            net_worth_raw = data.get("netWorth")
+            net_worth = None if net_worth_raw in (None, "") else float(net_worth_raw)
             if year <= 0 or income < 0 or donation < 0:
                 raise ValueError
         except (KeyError, ValueError, TypeError, json.JSONDecodeError):
