@@ -1,10 +1,28 @@
+const STORAGE_KEY = "annual-finance-records";
+
 const form = document.getElementById("finance-form");
 const recordsBody = document.getElementById("records-body");
 const clearButton = document.getElementById("clear-data");
 const formMessage = document.getElementById("form-message");
 
-let records = [];
+let records = loadRecords();
 let chart;
+
+function loadRecords() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecords() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+}
 
 function currency(value) {
   return new Intl.NumberFormat("en-US", {
@@ -104,19 +122,7 @@ function setMessage(text) {
   formMessage.textContent = text;
 }
 
-async function loadRecords() {
-  try {
-    const response = await fetch("/api/records");
-    if (!response.ok) throw new Error("load failed");
-    records = await response.json();
-    renderTable();
-    renderChart();
-  } catch {
-    setMessage("Unable to load records from database.");
-  }
-}
-
-form.addEventListener("submit", async (event) => {
+form.addEventListener("submit", (event) => {
   event.preventDefault();
 
   const formData = new FormData(form);
@@ -132,60 +138,44 @@ form.addEventListener("submit", async (event) => {
 
   const existing = records.find((record) => record.year === year);
 
-  try {
-    const response = await fetch("/api/records", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ year, income, donation, netWorth }),
-    });
-
-    if (!response.ok) {
-      throw new Error("save failed");
-    }
-
-    setMessage(existing ? `Updated records for ${year}.` : `Saved records for ${year}.`);
-    form.reset();
-    await loadRecords();
-  } catch {
-    setMessage("Unable to save record to database.");
+  if (existing) {
+    existing.income = income;
+    existing.donation = donation;
+    existing.netWorth = netWorth;
+    setMessage(`Updated records for ${year}.`);
+  } else {
+    records.push({ year, income, donation, netWorth });
+    setMessage(`Saved records for ${year}.`);
   }
+
+  saveRecords();
+  renderTable();
+  renderChart();
+  form.reset();
 });
 
-recordsBody.addEventListener("click", async (event) => {
+recordsBody.addEventListener("click", (event) => {
   const target = event.target;
 
   if (!(target instanceof HTMLButtonElement)) return;
   if (!target.classList.contains("delete-btn")) return;
 
   const year = Number(target.dataset.year);
+  records = records.filter((record) => record.year !== year);
 
-  try {
-    const response = await fetch(`/api/records/${year}`, {
-      method: "DELETE",
-    });
-    if (!response.ok) throw new Error("delete failed");
-
-    setMessage(`Deleted records for ${year}.`);
-    await loadRecords();
-  } catch {
-    setMessage("Unable to delete record from database.");
-  }
+  saveRecords();
+  renderTable();
+  renderChart();
+  setMessage(`Deleted records for ${year}.`);
 });
 
-clearButton.addEventListener("click", async () => {
-  try {
-    const response = await fetch("/api/records", {
-      method: "DELETE",
-    });
-    if (!response.ok) throw new Error("clear failed");
-
-    setMessage("Cleared all saved data.");
-    await loadRecords();
-  } catch {
-    setMessage("Unable to clear records from database.");
-  }
+clearButton.addEventListener("click", () => {
+  records = [];
+  saveRecords();
+  renderTable();
+  renderChart();
+  setMessage("Cleared all saved data.");
 });
 
-loadRecords();
+renderTable();
+renderChart();
