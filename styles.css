@@ -101,6 +101,18 @@ button:hover {
   color: var(--muted);
 }
 
+.goal-controls {
+  margin-bottom: 0.75rem;
+}
+
+.goal-label {
+  max-width: 220px;
+}
+
+.goal-label input {
+  margin-top: 0.2rem;
+}
+
 .goal-indicator {
   border-radius: 10px;
   padding: 0.75rem;

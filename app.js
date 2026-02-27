@@ -1,10 +1,12 @@
-const GOAL_PERCENT = 0.1;
+const DEFAULT_GOAL_PERCENT = 10;
+const GOAL_STORAGE_KEY = "giving-goal-percent";
 
 const form = document.getElementById("finance-form");
 const recordsBody = document.getElementById("records-body");
 const clearButton = document.getElementById("clear-data");
 const formMessage = document.getElementById("form-message");
 const goalIndicator = document.getElementById("goal-indicator");
+const goalPercentInput = document.getElementById("goal-percent-input");
 const yearInput = document.getElementById("year");
 const yearOptions = document.getElementById("year-options");
 const incomeInput = document.getElementById("income");
@@ -17,6 +19,24 @@ let incomeGivingChart;
 let netWorthChart;
 let goalProgressChart;
 let editingYear = null;
+let goalPercent = getStoredGoalPercent();
+
+function getStoredGoalPercent() {
+  const raw = localStorage.getItem(GOAL_STORAGE_KEY);
+  const parsed = Number(raw);
+  if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
+    return DEFAULT_GOAL_PERCENT;
+  }
+  return parsed;
+}
+
+function setStoredGoalPercent(value) {
+  localStorage.setItem(GOAL_STORAGE_KEY, String(value));
+}
+
+function goalRatio() {
+  return goalPercent / 100;
+}
 
 function currency(value) {
   return new Intl.NumberFormat("en-US", {
@@ -129,13 +149,9 @@ function createIncomeGivingChart() {
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { position: "bottom" },
-      },
+      plugins: { legend: { position: "bottom" } },
       scales: {
-        y: {
-          ticks: { callback: (value) => currency(value) },
-        },
+        y: { ticks: { callback: (value) => currency(value) } },
       },
     },
   });
@@ -164,13 +180,9 @@ function createNetWorthChart() {
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { position: "bottom" },
-      },
+      plugins: { legend: { position: "bottom" } },
       scales: {
-        y: {
-          ticks: { callback: (value) => currency(value) },
-        },
+        y: { ticks: { callback: (value) => currency(value) } },
       },
     },
   });
@@ -190,13 +202,19 @@ function createGoalChartAndIndicator() {
     cumulativeDonations += Number(entry.donation);
     cumulativeIncomeData.push(cumulativeIncome);
     cumulativeDonationsData.push(cumulativeDonations);
-    targetData.push(cumulativeIncome * GOAL_PERCENT);
+    targetData.push(cumulativeIncome * goalRatio());
   });
 
   const givingRate = cumulativeIncome > 0 ? cumulativeDonations / cumulativeIncome : 0;
-  const trackClass = givingRate >= GOAL_PERCENT ? "on-track" : "off-track";
+  const targetAmount = cumulativeIncome * goalRatio();
+  const neededToGoal = Math.max(0, targetAmount - cumulativeDonations);
+
+  const trackClass = givingRate >= goalRatio() ? "on-track" : "off-track";
   goalIndicator.className = `goal-indicator ${trackClass}`;
-  goalIndicator.textContent = `Cumulative giving rate: ${percent(givingRate)} (${currency(cumulativeDonations)} donated of ${currency(cumulativeIncome)} income). Goal: at least ${percent(GOAL_PERCENT)}.`;
+  goalIndicator.innerHTML = `
+    <div>Cumulative giving rate: ${percent(givingRate)} (${currency(cumulativeDonations)} donated of ${currency(cumulativeIncome)} income).</div>
+    <div>Goal: at least ${goalPercent.toFixed(1)}% (${currency(targetAmount)}). Needed to reach goal: ${currency(neededToGoal)}.</div>
+  `;
 
   destroyIfExists(goalProgressChart);
   const ctx = document.getElementById("goal-progress-chart").getContext("2d");
@@ -220,7 +238,7 @@ function createGoalChartAndIndicator() {
           tension: 0.2,
         },
         {
-          label: "10% Giving Target",
+          label: `${goalPercent.toFixed(1)}% Giving Target`,
           data: targetData,
           borderColor: "#f08c00",
           borderDash: [6, 6],
@@ -231,13 +249,9 @@ function createGoalChartAndIndicator() {
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { position: "bottom" },
-      },
+      plugins: { legend: { position: "bottom" } },
       scales: {
-        y: {
-          ticks: { callback: (value) => currency(value) },
-        },
+        y: { ticks: { callback: (value) => currency(value) } },
       },
     },
   });
@@ -269,15 +283,11 @@ async function loadRecords() {
 async function saveRecord(payload) {
   const response = await fetch("/api/records", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 
-  if (!response.ok) {
-    throw new Error("save failed");
-  }
+  if (!response.ok) throw new Error("save failed");
 }
 
 form.addEventListener("submit", async (event) => {
@@ -302,9 +312,7 @@ form.addEventListener("submit", async (event) => {
 
     if (editingYear !== null && editingYear !== year) {
       const deleteOldResponse = await fetch(`/api/records/${editingYear}`, { method: "DELETE" });
-      if (!deleteOldResponse.ok) {
-        throw new Error("delete old failed");
-      }
+      if (!deleteOldResponse.ok) throw new Error("delete old failed");
     }
 
     const message = editingYear !== null
@@ -337,9 +345,7 @@ recordsBody.addEventListener("click", async (event) => {
   if (!target.classList.contains("delete-btn")) return;
 
   try {
-    const response = await fetch(`/api/records/${year}`, {
-      method: "DELETE",
-    });
+    const response = await fetch(`/api/records/${year}`, { method: "DELETE" });
     if (!response.ok) throw new Error("delete failed");
 
     if (editingYear === year) {
@@ -354,11 +360,23 @@ recordsBody.addEventListener("click", async (event) => {
   }
 });
 
+goalPercentInput.addEventListener("change", () => {
+  const value = Number(goalPercentInput.value);
+  if (Number.isNaN(value) || value < 0 || value > 100) {
+    goalPercentInput.value = goalPercent.toFixed(1);
+    setMessage("Goal percentage must be between 0 and 100.");
+    return;
+  }
+
+  goalPercent = value;
+  setStoredGoalPercent(goalPercent);
+  renderCharts();
+  setMessage(`Goal updated to ${goalPercent.toFixed(1)}%.`);
+});
+
 clearButton.addEventListener("click", async () => {
   try {
-    const response = await fetch("/api/records", {
-      method: "DELETE",
-    });
+    const response = await fetch("/api/records", { method: "DELETE" });
     if (!response.ok) throw new Error("clear failed");
 
     form.reset();
@@ -371,5 +389,6 @@ clearButton.addEventListener("click", async () => {
 });
 
 populateYearOptions();
+goalPercentInput.value = goalPercent.toFixed(1);
 setFormModeDefault();
 loadRecords();

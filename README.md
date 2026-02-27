@@ -17,9 +17,11 @@ Current release: **v0.0.2**
 - Income and giving chart by year
 - Separate net worth chart (only plots years where net worth is provided)
 - Cumulative giving progress section with:
+  - Editable goal percentage (defaults to 10% and is saved locally)
   - Cumulative income vs cumulative donations chart
-  - 10% goal target line
+  - Goal target line based on your selected percentage
   - On-track/off-track indicator based on lifetime giving rate
+  - Amount still needed to reach your current giving goal
 - Table view for all saved data
 - Delete individual years or clear all records
 - Persistent storage in SQLite (`finance.db`)
