@@ -401,13 +401,13 @@ function initInvestmentsPage() {
     applySort();
     tableBody.innerHTML = "";
     if (!investments.length) {
-      tableBody.innerHTML = `<tr><td colspan="9">No stocks yet.</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="10">No stocks yet.</td></tr>`;
       return;
     }
 
     let totalPurchaseValue = 0;
     let totalCurrentValue = 0;
-    let missingCurrentValues = 0;
+    let valuedPositions = 0;
 
     for (const inv of investments) {
       const purchaseValue = Number(inv.shares) * Number(inv.purchase_price);
@@ -416,29 +416,34 @@ function initInvestmentsPage() {
       const companyName = inv.company_name || "—";
       const currentPriceText = currentPrice == null ? "N/A" : currency(currentPrice);
 
-      totalPurchaseValue += purchaseValue;
-      if (currentValue !== null) totalCurrentValue += currentValue;
-      else missingCurrentValues += 1;
-
       let gainLossCell = '<span>—</span>';
+      let gainLossPctCell = '<span>—</span>';
       if (currentValue !== null) {
+        totalPurchaseValue += purchaseValue;
+        totalCurrentValue += currentValue;
+        valuedPositions += 1;
         const gainLoss = currentValue - purchaseValue;
+        const gainLossPct = purchaseValue > 0 ? (gainLoss / purchaseValue) * 100 : 0;
         const cls = gainLoss >= 0 ? "gain-positive" : "gain-negative";
         gainLossCell = `<span class="${cls}">${gainLoss >= 0 ? "+" : ""}${currency(gainLoss)}</span>`;
+        gainLossPctCell = `<span class="${cls}">${gainLossPct >= 0 ? "+" : ""}${gainLossPct.toFixed(2)}%</span>`;
       }
 
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${inv.ticker}</td><td>${companyName}</td><td>${inv.purchase_date}</td><td>${inv.shares}</td><td>${currency(inv.purchase_price)}</td><td>${currency(purchaseValue)}</td><td>${currentPriceText}</td><td>${gainLossCell}</td><td><button class="edit-btn" data-id="${inv.id}" type="button">Edit</button><button class="delete-btn" data-id="${inv.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${inv.ticker}</td><td>${companyName}</td><td>${inv.purchase_date}</td><td>${inv.shares}</td><td>${currency(inv.purchase_price)}</td><td>${currency(purchaseValue)}</td><td>${currentPriceText}</td><td>${gainLossCell}</td><td>${gainLossPctCell}</td><td><button class="edit-btn" data-id="${inv.id}" type="button">Edit</button><button class="delete-btn" data-id="${inv.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
 
     const totalGainLoss = totalCurrentValue - totalPurchaseValue;
-    const totalCurrentText = missingCurrentValues > 0 ? "N/A" : currency(totalCurrentValue);
-    const totalGainLossText = missingCurrentValues > 0 ? "N/A" : `${totalGainLoss >= 0 ? "+" : ""}${currency(totalGainLoss)}`;
-    const totalGainLossClass = missingCurrentValues > 0 ? "" : (totalGainLoss >= 0 ? "gain-positive" : "gain-negative");
+    const hasValuedData = valuedPositions > 0;
+    const totalCurrentText = hasValuedData ? currency(totalCurrentValue) : "N/A";
+    const totalGainLossText = hasValuedData ? `${totalGainLoss >= 0 ? "+" : ""}${currency(totalGainLoss)}` : "N/A";
+    const totalGainLossPct = hasValuedData && totalPurchaseValue > 0 ? (totalGainLoss / totalPurchaseValue) * 100 : null;
+    const totalGainLossPctText = totalGainLossPct == null ? "N/A" : `${totalGainLossPct >= 0 ? "+" : ""}${totalGainLossPct.toFixed(2)}%`;
+    const totalGainLossClass = !hasValuedData ? "" : (totalGainLoss >= 0 ? "gain-positive" : "gain-negative");
     const totalRow = document.createElement("tr");
     totalRow.className = "totals-row";
-    totalRow.innerHTML = `<td colspan="5"><strong>Totals</strong></td><td><strong>${currency(totalPurchaseValue)}</strong></td><td><strong>${totalCurrentText}</strong></td><td><strong class="${totalGainLossClass}">${totalGainLossText}</strong></td><td></td>`;
+    totalRow.innerHTML = `<td colspan="5"><strong>Totals (priced holdings)</strong></td><td><strong>${hasValuedData ? currency(totalPurchaseValue) : "N/A"}</strong></td><td><strong>${totalCurrentText}</strong></td><td><strong class="${totalGainLossClass}">${totalGainLossText}</strong></td><td><strong class="${totalGainLossClass}">${totalGainLossPctText}</strong></td><td></td>`;
     tableBody.appendChild(totalRow);
 
     if (lastRefreshedEl) {
@@ -575,7 +580,7 @@ function initPreciousMetalsPage() {
     applySort();
     tableBody.innerHTML = "";
     if (!metals.length) {
-      tableBody.innerHTML = `<tr><td colspan="10">No precious metals yet.</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="11">No precious metals yet.</td></tr>`;
       return;
     }
 
@@ -585,14 +590,18 @@ function initPreciousMetalsPage() {
     for (const item of metals) {
       totalPurchase += Number(item.purchase_price);
       totalCurrent += Number(item.current_value);
+      const gainLoss = Number(item.current_value) - Number(item.purchase_price);
+      const gainLossPct = Number(item.purchase_price) > 0 ? (gainLoss / Number(item.purchase_price)) * 100 : 0;
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${item.metal_type}</td><td>${item.description}</td><td>${item.quantity}</td><td>${item.weight}</td><td>${item.purchase_date}</td><td>${item.where_purchased}</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${(Number(item.current_value) - Number(item.purchase_price)) >= 0 ? `<span class="gain-positive">+${currency(Number(item.current_value) - Number(item.purchase_price))}</span>` : `<span class="gain-negative">${currency(Number(item.current_value) - Number(item.purchase_price))}</span>`}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${item.metal_type}</td><td>${item.description}</td><td>${item.quantity}</td><td>${item.weight}</td><td>${item.purchase_date}</td><td>${item.where_purchased}</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${gainLoss >= 0 ? `<span class="gain-positive">+${currency(gainLoss)}</span>` : `<span class="gain-negative">${currency(gainLoss)}</span>`}</td><td>${gainLossPct >= 0 ? `<span class="gain-positive">+${gainLossPct.toFixed(2)}%</span>` : `<span class="gain-negative">${gainLossPct.toFixed(2)}%</span>`}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
 
+    const totalGainLoss = totalCurrent - totalPurchase;
+    const totalGainLossPct = totalPurchase > 0 ? (totalGainLoss / totalPurchase) * 100 : 0;
     const totalRow = document.createElement("tr");
     totalRow.className = "totals-row";
-    totalRow.innerHTML = `<td colspan="6"><strong>Totals</strong></td><td><strong>${currency(totalPurchase)}</strong></td><td><strong>${currency(totalCurrent)}</strong></td><td><strong>${(totalCurrent - totalPurchase) >= 0 ? `<span class="gain-positive">+${currency(totalCurrent - totalPurchase)}</span>` : `<span class="gain-negative">${currency(totalCurrent - totalPurchase)}</span>`}</strong></td><td></td>`;
+    totalRow.innerHTML = `<td colspan="6"><strong>Totals</strong></td><td><strong>${currency(totalPurchase)}</strong></td><td><strong>${currency(totalCurrent)}</strong></td><td><strong>${totalGainLoss >= 0 ? `<span class="gain-positive">+${currency(totalGainLoss)}</span>` : `<span class="gain-negative">${currency(totalGainLoss)}</span>`}</strong></td><td><strong>${totalGainLossPct >= 0 ? `<span class="gain-positive">+${totalGainLossPct.toFixed(2)}%</span>` : `<span class="gain-negative">${totalGainLossPct.toFixed(2)}%</span>`}</strong></td><td></td>`;
     tableBody.appendChild(totalRow);
   }
 
@@ -663,7 +672,7 @@ function initRealEstatePage() {
   const sortHeaders = document.querySelectorAll("[data-sort-real-estate]");
   const submitBtn = document.getElementById("real-estate-submit-btn");
   let rows = [];
-  let sortKey = "address";
+  let sortKey = "description";
   let sortDirection = "asc";
   let editingId = null;
 
@@ -697,7 +706,7 @@ function initRealEstatePage() {
     document.getElementById("re-purchase-price").value = item.purchase_price;
     document.getElementById("re-current-value").value = item.current_value;
     if (submitBtn) submitBtn.textContent = "Update Real Estate";
-    setText(msg, `Editing ${item.address}.`);
+    setText(msg, `Editing ${item.description || item.address}.`);
   }
 
   function resetEditState() {
@@ -715,7 +724,7 @@ function initRealEstatePage() {
     for (const item of rows) {
       const myValue = Number(item.current_value) * (Number(item.percentage_owned) / 100);
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.description || "—"}</td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${myValue >= 0 ? `<span class="gain-positive">${currency(myValue)}</span>` : `<span class="gain-negative">${currency(myValue)}</span>`}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${item.description || "—"}</td><td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${myValue >= 0 ? `<span class="gain-positive">${currency(myValue)}</span>` : `<span class="gain-negative">${currency(myValue)}</span>`}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
   }

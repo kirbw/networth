@@ -45,8 +45,8 @@
             <h2>Add Real Estate</h2>
             <form id="real-estate-form">
               <div class="form-grid">
-                <label>Address <input id="re-address" type="text" required /></label>
                 <label>Description <input id="re-description" type="text" /></label>
+                <label>Address <input id="re-address" type="text" required /></label>
                 <label>Percentage Owned <input id="re-owned" type="number" min="0" max="100" step="0.01" required /></label>
                 <label>Purchase Price ($) <input id="re-purchase-price" type="number" min="0" step="0.01" required /></label>
                 <label>Current Value ($) <input id="re-current-value" type="number" min="0" step="0.01" required /></label>
@@ -60,7 +60,7 @@
             <h2>Real Estate</h2>
             <div class="table-wrap">
               <table>
-                <thead><tr><th data-sort-real-estate="address" class="sortable">Address (Google Maps)</th><th data-sort-real-estate="description" class="sortable">Description</th><th data-sort-real-estate="percentage_owned" class="sortable">Percentage Owned</th><th data-sort-real-estate="purchase_price" class="sortable">Purchase Price</th><th data-sort-real-estate="current_value" class="sortable">Current Value</th><th>My Value</th><th>Actions</th></tr></thead>
+                <thead><tr><th data-sort-real-estate="description" class="sortable">Description</th><th data-sort-real-estate="address" class="sortable">Address (Google Maps)</th><th data-sort-real-estate="percentage_owned" class="sortable">Percentage Owned</th><th data-sort-real-estate="purchase_price" class="sortable">Purchase Price</th><th data-sort-real-estate="current_value" class="sortable">Current Value</th><th>My Value</th><th>Actions</th></tr></thead>
                 <tbody id="real-estate-body"></tbody>
               </table>
             </div>

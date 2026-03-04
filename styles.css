@@ -150,6 +150,16 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
   margin: 0;
 }
 
+
+body[data-page="home"] .chart-card {
+  margin-top: 0.75rem;
+  padding: 1.25rem;
+}
+
+body[data-page="home"] .chart-card + .chart-card {
+  margin-top: 1rem;
+}
+
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
   .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
