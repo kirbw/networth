@@ -15,6 +15,10 @@ All notable changes to this project are documented in this file.
 - Investments table now shows Gain/Loss per holding and a totals row.
 - Server-side protected page redirects now enforce valid sessions before protected pages render.
 
+- Security hardening: login rate limiting, hashed password-reset tokens, and stricter minimum password length.
+- Admin SMTP settings reads now redact stored SMTP password values.
+- Added baseline secure response headers (CSP, no-store cache, frame deny, no-sniff).
+
 ### Changed
 - Split admin area into subpages: Admin Users and Email Settings.
 - Use a single Admin sidebar entry that reveals admin sub-navigation on admin pages.

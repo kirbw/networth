@@ -22,6 +22,9 @@ SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
 PROTECTED_PAGES = {"/records.html", "/investments.html", "/admin-users.html", "/admin-email.html"}
 ADMIN_PAGES = {"/admin-users.html", "/admin-email.html"}
+LOGIN_WINDOW_SECONDS = 15 * 60
+MAX_LOGIN_ATTEMPTS = 8
+LOGIN_ATTEMPTS: dict[str, list[float]] = {}
 
 
 def utc_now() -> datetime:
@@ -52,6 +55,34 @@ def verify_password(password: str, stored_hash: str) -> bool:
     expected = hash_password(password, salt)
     return hmac.compare_digest(expected, stored_hash)
 
+
+
+
+def hash_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def is_strong_password(password: str) -> bool:
+    return len(password) >= 10
+
+
+def is_login_allowed(key: str) -> bool:
+    now = utc_now().timestamp()
+    cutoff = now - LOGIN_WINDOW_SECONDS
+    attempts = [ts for ts in LOGIN_ATTEMPTS.get(key, []) if ts >= cutoff]
+    LOGIN_ATTEMPTS[key] = attempts
+    return len(attempts) < MAX_LOGIN_ATTEMPTS
+
+
+def register_login_failure(key: str):
+    now = utc_now().timestamp()
+    attempts = [ts for ts in LOGIN_ATTEMPTS.get(key, []) if ts >= now - LOGIN_WINDOW_SECONDS]
+    attempts.append(now)
+    LOGIN_ATTEMPTS[key] = attempts
+
+
+def clear_login_failures(key: str):
+    LOGIN_ATTEMPTS.pop(key, None)
 
 def normalize_ticker(ticker: str) -> str:
     clean = ticker.strip().lower()
@@ -329,6 +360,15 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return True
         return False
 
+    def end_headers(self):
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+        super().end_headers()
+
     def _send_json(self, code: int, payload: dict | list, extra_headers: dict | None = None):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(code)
@@ -402,8 +442,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             raise ValueError("Invalid role.")
         if email is not None and "@" not in email:
             raise ValueError("Invalid email.")
-        if password and len(password) < 8:
-            raise ValueError("Password must be at least 8 characters.")
+        if password and not is_strong_password(password):
+            raise ValueError("Password must be at least 10 characters.")
         return full_name, username, email, password, role
 
     def do_GET(self):
@@ -483,7 +523,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     "smtpHost": get_setting(conn, "smtp_host", ""),
                     "smtpPort": get_setting(conn, "smtp_port", "587"),
                     "smtpUsername": get_setting(conn, "smtp_username", ""),
-                    "smtpPassword": get_setting(conn, "smtp_password", ""),
+                    "smtpPassword": "",
                     "smtpFromEmail": get_setting(conn, "smtp_from_email", ""),
                     "smtpUseSsl": get_setting(conn, "smtp_use_ssl", "0") == "1",
                     "websiteHost": get_setting(conn, "website_host", "http://localhost:3000"),
@@ -565,9 +605,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 user = conn.execute("SELECT id, email, username, full_name FROM users WHERE username = ? OR email = ?", (identifier, identifier)).fetchone()
                 if user and user["email"]:
                     token = secrets.token_urlsafe(32)
+                    token_hash = hash_reset_token(token)
                     conn.execute(
                         "INSERT INTO password_reset_tokens (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)",
-                        (token, user["id"], (utc_now() + timedelta(hours=1)).isoformat(), utc_now_iso()),
+                        (token_hash, user["id"], (utc_now() + timedelta(hours=1)).isoformat(), utc_now_iso()),
                     )
                     host = get_setting(conn, "website_host", "http://localhost:3000")
                     link = f"{host.rstrip('/')}/reset-password.html?token={token}"
@@ -584,19 +625,20 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 data = self._read_json()
                 token = str(data.get("token", "")).strip()
                 password = str(data.get("password", ""))
-                if not token or len(password) < 8:
-                    raise ValueError("Token and password (min 8 chars) are required.")
+                if not token or not is_strong_password(password):
+                    raise ValueError("Token and password (min 10 chars) are required.")
             except (ValueError, TypeError, json.JSONDecodeError) as error:
                 self._send_json(400, {"error": str(error)})
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                reset_row = conn.execute("SELECT token, user_id, expires_at FROM password_reset_tokens WHERE token = ?", (token,)).fetchone()
+                token_hash = hash_reset_token(token)
+                reset_row = conn.execute("SELECT token, user_id, expires_at FROM password_reset_tokens WHERE token = ?", (token_hash,)).fetchone()
                 if not reset_row:
                     self._send_json(400, {"error": "Invalid reset token."})
                     return
                 if datetime.fromisoformat(reset_row["expires_at"]) < utc_now():
-                    conn.execute("DELETE FROM password_reset_tokens WHERE token = ?", (token,))
+                    conn.execute("DELETE FROM password_reset_tokens WHERE token = ?", (token_hash,))
                     self._send_json(400, {"error": "Reset token expired."})
                     return
                 conn.execute("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", (hash_password(password), utc_now_iso(), reset_row["user_id"]))
@@ -615,12 +657,19 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             except (KeyError, ValueError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Invalid login data."})
                 return
+            remote_ip = self.client_address[0] if self.client_address else "unknown"
+            login_key = f"{remote_ip}:{username.lower()}"
+            if not is_login_allowed(login_key):
+                self._send_json(429, {"error": "Too many login attempts. Please wait and try again."})
+                return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
                 user = conn.execute("SELECT id, full_name, username, email, role, is_verified, password_hash FROM users WHERE username = ?", (username,)).fetchone()
                 if not user or not verify_password(password, user["password_hash"]):
+                    register_login_failure(login_key)
                     self._send_json(401, {"error": "Invalid username or password."})
                     return
+                clear_login_failures(login_key)
                 if user["role"] != "admin" and not user["is_verified"]:
                     self._send_json(403, {"error": "Account not verified. Please verify with the emailed code."})
                     return
@@ -717,10 +766,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 user_id = int(parts[3])
                 data = self._read_json()
                 new_password = str(data["password"])
-                if len(new_password) < 8:
+                if not is_strong_password(new_password):
                     raise ValueError
             except (ValueError, KeyError, TypeError, json.JSONDecodeError):
-                self._send_json(400, {"error": "Password must be at least 8 characters."})
+                self._send_json(400, {"error": "Password must be at least 10 characters."})
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 cursor = conn.execute("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", (hash_password(new_password), utc_now_iso(), user_id))
@@ -752,7 +801,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 set_setting(conn, "smtp_host", smtp_host)
                 set_setting(conn, "smtp_port", smtp_port)
                 set_setting(conn, "smtp_username", smtp_username)
-                set_setting(conn, "smtp_password", smtp_password)
+                if smtp_password:
+                    set_setting(conn, "smtp_password", smtp_password)
                 set_setting(conn, "smtp_from_email", smtp_from)
                 set_setting(conn, "smtp_use_ssl", smtp_use_ssl)
                 set_setting(conn, "website_host", website_host)

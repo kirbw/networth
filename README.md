@@ -59,6 +59,10 @@ ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
 - Smoother cross-page navigation by hiding login card until session check completes
 - Server-side protection for app pages (`records`, `investments`, `admin`) with one-way redirects to login when session is invalid
 - Session cookie is HTTP-only and validated against server-side session storage on every protected page request
+- Login protection includes basic server-side rate limiting to reduce brute-force attempts
+- Password reset tokens are stored as hashes in the database (not plaintext)
+- Admin SMTP settings endpoint no longer returns stored SMTP passwords
+- Added baseline security headers (CSP, frame deny, no-sniff, no-store cache)
 - Save one record per tax year
 - Update an existing year by re-submitting the same year
 - Income and giving chart by year
