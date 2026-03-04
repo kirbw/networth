@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Annual Finance Tracker - Stocks</title>
+  <title>Annual Finance Tracker - Precious Metals</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body data-page="investments">
+<body data-page="precious-metals">
   <div class="layout">
     <aside class="sidebar">
       <h2>Finance Tracker</h2>
@@ -62,35 +62,37 @@
         <section id="app-content" class="hidden">
           <section class="card admin-subnav-card">
             <div class="admin-subnav">
-              <a href="/investments.html" class="active">Stocks</a>
-              <a href="/precious-metals.html">Precious Metals</a>
+              <a href="/investments.html">Stocks</a>
+              <a href="/precious-metals.html" class="active">Precious Metals</a>
             </div>
           </section>
 
           <section class="card">
-            <h2>Add Stock</h2>
-            <form id="investment-form">
+            <h2>Add Precious Metal Item</h2>
+            <form id="metals-form">
               <div class="form-grid">
-                <label>Ticker <input id="inv-ticker" type="text" required /></label>
-                <label>Shares <input id="inv-shares" type="number" min="0.0001" step="0.0001" required /></label>
-                <label>Purchase Price ($) <input id="inv-price" type="number" min="0" step="0.0001" required /></label>
-                <label>Purchase Date <input id="inv-date" type="date" required /></label>
+                <label>Type <input id="metal-type" type="text" required /></label>
+                <label>Description <input id="metal-description" type="text" required /></label>
+                <label>Quantity <input id="metal-quantity" type="number" min="0" step="0.01" required /></label>
+                <label>Weight <input id="metal-weight" type="number" min="0" step="0.01" required /></label>
+                <label>Date Purchased <input id="metal-date" type="date" required /></label>
+                <label>Where Purchased <input id="metal-where" type="text" required /></label>
+                <label>Purchase Price ($) <input id="metal-purchase-price" type="number" min="0" step="0.01" required /></label>
+                <label>Current Value ($) <input id="metal-current-value" type="number" min="0" step="0.01" required /></label>
               </div>
-              <button type="submit">Add Stock</button>
-              <button id="refresh-prices-btn" type="button">Refresh Current Values</button>
-              <p id="investments-message"></p>
+              <button type="submit">Add Item</button>
+              <p id="metals-message"></p>
             </form>
           </section>
 
           <section class="card">
-            <h2>Stocks</h2>
+            <h2>Precious Metals</h2>
             <div class="table-wrap">
               <table>
-                <thead><tr><th data-sort-investments="ticker" class="sortable">Ticker</th><th data-sort-investments="purchase_date" class="sortable">Purchase Date</th><th data-sort-investments="shares" class="sortable">Shares</th><th data-sort-investments="purchase_price" class="sortable">Purchase Price</th><th>Purchase Value</th><th>Current Price</th><th>Gain/Loss</th><th>Actions</th></tr></thead>
-                <tbody id="investments-body"></tbody>
+                <thead><tr><th data-sort-metals="metal_type" class="sortable">Type</th><th data-sort-metals="description" class="sortable">Description</th><th data-sort-metals="quantity" class="sortable">Quantity</th><th data-sort-metals="weight" class="sortable">Weight</th><th data-sort-metals="purchase_date" class="sortable">Date Purchased</th><th data-sort-metals="where_purchased" class="sortable">Where Purchased</th><th data-sort-metals="purchase_price" class="sortable">Purchase Price</th><th data-sort-metals="current_value" class="sortable">Current Value</th><th>Gain/Loss</th><th>Actions</th></tr></thead>
+                <tbody id="metals-body"></tbody>
               </table>
             </div>
-            <p class="small-note">Current prices are fetched from Stooq quotes (no API key required).</p>
           </section>
         </section>
       </main>

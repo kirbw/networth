@@ -166,3 +166,12 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
   background: #f8faff;
   border-top: 2px solid var(--border);
 }
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable:hover {
+  text-decoration: underline;
+}

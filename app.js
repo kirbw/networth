@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/admin-users.html", "/admin-email.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/admin-users.html", "/admin-email.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -355,13 +355,28 @@ function initInvestmentsPage() {
   const msg = document.getElementById("investments-message");
   const tableBody = document.getElementById("investments-body");
   const refreshBtn = document.getElementById("refresh-prices-btn");
+  const sortHeaders = document.querySelectorAll("[data-sort-investments]");
 
   let investments = [];
+  let sortKey = "purchase_date";
+  let sortDirection = "desc";
 
   async function loadInvestments() {
     const response = await apiFetch("/api/investments");
     if (!response.ok) return;
     investments = await response.json();
+  }
+
+  function applySort() {
+    const direction = sortDirection === "asc" ? 1 : -1;
+    investments.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      const aNum = Number(av);
+      const bNum = Number(bv);
+      if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return (aNum - bNum) * direction;
+      return String(av).localeCompare(String(bv)) * direction;
+    });
   }
 
   async function quote(ticker) {
@@ -374,9 +389,10 @@ function initInvestmentsPage() {
   }
 
   async function renderTable() {
+    applySort();
     tableBody.innerHTML = "";
     if (!investments.length) {
-      tableBody.innerHTML = `<tr><td colspan="8">No investments yet.</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="8">No stocks yet.</td></tr>`;
       return;
     }
 
@@ -420,6 +436,16 @@ function initInvestmentsPage() {
     tableBody.appendChild(totalRow);
   }
 
+  sortHeaders.forEach((header) => {
+    header.addEventListener("click", async () => {
+      const key = header.dataset.sortInvestments;
+      if (!key) return;
+      sortDirection = sortKey === key && sortDirection === "asc" ? "desc" : "asc";
+      sortKey = key;
+      await renderTable();
+    });
+  });
+
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const payload = {
@@ -430,11 +456,11 @@ function initInvestmentsPage() {
     };
     const response = await apiFetch("/api/investments", { method: "POST", body: JSON.stringify(payload) });
     const data = await response.json();
-    if (!response.ok) return setText(msg, data.error || "Unable to add investment.");
+    if (!response.ok) return setText(msg, data.error || "Unable to add stock.");
     form.reset();
     await loadInvestments();
     await renderTable();
-    setText(msg, "Investment added.");
+    setText(msg, "Stock added.");
   });
 
   tableBody?.addEventListener("click", async (event) => {
@@ -456,6 +482,107 @@ function initInvestmentsPage() {
     render: async () => {
       await loadInvestments();
       await renderTable();
+    },
+  };
+}
+
+function initPreciousMetalsPage() {
+  const form = document.getElementById("metals-form");
+  const msg = document.getElementById("metals-message");
+  const tableBody = document.getElementById("metals-body");
+  const sortHeaders = document.querySelectorAll("[data-sort-metals]");
+
+  let metals = [];
+  let sortKey = "purchase_date";
+  let sortDirection = "desc";
+
+  async function loadMetals() {
+    const response = await apiFetch("/api/precious-metals");
+    if (!response.ok) return;
+    metals = await response.json();
+  }
+
+  function applySort() {
+    const direction = sortDirection === "asc" ? 1 : -1;
+    metals.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      const aNum = Number(av);
+      const bNum = Number(bv);
+      if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return (aNum - bNum) * direction;
+      return String(av).localeCompare(String(bv)) * direction;
+    });
+  }
+
+  function renderTable() {
+    applySort();
+    tableBody.innerHTML = "";
+    if (!metals.length) {
+      tableBody.innerHTML = `<tr><td colspan="10">No precious metals yet.</td></tr>`;
+      return;
+    }
+
+    let totalPurchase = 0;
+    let totalCurrent = 0;
+
+    for (const item of metals) {
+      totalPurchase += Number(item.purchase_price);
+      totalCurrent += Number(item.current_value);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${item.metal_type}</td><td>${item.description}</td><td>${item.quantity}</td><td>${item.weight}</td><td>${item.purchase_date}</td><td>${item.where_purchased}</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${(Number(item.current_value) - Number(item.purchase_price)) >= 0 ? "+" : ""}${currency(Number(item.current_value) - Number(item.purchase_price))}</td><td><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tableBody.appendChild(tr);
+    }
+
+    const totalRow = document.createElement("tr");
+    totalRow.className = "totals-row";
+    totalRow.innerHTML = `<td colspan="6"><strong>Totals</strong></td><td><strong>${currency(totalPurchase)}</strong></td><td><strong>${currency(totalCurrent)}</strong></td><td><strong>${(totalCurrent - totalPurchase) >= 0 ? "+" : ""}${currency(totalCurrent - totalPurchase)}</strong></td><td></td>`;
+    tableBody.appendChild(totalRow);
+  }
+
+  sortHeaders.forEach((header) => {
+    header.addEventListener("click", () => {
+      const key = header.dataset.sortMetals;
+      if (!key) return;
+      sortDirection = sortKey === key && sortDirection === "asc" ? "desc" : "asc";
+      sortKey = key;
+      renderTable();
+    });
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      type: document.getElementById("metal-type").value.trim(),
+      description: document.getElementById("metal-description").value.trim(),
+      quantity: Number(document.getElementById("metal-quantity").value),
+      weight: Number(document.getElementById("metal-weight").value),
+      datePurchased: document.getElementById("metal-date").value,
+      wherePurchased: document.getElementById("metal-where").value.trim(),
+      purchasePrice: Number(document.getElementById("metal-purchase-price").value),
+      currentValue: Number(document.getElementById("metal-current-value").value),
+    };
+    const response = await apiFetch("/api/precious-metals", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to add precious metal record.");
+    form.reset();
+    await loadMetals();
+    renderTable();
+    setText(msg, "Precious metal record added.");
+  });
+
+  tableBody?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement) || !target.classList.contains("delete-btn")) return;
+    const id = target.dataset.id;
+    await apiFetch(`/api/precious-metals/${id}`, { method: "DELETE" });
+    await loadMetals();
+    renderTable();
+  });
+
+  return {
+    render: async () => {
+      await loadMetals();
+      renderTable();
     },
   };
 }
@@ -608,6 +735,11 @@ async function initPageData() {
 
   if (page === "investments") {
     if (!pageController) pageController = initInvestmentsPage();
+    return pageController.render();
+  }
+
+  if (page === "precious-metals") {
+    if (!pageController) pageController = initPreciousMetalsPage();
     return pageController.render();
   }
 

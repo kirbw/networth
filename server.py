@@ -20,7 +20,7 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/admin-users.html", "/admin-email.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/admin-users.html", "/admin-email.html"}
 ADMIN_PAGES = {"/admin-users.html", "/admin-email.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
@@ -290,6 +290,25 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS precious_metals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                metal_type TEXT NOT NULL,
+                description TEXT NOT NULL,
+                quantity REAL NOT NULL,
+                weight REAL NOT NULL,
+                purchase_date TEXT NOT NULL,
+                where_purchased TEXT NOT NULL,
+                purchase_price REAL NOT NULL,
+                current_value REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS password_reset_tokens (
                 token TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -499,6 +518,19 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
                     "SELECT id, ticker, shares, purchase_price, purchase_date, created_at, updated_at FROM investments WHERE user_id = ? ORDER BY purchase_date DESC, id DESC",
+                    (user["id"],),
+                ).fetchall()
+            self._send_json(200, [dict(row) for row in rows])
+            return
+
+        if parsed.path == "/api/precious-metals":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    "SELECT id, metal_type, description, quantity, weight, purchase_date, where_purchased, purchase_price, current_value, created_at, updated_at FROM precious_metals WHERE user_id = ? ORDER BY purchase_date DESC, id DESC",
                     (user["id"],),
                 ).fetchall()
             self._send_json(200, [dict(row) for row in rows])
@@ -734,6 +766,34 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+        if parsed.path == "/api/precious-metals":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                metal_type = str(data.get("type", "")).strip()
+                description = str(data.get("description", "")).strip()
+                quantity = float(data.get("quantity", 0))
+                weight = float(data.get("weight", 0))
+                purchase_date = str(data.get("datePurchased", "")).strip()
+                where_purchased = str(data.get("wherePurchased", "")).strip()
+                purchase_price = float(data.get("purchasePrice", 0))
+                current_value = float(data.get("currentValue", 0))
+                if not metal_type or not description or quantity < 0 or weight < 0 or not purchase_date or not where_purchased or purchase_price < 0 or current_value < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid precious metal data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute(
+                    "INSERT INTO precious_metals (user_id, metal_type, description, quantity, weight, purchase_date, where_purchased, purchase_price, current_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (user["id"], metal_type, description, quantity, weight, purchase_date, where_purchased, purchase_price, current_value, now, now),
+                )
+            self._send_json(200, {"success": True})
+            return
+
         if parsed.path == "/api/admin/users":
             admin = self._require_admin()
             if not admin:
@@ -850,6 +910,17 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute("DELETE FROM investments WHERE id = ? AND user_id = ?", (investment_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/precious-metals/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid precious metal id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM precious_metals WHERE id = ? AND user_id = ?", (item_id, user["id"]))
             self._send_json(200, {"success": True})
             return
 
