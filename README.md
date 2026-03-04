@@ -53,11 +53,13 @@ ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
 - SMTP + host name settings for outbound email links and verification/reset emails
 - Forgot password flow that emails reset links
 - Version display in bottom-left footer for troubleshooting
-- Investments section now has subpages for Stocks and Precious Metals
+- Investments section now has subpages for Stocks, Precious Metals, Real Estate, and Business Ventures
 - Dedicated Stocks page to track ticker, shares, purchase price, and purchase date
 - Dedicated Precious Metals page for type, description, quantity, weight, where/date purchased, purchase price, and current value
+- Dedicated Real Estate page for address, % owned, purchase/current value, and computed my-value (current × ownership %)
+- Dedicated Business Ventures page for business name, % owned, business value, and computed my-value
 - Live quote lookup endpoint and gain/loss calculation for each investment (quotes via Stooq)
-- Stocks and Precious Metals tables support click-to-sort by key columns (purchase date, quantity, price, etc.)
+- Stocks, Precious Metals, Real Estate, and Business Ventures tables support click-to-sort by key columns
 - Investments table totals row for purchase value, current value, and gain/loss
 - Smoother cross-page navigation by hiding login card until session check completes
 - Server-side protection for app pages (`records`, `investments`, `admin`) with one-way redirects to login when session is invalid

@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/admin-users.html", "/admin-email.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/admin-users.html", "/admin-email.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -587,6 +587,169 @@ function initPreciousMetalsPage() {
   };
 }
 
+function initRealEstatePage() {
+  const form = document.getElementById("real-estate-form");
+  const msg = document.getElementById("real-estate-message");
+  const tableBody = document.getElementById("real-estate-body");
+  const sortHeaders = document.querySelectorAll("[data-sort-real-estate]");
+  let rows = [];
+  let sortKey = "address";
+  let sortDirection = "asc";
+
+  async function loadRows() {
+    const response = await apiFetch("/api/real-estate");
+    if (!response.ok) return;
+    rows = await response.json();
+  }
+
+  function applySort() {
+    const direction = sortDirection === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      const aNum = Number(av);
+      const bNum = Number(bv);
+      if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return (aNum - bNum) * direction;
+      return String(av).localeCompare(String(bv)) * direction;
+    });
+  }
+
+  function mapsLink(address) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  }
+
+  function renderTable() {
+    applySort();
+    tableBody.innerHTML = "";
+    if (!rows.length) {
+      tableBody.innerHTML = `<tr><td colspan="6">No real estate records yet.</td></tr>`;
+      return;
+    }
+    for (const item of rows) {
+      const myValue = Number(item.current_value) * (Number(item.percentage_owned) / 100);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${currency(myValue)}</td><td><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tableBody.appendChild(tr);
+    }
+  }
+
+  sortHeaders.forEach((header) => {
+    header.addEventListener("click", () => {
+      const key = header.dataset.sortRealEstate;
+      if (!key) return;
+      sortDirection = sortKey === key && sortDirection === "asc" ? "desc" : "asc";
+      sortKey = key;
+      renderTable();
+    });
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      address: document.getElementById("re-address").value.trim(),
+      percentageOwned: Number(document.getElementById("re-owned").value),
+      purchasePrice: Number(document.getElementById("re-purchase-price").value),
+      currentValue: Number(document.getElementById("re-current-value").value),
+    };
+    const response = await apiFetch("/api/real-estate", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to add real estate record.");
+    form.reset();
+    await loadRows();
+    renderTable();
+    setText(msg, "Real estate record added.");
+  });
+
+  tableBody?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement) || !target.classList.contains("delete-btn")) return;
+    await apiFetch(`/api/real-estate/${target.dataset.id}`, { method: "DELETE" });
+    await loadRows();
+    renderTable();
+  });
+
+  return { render: async () => { await loadRows(); renderTable(); } };
+}
+
+function initBusinessVenturesPage() {
+  const form = document.getElementById("business-ventures-form");
+  const msg = document.getElementById("business-ventures-message");
+  const tableBody = document.getElementById("business-ventures-body");
+  const sortHeaders = document.querySelectorAll("[data-sort-business]");
+  let rows = [];
+  let sortKey = "business_name";
+  let sortDirection = "asc";
+
+  async function loadRows() {
+    const response = await apiFetch("/api/business-ventures");
+    if (!response.ok) return;
+    rows = await response.json();
+  }
+
+  function applySort() {
+    const direction = sortDirection === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      const aNum = Number(av);
+      const bNum = Number(bv);
+      if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return (aNum - bNum) * direction;
+      return String(av).localeCompare(String(bv)) * direction;
+    });
+  }
+
+  function renderTable() {
+    applySort();
+    tableBody.innerHTML = "";
+    if (!rows.length) {
+      tableBody.innerHTML = `<tr><td colspan="5">No business ventures yet.</td></tr>`;
+      return;
+    }
+    for (const item of rows) {
+      const myValue = Number(item.business_value) * (Number(item.percentage_owned) / 100);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${item.business_name}</td><td>${item.percentage_owned}%</td><td>${currency(item.business_value)}</td><td>${currency(myValue)}</td><td><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tableBody.appendChild(tr);
+    }
+  }
+
+  sortHeaders.forEach((header) => {
+    header.addEventListener("click", () => {
+      const key = header.dataset.sortBusiness;
+      if (!key) return;
+      sortDirection = sortKey === key && sortDirection === "asc" ? "desc" : "asc";
+      sortKey = key;
+      renderTable();
+    });
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      businessName: document.getElementById("bv-name").value.trim(),
+      percentageOwned: Number(document.getElementById("bv-owned").value),
+      businessValue: Number(document.getElementById("bv-value").value),
+    };
+    const response = await apiFetch("/api/business-ventures", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to add business venture.");
+    form.reset();
+    await loadRows();
+    renderTable();
+    setText(msg, "Business venture added.");
+  });
+
+  tableBody?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement) || !target.classList.contains("delete-btn")) return;
+    await apiFetch(`/api/business-ventures/${target.dataset.id}`, { method: "DELETE" });
+    await loadRows();
+    renderTable();
+  });
+
+  return { render: async () => { await loadRows(); renderTable(); } };
+}
+
 function initAdminUsersPage() {
   const createForm = document.getElementById("create-user-form");
   const resetForm = document.getElementById("reset-password-form");
@@ -740,6 +903,16 @@ async function initPageData() {
 
   if (page === "precious-metals") {
     if (!pageController) pageController = initPreciousMetalsPage();
+    return pageController.render();
+  }
+
+  if (page === "real-estate") {
+    if (!pageController) pageController = initRealEstatePage();
+    return pageController.render();
+  }
+
+  if (page === "business-ventures") {
+    if (!pageController) pageController = initBusinessVenturesPage();
     return pageController.render();
   }
 

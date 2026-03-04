@@ -12,9 +12,11 @@ All notable changes to this project are documented in this file.
 - Global version footer shown in bottom-left for troubleshooting.
 - New Investments page for tracking ticker, shares, purchase price, and purchase date.
 - Precious Metals subpage under Investments with collection-specific fields and totals.
+- Real Estate subpage under Investments with ownership-based my-value calculation and map links.
+- Business Ventures subpage under Investments with ownership-based my-value calculation.
 - Investments API endpoints (`GET/POST/DELETE /api/investments`) plus quote lookup endpoint (`GET /api/quote`).
 - Investments table now shows Gain/Loss per holding and a totals row.
-- Stocks and Precious Metals tables are sortable by clicking column headers (date, quantity, price, etc.).
+- Stocks, Precious Metals, Real Estate, and Business Ventures tables are sortable by clicking key column headers.
 - Server-side protected page redirects now enforce valid sessions before protected pages render.
 
 - Security hardening: login rate limiting, hashed password-reset tokens, and stricter minimum password length.
