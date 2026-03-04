@@ -1,66 +1,45 @@
 const DEFAULT_GOAL_PERCENT = 10;
 
+const page = document.body.dataset.page;
+
 const authCard = document.getElementById("auth-card");
-const appShell = document.getElementById("app-shell");
-const adminCard = document.getElementById("admin-card");
-const sessionUser = document.getElementById("session-user");
+const appContent = document.getElementById("app-content");
+const sessionName = document.getElementById("session-name");
+const logoutBtn = document.getElementById("logout-btn");
+const navAdmin = document.getElementById("nav-admin");
 
 const loginForm = document.getElementById("login-form");
-const loginUsername = document.getElementById("login-username");
-const loginPassword = document.getElementById("login-password");
-const loginMessage = document.getElementById("login-message");
-const logoutBtn = document.getElementById("logout-btn");
-
-const createUserForm = document.getElementById("create-user-form");
-const resetPasswordForm = document.getElementById("reset-password-form");
-const newUsername = document.getElementById("new-username");
-const newPassword = document.getElementById("new-password");
-const newRole = document.getElementById("new-role");
-const resetUserId = document.getElementById("reset-user-id");
-const resetPassword = document.getElementById("reset-password");
-const adminMessage = document.getElementById("admin-message");
-
-const form = document.getElementById("finance-form");
-const recordsBody = document.getElementById("records-body");
-const clearButton = document.getElementById("clear-data");
-const formMessage = document.getElementById("form-message");
-const goalIndicator = document.getElementById("goal-indicator");
-const goalPercentInput = document.getElementById("goal-percent-input");
-const yearInput = document.getElementById("year");
-const yearOptions = document.getElementById("year-options");
-const incomeInput = document.getElementById("income");
-const donationInput = document.getElementById("donation");
-const netWorthInput = document.getElementById("netWorth");
-const saveButton = document.getElementById("save-btn");
+const signupForm = document.getElementById("signup-form");
+const toggleSignupBtn = document.getElementById("toggle-signup-btn");
+const toggleLoginBtn = document.getElementById("toggle-login-btn");
+const authMessage = document.getElementById("auth-message");
 
 let currentUser = null;
 let records = [];
-let users = [];
+let editingYear = null;
+
 let incomeGivingChart;
 let netWorthChart;
 let goalProgressChart;
-let editingYear = null;
-let goalPercent = DEFAULT_GOAL_PERCENT;
 
 function goalStorageKey() {
   return currentUser ? `giving-goal-percent:${currentUser.username}` : "giving-goal-percent:anonymous";
 }
 
-function getStoredGoalPercent() {
+function getGoalPercent() {
   const parsed = Number(localStorage.getItem(goalStorageKey()));
   if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) return DEFAULT_GOAL_PERCENT;
   return parsed;
 }
 
-function setStoredGoalPercent(value) {
+function setGoalPercent(value) {
   localStorage.setItem(goalStorageKey(), String(value));
 }
 
 function apiFetch(url, options = {}) {
-  return fetch(url, {
-    ...options,
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-  });
+  const headers = options.headers || {};
+  const finalHeaders = options.body ? { "Content-Type": "application/json", ...headers } : headers;
+  return fetch(url, { ...options, headers: finalHeaders });
 }
 
 function currency(value) {
@@ -71,331 +50,424 @@ function percent(value) {
   return `${(value * 100).toFixed(2)}%`;
 }
 
-function goalRatio() {
-  return goalPercent / 100;
+function setText(el, text) {
+  if (el) el.textContent = text;
 }
 
-function setMessage(el, text) {
-  el.textContent = text;
-}
-
-function populateYearOptions() {
-  const startYear = 1970;
-  const currentYearValue = new Date().getFullYear();
-  yearOptions.innerHTML = "";
-  for (let year = currentYearValue + 1; year >= startYear; year -= 1) {
-    const option = document.createElement("option");
-    option.value = String(year);
-    yearOptions.appendChild(option);
-  }
+function showSignup(show) {
+  if (!signupForm || !loginForm) return;
+  signupForm.classList.toggle("hidden", !show);
+  loginForm.classList.toggle("hidden", show);
 }
 
 function sortRecords() {
   records.sort((a, b) => a.year - b.year);
 }
 
-function destroyIfExists(chart) {
-  if (chart) chart.destroy();
-}
-
-function formatNetWorth(value) {
-  return value === null || value === undefined ? "—" : currency(value);
-}
-
-function setFormModeDefault() {
-  editingYear = null;
-  saveButton.textContent = "Save Year";
-}
-
-function startEditingRecord(year) {
-  const record = records.find((entry) => entry.year === year);
-  if (!record) return;
-  editingYear = year;
-  yearInput.value = String(record.year);
-  incomeInput.value = String(record.income);
-  donationInput.value = String(record.donation);
-  netWorthInput.value = record.netWorth == null ? "" : String(record.netWorth);
-  saveButton.textContent = "Update Year";
-  setMessage(formMessage, `Editing ${year}. Update fields then click Update Year.`);
-}
-
-function renderTable() {
-  sortRecords();
-  recordsBody.innerHTML = "";
-  if (!records.length) {
-    recordsBody.innerHTML = `<tr><td colspan="5">No annual records yet.</td></tr>`;
-    return;
-  }
-
-  for (const record of records) {
-    const row = document.createElement("tr");
-    row.innerHTML = `<td>${record.year}</td><td>${currency(record.income)}</td><td>${currency(record.donation)}</td><td>${formatNetWorth(record.netWorth)}</td><td><button class="edit-btn" data-year="${record.year}" type="button">Edit</button><button class="delete-btn" data-year="${record.year}" type="button">Delete</button></td>`;
-    recordsBody.appendChild(row);
-  }
-}
-
-function createIncomeGivingChart() {
-  destroyIfExists(incomeGivingChart);
-  incomeGivingChart = new Chart(document.getElementById("income-giving-chart").getContext("2d"), {
-    type: "line",
-    data: {
-      labels: records.map((r) => r.year),
-      datasets: [
-        { label: "Income", data: records.map((r) => r.income), borderColor: "#3956f6", backgroundColor: "#3956f633", tension: 0.2 },
-        { label: "Donations", data: records.map((r) => r.donation), borderColor: "#00a76f", backgroundColor: "#00a76f33", tension: 0.2 },
-      ],
-    },
-    options: { responsive: true, plugins: { legend: { position: "bottom" } }, scales: { y: { ticks: { callback: (v) => currency(v) } } } },
-  });
-}
-
-function createNetWorthChart() {
-  destroyIfExists(netWorthChart);
-  const nw = records.filter((r) => r.netWorth != null);
-  netWorthChart = new Chart(document.getElementById("net-worth-chart").getContext("2d"), {
-    type: "line",
-    data: { labels: nw.map((r) => r.year), datasets: [{ label: "Net Worth", data: nw.map((r) => r.netWorth), borderColor: "#9747ff", backgroundColor: "#9747ff33", tension: 0.2 }] },
-    options: { responsive: true, plugins: { legend: { position: "bottom" } }, scales: { y: { ticks: { callback: (v) => currency(v) } } } },
-  });
-}
-
-function createGoalChartAndIndicator() {
-  let cumulativeIncome = 0;
-  let cumulativeDonations = 0;
-  const incomeSeries = [];
-  const donationSeries = [];
-  const targetSeries = [];
-
-  for (const r of records) {
-    cumulativeIncome += Number(r.income);
-    cumulativeDonations += Number(r.donation);
-    incomeSeries.push(cumulativeIncome);
-    donationSeries.push(cumulativeDonations);
-    targetSeries.push(cumulativeIncome * goalRatio());
-  }
-
-  const targetAmount = cumulativeIncome * goalRatio();
-  const needed = Math.max(0, targetAmount - cumulativeDonations);
-  const givingRate = cumulativeIncome > 0 ? cumulativeDonations / cumulativeIncome : 0;
-
-  goalIndicator.className = `goal-indicator ${givingRate >= goalRatio() ? "on-track" : "off-track"}`;
-  goalIndicator.innerHTML = `<div>Cumulative giving rate: ${percent(givingRate)} (${currency(cumulativeDonations)} of ${currency(cumulativeIncome)} income).</div><div>Goal: ${goalPercent.toFixed(1)}% (${currency(targetAmount)} target). Needed to reach goal: ${currency(needed)}.</div>`;
-
-  destroyIfExists(goalProgressChart);
-  goalProgressChart = new Chart(document.getElementById("goal-progress-chart").getContext("2d"), {
-    type: "line",
-    data: {
-      labels: records.map((r) => r.year),
-      datasets: [
-        { label: "Cumulative Income", data: incomeSeries, borderColor: "#3956f6", backgroundColor: "#3956f633", tension: 0.2 },
-        { label: "Cumulative Donations", data: donationSeries, borderColor: "#00a76f", backgroundColor: "#00a76f33", tension: 0.2 },
-        { label: `${goalPercent.toFixed(1)}% Giving Target`, data: targetSeries, borderColor: "#f08c00", borderDash: [6, 6], pointRadius: 0, tension: 0 },
-      ],
-    },
-    options: { responsive: true, plugins: { legend: { position: "bottom" } }, scales: { y: { ticks: { callback: (v) => currency(v) } } } },
-  });
-}
-
-function renderCharts() {
-  sortRecords();
-  createIncomeGivingChart();
-  createNetWorthChart();
-  createGoalChartAndIndicator();
-}
-
-async function loadRecords() {
-  const response = await apiFetch("/api/records", { method: "GET", headers: {} });
-  if (!response.ok) throw new Error("Unable to load records");
-  records = await response.json();
-  renderTable();
-  renderCharts();
-}
-
-async function loadAdminUsers() {
-  if (!currentUser || currentUser.role !== "admin") return;
-  const response = await apiFetch("/api/admin/users", { method: "GET", headers: {} });
-  if (!response.ok) throw new Error("Unable to load users");
-  users = await response.json();
-
-  resetUserId.innerHTML = "";
-  for (const user of users) {
+function populateYearOptions() {
+  const yearOptions = document.getElementById("year-options");
+  if (!yearOptions) return;
+  yearOptions.innerHTML = "";
+  const start = 1970;
+  const currentYear = new Date().getFullYear();
+  for (let y = currentYear + 1; y >= start; y -= 1) {
     const option = document.createElement("option");
-    option.value = String(user.id);
-    option.textContent = `${user.username} (${user.role})`;
-    resetUserId.appendChild(option);
+    option.value = String(y);
+    yearOptions.appendChild(option);
   }
 }
 
 function renderAuthState() {
-  if (!currentUser) {
-    authCard.classList.remove("hidden");
-    appShell.classList.add("hidden");
+  const authenticated = Boolean(currentUser);
+  authCard?.classList.toggle("hidden", authenticated);
+  appContent?.classList.toggle("hidden", !authenticated);
+
+  if (sessionName) {
+    sessionName.textContent = authenticated
+      ? `${currentUser.fullName || currentUser.username} (${currentUser.role})`
+      : "Not signed in";
+  }
+
+  if (navAdmin) {
+    navAdmin.classList.toggle("hidden", !(authenticated && currentUser.role === "admin"));
+  }
+}
+
+function ensureAdminPageAccess() {
+  if (page !== "admin") return;
+  if (!currentUser || currentUser.role !== "admin") {
+    window.location.href = "/";
+  }
+}
+
+async function loadCurrentUser() {
+  const response = await apiFetch("/api/me");
+  const payload = await response.json();
+  currentUser = payload.authenticated ? payload.user : null;
+  renderAuthState();
+  ensureAdminPageAccess();
+}
+
+async function handleLogin(event) {
+  event.preventDefault();
+  const username = document.getElementById("login-username").value.trim();
+  const password = document.getElementById("login-password").value;
+
+  const response = await apiFetch("/api/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    setText(authMessage, payload.error || "Login failed.");
     return;
   }
 
-  authCard.classList.add("hidden");
-  appShell.classList.remove("hidden");
-  sessionUser.textContent = `Logged in as ${currentUser.username} (${currentUser.role})`;
-  adminCard.classList.toggle("hidden", currentUser.role !== "admin");
-  goalPercent = getStoredGoalPercent();
-  goalPercentInput.value = goalPercent.toFixed(1);
-}
+  currentUser = payload.user;
+  setText(authMessage, "Logged in successfully.");
+  renderAuthState();
 
-async function bootstrap() {
-  try {
-    const me = await apiFetch("/api/me", { method: "GET", headers: {} });
-    const payload = await me.json();
-    currentUser = payload.authenticated ? payload.user : null;
-    renderAuthState();
-    if (currentUser) {
-      await loadRecords();
-      await loadAdminUsers();
-    }
-  } catch {
-    setMessage(loginMessage, "Unable to connect to server.");
+  if (page === "admin" && currentUser.role !== "admin") {
+    window.location.href = "/";
+    return;
   }
+
+  await initPageData();
 }
 
-loginForm.addEventListener("submit", async (event) => {
+async function handleSignup(event) {
   event.preventDefault();
-  try {
-    const response = await apiFetch("/api/login", {
-      method: "POST",
-      body: JSON.stringify({ username: loginUsername.value.trim(), password: loginPassword.value }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Login failed");
+  const fullName = document.getElementById("signup-full-name").value.trim();
+  const email = document.getElementById("signup-email").value.trim();
+  const username = document.getElementById("signup-username").value.trim();
+  const password = document.getElementById("signup-password").value;
 
-    currentUser = payload.user;
-    loginForm.reset();
-    setMessage(loginMessage, "");
-    renderAuthState();
-    await loadRecords();
-    await loadAdminUsers();
-  } catch (error) {
-    setMessage(loginMessage, error.message || "Login failed");
+  const response = await apiFetch("/api/signup", {
+    method: "POST",
+    body: JSON.stringify({ fullName, email, username, password }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    setText(authMessage, payload.error || "Unable to create account.");
+    return;
   }
-});
 
-logoutBtn.addEventListener("click", async () => {
+  setText(authMessage, "Account created. You can now log in.");
+  signupForm.reset();
+  showSignup(false);
+}
+
+async function handleLogout() {
   await apiFetch("/api/logout", { method: "POST", body: JSON.stringify({}) });
   currentUser = null;
   records = [];
-  users = [];
-  setFormModeDefault();
   renderAuthState();
-});
+}
 
-createUserForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  try {
-    const response = await apiFetch("/api/admin/users", {
-      method: "POST",
-      body: JSON.stringify({ username: newUsername.value.trim(), password: newPassword.value, role: newRole.value }),
+function bindAuthUI() {
+  loginForm?.addEventListener("submit", handleLogin);
+  signupForm?.addEventListener("submit", handleSignup);
+  logoutBtn?.addEventListener("click", handleLogout);
+  toggleSignupBtn?.addEventListener("click", () => showSignup(true));
+  toggleLoginBtn?.addEventListener("click", () => showSignup(false));
+}
+
+async function loadRecords() {
+  const response = await apiFetch("/api/records");
+  if (!response.ok) throw new Error("Unable to load records.");
+  records = await response.json();
+  sortRecords();
+}
+
+function initHomePage() {
+  const form = document.getElementById("finance-form");
+  const formMessage = document.getElementById("form-message");
+  const goalInput = document.getElementById("goal-percent-input");
+  const goalIndicator = document.getElementById("goal-indicator");
+  const yearInput = document.getElementById("year");
+  const incomeInput = document.getElementById("income");
+  const donationInput = document.getElementById("donation");
+  const netWorthInput = document.getElementById("netWorth");
+
+  function destroy(chart) {
+    if (chart) chart.destroy();
+  }
+
+  function renderCharts() {
+    const goalPercent = getGoalPercent();
+    goalInput.value = goalPercent.toFixed(1);
+    const ratio = goalPercent / 100;
+
+    destroy(incomeGivingChart);
+    incomeGivingChart = new Chart(document.getElementById("income-giving-chart").getContext("2d"), {
+      type: "line",
+      data: {
+        labels: records.map((r) => r.year),
+        datasets: [
+          { label: "Income", data: records.map((r) => r.income), borderColor: "#3956f6", tension: 0.2 },
+          { label: "Donations", data: records.map((r) => r.donation), borderColor: "#00a76f", tension: 0.2 },
+        ],
+      },
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } },
     });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Unable to create user");
 
-    createUserForm.reset();
-    setMessage(adminMessage, "User created.");
-    await loadAdminUsers();
-  } catch (error) {
-    setMessage(adminMessage, error.message || "Unable to create user");
-  }
-});
-
-resetPasswordForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  try {
-    const response = await apiFetch(`/api/admin/users/${resetUserId.value}/reset-password`, {
-      method: "POST",
-      body: JSON.stringify({ password: resetPassword.value }),
+    const nw = records.filter((r) => r.netWorth !== null && r.netWorth !== undefined);
+    destroy(netWorthChart);
+    netWorthChart = new Chart(document.getElementById("net-worth-chart").getContext("2d"), {
+      type: "line",
+      data: { labels: nw.map((r) => r.year), datasets: [{ label: "Net Worth", data: nw.map((r) => r.netWorth), borderColor: "#9747ff", tension: 0.2 }] },
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } },
     });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Unable to reset password");
 
-    resetPasswordForm.reset();
-    setMessage(adminMessage, "Password reset successfully.");
-  } catch (error) {
-    setMessage(adminMessage, error.message || "Unable to reset password");
+    let cumIncome = 0;
+    let cumDonation = 0;
+    const cumIncomeSeries = [];
+    const cumDonationSeries = [];
+    const targetSeries = [];
+    for (const r of records) {
+      cumIncome += Number(r.income);
+      cumDonation += Number(r.donation);
+      cumIncomeSeries.push(cumIncome);
+      cumDonationSeries.push(cumDonation);
+      targetSeries.push(cumIncome * ratio);
+    }
+
+    const targetAmount = cumIncome * ratio;
+    const needed = Math.max(0, targetAmount - cumDonation);
+    const givingRate = cumIncome > 0 ? cumDonation / cumIncome : 0;
+    goalIndicator.className = `goal-indicator ${givingRate >= ratio ? "on-track" : "off-track"}`;
+    goalIndicator.innerHTML = `<div>Cumulative giving rate: ${percent(givingRate)} (${currency(cumDonation)} of ${currency(cumIncome)} income).</div><div>Goal: ${goalPercent.toFixed(1)}% (${currency(targetAmount)} target). Needed to reach goal: ${currency(needed)}.</div>`;
+
+    destroy(goalProgressChart);
+    goalProgressChart = new Chart(document.getElementById("goal-progress-chart").getContext("2d"), {
+      type: "line",
+      data: {
+        labels: records.map((r) => r.year),
+        datasets: [
+          { label: "Cumulative Income", data: cumIncomeSeries, borderColor: "#3956f6", tension: 0.2 },
+          { label: "Cumulative Donations", data: cumDonationSeries, borderColor: "#00a76f", tension: 0.2 },
+          { label: `${goalPercent.toFixed(1)}% Giving Target`, data: targetSeries, borderColor: "#f08c00", borderDash: [6, 6], pointRadius: 0 },
+        ],
+      },
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+    });
   }
-});
 
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const year = Number(yearInput.value);
+    const income = Number(incomeInput.value);
+    const donation = Number(donationInput.value);
+    const netWorthRaw = netWorthInput.value.trim();
+    const netWorth = netWorthRaw === "" ? null : Number(netWorthRaw);
 
-  const year = Number(yearInput.value);
-  const income = Number(incomeInput.value);
-  const donation = Number(donationInput.value);
-  const netWorthRaw = netWorthInput.value.trim();
-  const netWorth = netWorthRaw === "" ? null : Number(netWorthRaw);
+    if (!year || year < 1970 || income < 0 || donation < 0 || (netWorth !== null && Number.isNaN(netWorth))) {
+      setText(formMessage, "Please enter valid values.");
+      return;
+    }
 
-  if (!year || year < 1970 || income < 0 || donation < 0 || (netWorth !== null && Number.isNaN(netWorth))) {
-    setMessage(formMessage, "Please enter valid values for all fields.");
-    return;
-  }
-
-  try {
-    const saveResponse = await apiFetch("/api/records", {
+    const response = await apiFetch("/api/records", {
       method: "POST",
       body: JSON.stringify({ year, income, donation, netWorth }),
     });
-    const payload = await saveResponse.json();
-    if (!saveResponse.ok) throw new Error(payload.error || "Unable to save");
-
-    if (editingYear !== null && editingYear !== year) {
-      await apiFetch(`/api/records/${editingYear}`, { method: "DELETE", headers: {} });
+    const payload = await response.json();
+    if (!response.ok) {
+      setText(formMessage, payload.error || "Unable to save record.");
+      return;
     }
 
-    setMessage(formMessage, editingYear !== null ? "Record updated." : "Record saved.");
+    setText(formMessage, "Saved.");
     form.reset();
-    setFormModeDefault();
     await loadRecords();
-  } catch (error) {
-    setMessage(formMessage, error.message || "Unable to save record.");
-  }
-});
+    renderCharts();
+  });
 
-recordsBody.addEventListener("click", async (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLButtonElement)) return;
+  goalInput?.addEventListener("change", () => {
+    const value = Number(goalInput.value);
+    if (Number.isNaN(value) || value < 0 || value > 100) return;
+    setGoalPercent(value);
+    renderCharts();
+  });
 
-  const year = Number(target.dataset.year);
-  if (target.classList.contains("edit-btn")) {
-    startEditingRecord(year);
-    return;
-  }
+  return { render: renderCharts };
+}
 
-  if (target.classList.contains("delete-btn")) {
-    await apiFetch(`/api/records/${year}`, { method: "DELETE", headers: {} });
-    if (editingYear === year) {
-      form.reset();
-      setFormModeDefault();
+function initRecordsPage() {
+  const tbody = document.getElementById("records-body");
+  const clearBtn = document.getElementById("clear-data");
+  const form = document.getElementById("edit-form");
+  const message = document.getElementById("records-message");
+  const yearInput = document.getElementById("edit-year");
+  const incomeInput = document.getElementById("edit-income");
+  const donationInput = document.getElementById("edit-donation");
+  const netWorthInput = document.getElementById("edit-netWorth");
+
+  function renderTable() {
+    tbody.innerHTML = "";
+    if (!records.length) {
+      tbody.innerHTML = `<tr><td colspan="5">No annual records yet.</td></tr>`;
+      return;
     }
-    await loadRecords();
+
+    for (const r of records) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${r.year}</td><td>${currency(r.income)}</td><td>${currency(r.donation)}</td><td>${r.netWorth == null ? "—" : currency(r.netWorth)}</td><td><button class="edit-btn" data-year="${r.year}" type="button">Edit</button><button class="delete-btn" data-year="${r.year}" type="button">Delete</button></td>`;
+      tbody.appendChild(tr);
+    }
   }
-});
 
-clearButton.addEventListener("click", async () => {
-  await apiFetch("/api/records", { method: "DELETE", headers: {} });
-  form.reset();
-  setFormModeDefault();
-  setMessage(formMessage, "Cleared all saved data.");
-  await loadRecords();
-});
+  tbody?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const year = Number(target.dataset.year);
 
-goalPercentInput.addEventListener("change", () => {
-  const value = Number(goalPercentInput.value);
-  if (Number.isNaN(value) || value < 0 || value > 100) {
-    goalPercentInput.value = goalPercent.toFixed(1);
-    setMessage(formMessage, "Goal percentage must be between 0 and 100.");
+    if (target.classList.contains("edit-btn")) {
+      const rec = records.find((x) => x.year === year);
+      if (!rec) return;
+      editingYear = year;
+      yearInput.value = String(rec.year);
+      incomeInput.value = String(rec.income);
+      donationInput.value = String(rec.donation);
+      netWorthInput.value = rec.netWorth == null ? "" : String(rec.netWorth);
+      setText(message, `Editing ${year}.`);
+      return;
+    }
+
+    if (target.classList.contains("delete-btn")) {
+      await apiFetch(`/api/records/${year}`, { method: "DELETE" });
+      await loadRecords();
+      renderTable();
+      setText(message, `Deleted ${year}.`);
+    }
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const year = Number(yearInput.value);
+    const income = Number(incomeInput.value);
+    const donation = Number(donationInput.value);
+    const netWorthRaw = netWorthInput.value.trim();
+    const netWorth = netWorthRaw === "" ? null : Number(netWorthRaw);
+    if (!year || year < 1970) return;
+
+    await apiFetch("/api/records", { method: "POST", body: JSON.stringify({ year, income, donation, netWorth }) });
+    if (editingYear !== null && editingYear !== year) {
+      await apiFetch(`/api/records/${editingYear}`, { method: "DELETE" });
+    }
+    editingYear = null;
+    form.reset();
+    await loadRecords();
+    renderTable();
+    setText(message, "Record updated.");
+  });
+
+  clearBtn?.addEventListener("click", async () => {
+    await apiFetch("/api/records", { method: "DELETE" });
+    await loadRecords();
+    renderTable();
+    setText(message, "All records cleared.");
+  });
+
+  return { render: renderTable };
+}
+
+function initAdminPage() {
+  const createForm = document.getElementById("create-user-form");
+  const resetForm = document.getElementById("reset-password-form");
+  const userSelect = document.getElementById("reset-user-id");
+  const tableBody = document.getElementById("users-body");
+  const adminMessage = document.getElementById("admin-message");
+
+  async function loadUsers() {
+    const response = await apiFetch("/api/admin/users");
+    if (!response.ok) return;
+    const users = await response.json();
+
+    userSelect.innerHTML = "";
+    tableBody.innerHTML = "";
+    for (const user of users) {
+      const option = document.createElement("option");
+      option.value = String(user.id);
+      option.textContent = `${user.fullName} (${user.username})`;
+      userSelect.appendChild(option);
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${user.fullName}</td><td>${user.username}</td><td>${user.email || "—"}</td><td>${user.role}</td>`;
+      tableBody.appendChild(tr);
+    }
+  }
+
+  createForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      fullName: document.getElementById("new-full-name").value.trim(),
+      username: document.getElementById("new-username").value.trim(),
+      email: document.getElementById("new-email").value.trim(),
+      password: document.getElementById("new-password").value,
+      role: document.getElementById("new-role").value,
+    };
+    const response = await apiFetch("/api/admin/users", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) {
+      setText(adminMessage, data.error || "Unable to create user.");
+      return;
+    }
+    createForm.reset();
+    setText(adminMessage, "User created.");
+    await loadUsers();
+  });
+
+  resetForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const userId = userSelect.value;
+    const password = document.getElementById("reset-password").value;
+    const response = await apiFetch(`/api/admin/users/${userId}/reset-password`, {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setText(adminMessage, data.error || "Unable to reset password.");
+      return;
+    }
+    resetForm.reset();
+    setText(adminMessage, "Password reset.");
+  });
+
+  return { render: loadUsers };
+}
+
+let pageController = null;
+
+async function initPageData() {
+  if (!currentUser) return;
+
+  if (page === "home") {
+    await loadRecords();
+    if (!pageController) pageController = initHomePage();
+    pageController.render();
     return;
   }
-  goalPercent = value;
-  setStoredGoalPercent(goalPercent);
-  renderCharts();
-});
 
-populateYearOptions();
-setFormModeDefault();
+  if (page === "records") {
+    await loadRecords();
+    if (!pageController) pageController = initRecordsPage();
+    pageController.render();
+    return;
+  }
+
+  if (page === "admin") {
+    if (!pageController) pageController = initAdminPage();
+    await pageController.render();
+  }
+}
+
+async function bootstrap() {
+  bindAuthUI();
+  populateYearOptions();
+  showSignup(false);
+  await loadCurrentUser();
+  await initPageData();
+}
+
 bootstrap();

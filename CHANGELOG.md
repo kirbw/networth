@@ -5,8 +5,13 @@ All notable changes to this project are documented in this file.
 ## [Unreleased]
 
 ### Added
+- Public self-signup endpoint and UI (full name, email, username, password).
+- User profile fields for full name and email in auth/admin flows.
 
 ### Changed
+- Split UI into three pages: Home, Records, and Admin.
+- Moved session + logout controls into the top navigation bar.
+- Admin tools moved off the charts page into dedicated admin page.
 
 ## [v0.0.4] - 2026-03-04
 

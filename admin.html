@@ -3,11 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Annual Finance Tracker - Home</title>
+  <title>Annual Finance Tracker - Admin</title>
   <link rel="stylesheet" href="styles.css" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body data-page="home">
+<body data-page="admin">
   <header class="topbar">
     <div class="topbar-left">
       <strong>Annual Finance Tracker</strong>
@@ -15,9 +14,9 @@
       <button id="logout-btn" type="button">Logout</button>
     </div>
     <nav class="menu">
-      <a href="/" class="active">Home</a>
+      <a href="/">Home</a>
       <a href="/records.html">Records</a>
-      <a id="nav-admin" href="/admin.html" class="hidden">Admin</a>
+      <a id="nav-admin" href="/admin.html" class="active">Admin</a>
     </nav>
   </header>
 
@@ -29,7 +28,6 @@
         <label>Password <input id="login-password" type="password" required /></label>
         <button type="submit">Log In</button>
       </form>
-
       <form id="signup-form" class="hidden">
         <label>Full Name <input id="signup-full-name" type="text" required /></label>
         <label>Email <input id="signup-email" type="email" required /></label>
@@ -37,7 +35,6 @@
         <label>Password <input id="signup-password" type="password" required /></label>
         <button type="submit">Create Account</button>
       </form>
-
       <div class="auth-actions">
         <button id="toggle-signup-btn" type="button">Create account</button>
         <button id="toggle-login-btn" type="button">Back to login</button>
@@ -46,39 +43,44 @@
     </section>
 
     <section id="app-content" class="hidden">
-      <section class="card form-card">
-        <h2>Add Annual Data</h2>
-        <form id="finance-form">
-          <div class="form-grid">
-            <label>
-              Tax Year
-              <input id="year" type="number" min="1970" max="3000" list="year-options" required />
-              <datalist id="year-options"></datalist>
+      <section class="card">
+        <h2>Admin Settings</h2>
+        <div class="admin-grid">
+          <form id="create-user-form">
+            <h3>Create User</h3>
+            <label>Full Name <input id="new-full-name" type="text" required /></label>
+            <label>Email <input id="new-email" type="email" required /></label>
+            <label>Username <input id="new-username" type="text" required /></label>
+            <label>Password <input id="new-password" type="password" required /></label>
+            <label>Role
+              <select id="new-role">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
             </label>
-            <label>Total Income ($) <input id="income" type="number" min="0" step="0.01" required /></label>
-            <label>Donations ($) <input id="donation" type="number" min="0" step="0.01" required /></label>
-            <label><span class="label-title">Net Worth ($) <span class="optional">(optional)</span></span><input id="netWorth" type="number" step="0.01" /></label>
-          </div>
-          <button id="save-btn" type="submit">Save Year</button>
-          <p id="form-message"></p>
-        </form>
+            <button type="submit">Create User</button>
+          </form>
+
+          <form id="reset-password-form">
+            <h3>Reset Password</h3>
+            <label>User
+              <select id="reset-user-id" required></select>
+            </label>
+            <label>New Password <input id="reset-password" type="password" required /></label>
+            <button type="submit">Reset Password</button>
+          </form>
+        </div>
+        <p id="admin-message"></p>
       </section>
 
-      <section class="card chart-card">
-        <h2>Income & Giving by Year</h2>
-        <canvas id="income-giving-chart"></canvas>
-      </section>
-
-      <section class="card chart-card">
-        <h2>Net Worth by Year</h2>
-        <canvas id="net-worth-chart"></canvas>
-      </section>
-
-      <section class="card chart-card">
-        <h2>Cumulative Giving Progress</h2>
-        <label class="goal-label">Goal Percentage <input id="goal-percent-input" type="number" min="0" max="100" step="0.1" /></label>
-        <div id="goal-indicator" class="goal-indicator"></div>
-        <canvas id="goal-progress-chart"></canvas>
+      <section class="card">
+        <h2>Users</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Full Name</th><th>Username</th><th>Email</th><th>Role</th></tr></thead>
+            <tbody id="users-body"></tbody>
+          </table>
+        </div>
       </section>
     </section>
   </main>

@@ -22,10 +22,15 @@ Current release: **v0.0.4**
 This version adds:
 
 - Username/password login
+- Public self-signup (create account) flow
 - Per-user data isolation (each user sees only their own records)
 - Admin role with user management:
   - Create users
   - Reset passwords
+- Multi-page UI:
+  - Home (data entry + charts)
+  - Records (saved records list + edit)
+  - Admin (settings, admin-only)
 
 ### Default admin bootstrap
 
@@ -69,3 +74,4 @@ Then open `http://localhost:3000`.
 - Run behind HTTPS (reverse proxy) so credentials and session cookies are encrypted in transit.
 - Restrict network exposure (firewall/VPN) if this app is self-hosted.
 - Use strong unique passwords for all users.
+- Prefer adding CSRF protection and login rate limiting before internet exposure.
