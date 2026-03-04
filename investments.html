@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Stocks</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="investments">
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Finance Tracker</h2>
+      <nav class="side-menu">
+        <a href="/">Home</a>
+        <a href="/records.html">Records</a>
+        <a href="/investments.html" class="active">Investments</a>
+        <a id="nav-admin" href="/admin-users.html" class="hidden">Admin</a>
+      </nav>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <div class="session-controls">
+          <span id="session-name">Not signed in</span>
+          <button id="logout-btn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden">
+          <h2>Sign In</h2>
+          <form id="login-form">
+            <label>Username <input id="login-username" type="text" required /></label>
+            <label>Password <input id="login-password" type="password" required /></label>
+            <button type="submit">Log In</button>
+          </form>
+          <form id="signup-form" class="hidden">
+            <label>Full Name <input id="signup-full-name" type="text" required /></label>
+            <label>Email <input id="signup-email" type="email" required /></label>
+            <label>Username <input id="signup-username" type="text" required /></label>
+            <label>Password <input id="signup-password" type="password" required /></label>
+            <button type="submit">Create Account</button>
+          </form>
+          <form id="verify-form" class="hidden">
+            <label>Username <input id="verify-username" type="text" required /></label>
+            <label>Verification Code <input id="verify-code" type="text" required /></label>
+            <button type="submit">Verify Account</button>
+          </form>
+          <form id="forgot-password-form" class="hidden">
+            <label>Email or Username <input id="forgot-identifier" type="text" required /></label>
+            <button type="submit">Send Reset Link</button>
+          </form>
+          <div class="auth-actions">
+            <button id="toggle-signup-btn" type="button">Create account</button>
+            <button id="toggle-verify-btn" type="button">Verify account</button>
+            <button id="toggle-forgot-btn" type="button">Forgot password</button>
+            <button id="toggle-login-btn" type="button">Back to login</button>
+          </div>
+          <p id="auth-message"></p>
+        </section>
+
+        <section id="app-content" class="hidden">
+          <section class="card admin-subnav-card">
+            <div class="admin-subnav">
+              <a href="/investments.html" class="active">Stocks</a>
+              <a href="/precious-metals.html">Precious Metals</a>
+              <a href="/real-estate.html">Real Estate</a>
+              <a href="/business-ventures.html">Business Ventures</a>
+              <a href="/retirement-accounts.html">Retirement Accounts</a>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Add Stock</h2>
+            <form id="investment-form">
+              <div class="form-grid">
+                <label>Ticker <input id="inv-ticker" type="text" required /></label>
+                <label>Shares <input id="inv-shares" type="number" min="0.0001" step="0.0001" required /></label>
+                <label>Purchase Price ($) <input id="inv-price" type="number" min="0" step="0.0001" required /></label>
+                <label>Purchase Date <input id="inv-date" type="date" required /></label>
+              </div>
+              <button type="submit" id="stocks-submit-btn">Add Stock</button>
+              <button id="refresh-prices-btn" type="button">Refresh Current Values</button>
+              <p id="investments-message"></p>
+            </form>
+          </section>
+
+          <section class="card">
+            <h2>Stocks</h2>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th data-sort-investments="ticker" class="sortable">Ticker</th><th data-sort-investments="company_name" class="sortable">Company</th><th data-sort-investments="purchase_date" class="sortable">Purchase Date</th><th data-sort-investments="shares" class="sortable">Shares</th><th data-sort-investments="purchase_price" class="sortable">Purchase Price</th><th>Purchase Value</th><th data-sort-investments="current_price" class="sortable">Current Price</th><th>Gain/Loss</th><th>Gain/Loss %</th><th>Actions</th></tr></thead>
+                <tbody id="investments-body"></tbody>
+              </table>
+            </div>
+            <p class="small-note">Current prices are fetched from Stooq quotes (no API key required). <span id="last-refreshed">Last refreshed: Never</span></p>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>
