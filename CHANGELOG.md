@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Added
+- Authentication with username/password login and logout endpoints.
+- Multi-user data isolation so each user sees only their own annual records.
+- Admin user management APIs and UI (create users and reset passwords).
+
+### Changed
+- `annual_records` schema updated to be user-scoped (`user_id`, `year` primary key).
+- Legacy single-user records are migrated to the first admin account.
+
+
 ## [v0.0.3] - 2026-02-27
 
 ### Added

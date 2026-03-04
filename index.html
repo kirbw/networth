@@ -11,90 +11,133 @@
   <main class="container">
     <header>
       <h1>Annual Finance Tracker</h1>
-      <p>Track annual income, charitable giving, and net worth in one place. Data is saved to a local SQLite database.</p>
+      <p>Track annual income, charitable giving, and net worth with account-based access control.</p>
     </header>
 
-    <section class="card form-card">
-      <h2>Add or Update Annual Data</h2>
-      <form id="finance-form">
-        <div class="form-grid">
-          <label>
-            Tax Year
-            <input id="year" name="year" type="number" min="1970" max="3000" list="year-options" required />
-            <datalist id="year-options"></datalist>
-          </label>
-
-          <label>
-            Total Annual Income ($)
-            <input id="income" name="income" type="number" min="0" step="0.01" required />
-          </label>
-
-          <label>
-            Annual Charitable Donations ($)
-            <input id="donation" name="donation" type="number" min="0" step="0.01" required />
-          </label>
-
-          <label>
-            <span class="label-title">Net Worth ($) <span class="optional">(optional)</span></span>
-            <input id="netWorth" name="netWorth" type="number" step="0.01" />
-          </label>
-        </div>
-
-        <button id="save-btn" type="submit">Save Year</button>
-        <p id="form-message" role="status" aria-live="polite"></p>
+    <section id="auth-card" class="card auth-card">
+      <h2>Sign In</h2>
+      <form id="login-form" class="auth-form">
+        <label>
+          Username
+          <input id="login-username" type="text" autocomplete="username" required />
+        </label>
+        <label>
+          Password
+          <input id="login-password" type="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit">Log In</button>
+        <p id="login-message" role="status" aria-live="polite"></p>
       </form>
     </section>
 
-    <section class="card chart-card">
-      <div class="section-heading">
-        <h2>Income & Giving by Year</h2>
-      </div>
-      <canvas id="income-giving-chart" aria-label="A chart showing income and giving trends" role="img"></canvas>
-    </section>
+    <section id="app-shell" class="hidden">
+      <section class="card session-card">
+        <div class="section-heading">
+          <h2>Session</h2>
+          <button id="logout-btn" type="button">Log Out</button>
+        </div>
+        <p id="session-user"></p>
+      </section>
 
-    <section class="card chart-card">
-      <div class="section-heading">
-        <h2>Net Worth by Year</h2>
-      </div>
-      <canvas id="net-worth-chart" aria-label="A chart showing net worth trends" role="img"></canvas>
-    </section>
+      <section id="admin-card" class="card hidden">
+        <h2>Admin Panel</h2>
+        <div class="admin-grid">
+          <form id="create-user-form">
+            <h3>Create User</h3>
+            <label>Username <input id="new-username" type="text" required /></label>
+            <label>Password <input id="new-password" type="password" required /></label>
+            <label>
+              Role
+              <select id="new-role">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+            <button type="submit">Create User</button>
+          </form>
 
-    <section class="card chart-card">
-      <div class="section-heading">
-        <h2>Cumulative Giving Progress</h2>
-      </div>
-      <div class="goal-controls">
-        <label class="goal-label" for="goal-percent-input">
-          Goal Percentage
-          <input id="goal-percent-input" type="number" min="0" max="100" step="0.1" />
-        </label>
-      </div>
-      <div id="goal-indicator" class="goal-indicator" aria-live="polite"></div>
-      <canvas id="goal-progress-chart" aria-label="A chart showing cumulative income, giving, and target" role="img"></canvas>
-    </section>
+          <form id="reset-password-form">
+            <h3>Reset Password</h3>
+            <label>
+              User
+              <select id="reset-user-id" required></select>
+            </label>
+            <label>New Password <input id="reset-password" type="password" required /></label>
+            <button type="submit">Reset Password</button>
+          </form>
+        </div>
+        <p id="admin-message" role="status" aria-live="polite"></p>
+      </section>
 
-    <section class="card table-card">
-      <div class="section-heading">
-        <h2>Saved Annual Records</h2>
-        <button id="clear-data" class="danger" type="button">Clear All Data</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Year</th>
-              <th>Income</th>
-              <th>Donated</th>
-              <th>Net Worth</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="records-body"></tbody>
-        </table>
-      </div>
+      <section class="card form-card">
+        <h2>Add or Update Annual Data</h2>
+        <form id="finance-form">
+          <div class="form-grid">
+            <label>
+              Tax Year
+              <input id="year" name="year" type="number" min="1970" max="3000" list="year-options" required />
+              <datalist id="year-options"></datalist>
+            </label>
+
+            <label>
+              Total Annual Income ($)
+              <input id="income" name="income" type="number" min="0" step="0.01" required />
+            </label>
+
+            <label>
+              Annual Charitable Donations ($)
+              <input id="donation" name="donation" type="number" min="0" step="0.01" required />
+            </label>
+
+            <label>
+              <span class="label-title">Net Worth ($) <span class="optional">(optional)</span></span>
+              <input id="netWorth" name="netWorth" type="number" step="0.01" />
+            </label>
+          </div>
+
+          <button id="save-btn" type="submit">Save Year</button>
+          <p id="form-message" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="card chart-card">
+        <div class="section-heading"><h2>Income & Giving by Year</h2></div>
+        <canvas id="income-giving-chart" role="img"></canvas>
+      </section>
+
+      <section class="card chart-card">
+        <div class="section-heading"><h2>Net Worth by Year</h2></div>
+        <canvas id="net-worth-chart" role="img"></canvas>
+      </section>
+
+      <section class="card chart-card">
+        <div class="section-heading"><h2>Cumulative Giving Progress</h2></div>
+        <div class="goal-controls">
+          <label class="goal-label" for="goal-percent-input">
+            Goal Percentage
+            <input id="goal-percent-input" type="number" min="0" max="100" step="0.1" />
+          </label>
+        </div>
+        <div id="goal-indicator" class="goal-indicator" aria-live="polite"></div>
+        <canvas id="goal-progress-chart" role="img"></canvas>
+      </section>
+
+      <section class="card table-card">
+        <div class="section-heading">
+          <h2>Saved Annual Records</h2>
+          <button id="clear-data" class="danger" type="button">Clear All Data</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Year</th><th>Income</th><th>Donated</th><th>Net Worth</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="records-body"></tbody>
+          </table>
+        </div>
+      </section>
     </section>
   </main>
-
   <script src="app.js"></script>
 </body>
 </html>
