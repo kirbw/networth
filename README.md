@@ -8,7 +8,14 @@ A simple web app for tracking yearly:
 
 ## Release
 
-Current release: **v0.0.3**
+Current release: **v0.0.4**
+
+## Release Notes
+
+### v0.0.4 highlights
+- Promoted the multi-user authentication and admin-management build to an official release.
+- Added formal release notes and changelog entries for deployment tracking.
+- Kept all v0.0.3 functionality (auth, per-user data isolation, admin user management, user-scoped records) as the release baseline.
 
 ## Security and multi-user update
 
