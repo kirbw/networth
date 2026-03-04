@@ -54,16 +54,19 @@ ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
 - SMTP + host name settings for outbound email links and verification/reset emails
 - Forgot password flow that emails reset links
 - Version display in bottom-left footer for troubleshooting
-- Investments section now has subpages for Stocks, Precious Metals, Real Estate, and Business Ventures
+- Investments section now has subpages for Stocks, Precious Metals, Real Estate, Business Ventures, and Retirement Accounts
 - Dedicated Stocks page to track ticker, shares, purchase price, and purchase date
 - Dedicated Precious Metals page for type, description, quantity, weight, where/date purchased, purchase price, and current value
 - Dedicated Real Estate page for address, % owned, purchase/current value, and computed my-value (current × ownership %)
 - Dedicated Business Ventures page for business name, % owned, business value, and computed my-value
+- Dedicated Retirement Accounts page for description, type, broker, taxable flag, and account value
 - Live quote lookup endpoint and gain/loss calculation for each investment (quotes via Stooq)
 - Stocks page stores company name + current price and shows a last refreshed timestamp
 - Stocks totals now automatically exclude positions that do not have a current price (for unsupported tickers such as some OTC symbols)
 - Stocks, Precious Metals, Real Estate, and Business Ventures tables support click-to-sort by key columns
 - Investments table totals row for purchase value, current value, and gain/loss
+- Home dashboard includes an investments summary chart (stocks, precious metals, real estate my-value, business my-value, retirement accounts) plus combined total
+- Edit on Records now scrolls directly to the edit form; deletes/clear actions now prompt for confirmation
 - Smoother cross-page navigation by hiding login card until session check completes
 - Server-side protection for app pages (`records`, `investments`, `admin`) with one-way redirects to login when session is invalid
 - Session cookie is HTTP-only and validated against server-side session storage on every protected page request

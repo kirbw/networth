@@ -19,6 +19,8 @@ All notable changes to this project are documented in this file.
 - Stocks, Precious Metals, Real Estate, and Business Ventures tables are sortable by clicking key column headers.
 - Server-side protected page redirects now enforce valid sessions before protected pages render.
 - Added gain/loss percentage columns to Stocks and Precious Metals tables.
+- Added Retirement Accounts subpage with sortable CRUD table and per-user API endpoints.
+- Added Home-page investments summary bar chart with category totals and combined total.
 
 - Security hardening: login rate limiting, hashed password-reset tokens, and stricter minimum password length.
 - Admin SMTP settings reads now redact stored SMTP password values.
@@ -34,7 +36,8 @@ All notable changes to this project are documented in this file.
 - Added `next` redirect support after login for smoother server-initiated login flow.
 - Stocks totals now exclude holdings without a current price so unsupported tickers do not break totals.
 - Reordered Real Estate page layout to show Description before Address.
-- Increased spacing between home-page charts for improved readability.
+- Increased spacing/padding across all pages for improved readability and consistency.
+- Records edit now scrolls to the edit form; delete/clear actions now require confirmation prompts across record/investment pages.
 
 ## [v0.0.5] - 2026-03-04
 

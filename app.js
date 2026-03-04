@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/admin-users.html", "/admin-email.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/admin-users.html", "/admin-email.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -25,6 +25,7 @@ let editingYear = null;
 let incomeGivingChart;
 let netWorthChart;
 let goalProgressChart;
+let investmentsSummaryChart;
 
 function apiFetch(url, options = {}) {
   const headers = options.body ? { "Content-Type": "application/json", ...(options.headers || {}) } : (options.headers || {});
@@ -200,8 +201,29 @@ function initHomePage() {
   const incomeInput = document.getElementById("income");
   const donationInput = document.getElementById("donation");
   const netWorthInput = document.getElementById("netWorth");
+  const investmentsTotalEl = document.getElementById("investments-combined-total");
 
   const destroy = (c) => { if (c) c.destroy(); };
+
+  async function renderInvestmentsSummary() {
+    const chartEl = document.getElementById("investments-summary-chart");
+    if (!chartEl) return;
+    const response = await apiFetch("/api/investments/summary");
+    if (!response.ok) return;
+    const summary = await response.json();
+    const labels = ["Stocks", "Precious Metals", "Real Estate (My Value)", "Business Ventures (My Value)", "Retirement Accounts"];
+    const values = [summary.stocks || 0, summary.preciousMetals || 0, summary.realEstateMyValue || 0, summary.businessVenturesMyValue || 0, summary.retirementAccounts || 0];
+    destroy(investmentsSummaryChart);
+    investmentsSummaryChart = new Chart(chartEl.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{ label: "Total Value", data: values, backgroundColor: ["#3956f6", "#00a76f", "#9747ff", "#f08c00", "#0090d8"] }],
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } },
+    });
+    if (investmentsTotalEl) investmentsTotalEl.textContent = `Combined total: ${currency(summary.combinedTotal || 0)}`;
+  }
 
   function renderCharts() {
     const goalPercent = getGoalPercent();
@@ -267,6 +289,7 @@ function initHomePage() {
     form.reset();
     await loadRecords();
     renderCharts();
+    await renderInvestmentsSummary();
   });
 
   goalInput?.addEventListener("change", () => {
@@ -276,7 +299,7 @@ function initHomePage() {
     renderCharts();
   });
 
-  return { render: renderCharts };
+  return { render: async () => { renderCharts(); await renderInvestmentsSummary(); } };
 }
 
 function initRecordsPage() {
@@ -284,6 +307,7 @@ function initRecordsPage() {
   const clearBtn = document.getElementById("clear-data");
   const form = document.getElementById("edit-form");
   const msg = document.getElementById("records-message");
+  const editorCard = document.getElementById("record-editor-card");
   const yearInput = document.getElementById("edit-year");
   const incomeInput = document.getElementById("edit-income");
   const donationInput = document.getElementById("edit-donation");
@@ -314,9 +338,12 @@ function initRecordsPage() {
       incomeInput.value = rec.income;
       donationInput.value = rec.donation;
       netWorthInput.value = rec.netWorth ?? "";
+      editorCard?.scrollIntoView({ behavior: "smooth", block: "start" });
+      yearInput.focus();
       return setText(msg, `Editing ${year}.`);
     }
     if (target.classList.contains("delete-btn")) {
+      if (!window.confirm(`Delete record for ${year}?`)) return;
       await apiFetch(`/api/records/${year}`, { method: "DELETE" });
       await loadRecords();
       renderTable();
@@ -341,6 +368,7 @@ function initRecordsPage() {
   });
 
   clearBtn?.addEventListener("click", async () => {
+    if (!window.confirm("Clear all records? This cannot be undone.")) return;
     await apiFetch("/api/records", { method: "DELETE" });
     await loadRecords();
     renderTable();
@@ -495,6 +523,7 @@ function initInvestmentsPage() {
       return;
     }
     if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm("Delete this stock entry?")) return;
     await apiFetch(`/api/investments/${id}`, { method: "DELETE" });
     if (editingId === id) {
       form?.reset();
@@ -648,6 +677,7 @@ function initPreciousMetalsPage() {
       return;
     }
     if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm("Delete this precious metals entry?")) return;
     await apiFetch(`/api/precious-metals/${id}`, { method: "DELETE" });
     if (editingId === id) {
       form?.reset();
@@ -769,6 +799,7 @@ function initRealEstatePage() {
       return;
     }
     if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm("Delete this real estate entry?")) return;
     await apiFetch(`/api/real-estate/${id}`, { method: "DELETE" });
     if (editingId === id) {
       form?.reset();
@@ -877,7 +908,127 @@ function initBusinessVenturesPage() {
       return;
     }
     if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm("Delete this business venture entry?")) return;
     await apiFetch(`/api/business-ventures/${id}`, { method: "DELETE" });
+    if (editingId === id) {
+      form?.reset();
+      resetEditState();
+    }
+    await loadRows();
+    renderTable();
+  });
+
+  return { render: async () => { await loadRows(); renderTable(); } };
+}
+
+function initRetirementAccountsPage() {
+  const form = document.getElementById("retirement-form");
+  const msg = document.getElementById("retirement-message");
+  const tableBody = document.getElementById("retirement-body");
+  const sortHeaders = document.querySelectorAll("[data-sort-retirement]");
+  const submitBtn = document.getElementById("retirement-submit-btn");
+  let rows = [];
+  let sortKey = "description";
+  let sortDirection = "asc";
+  let editingId = null;
+
+  async function loadRows() {
+    const response = await apiFetch("/api/retirement-accounts");
+    if (!response.ok) return;
+    rows = await response.json();
+  }
+
+  function applySort() {
+    const direction = sortDirection === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      const aNum = Number(av);
+      const bNum = Number(bv);
+      if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return (aNum - bNum) * direction;
+      return String(av).localeCompare(String(bv)) * direction;
+    });
+  }
+
+  function startEdit(item) {
+    editingId = item.id;
+    document.getElementById("ret-description").value = item.description;
+    document.getElementById("ret-type").value = item.account_type;
+    document.getElementById("ret-broker").value = item.broker;
+    document.getElementById("ret-taxable").value = Number(item.taxable) === 1 ? "yes" : "no";
+    document.getElementById("ret-value").value = item.value;
+    if (submitBtn) submitBtn.textContent = "Update Retirement Account";
+    setText(msg, `Editing ${item.description}.`);
+  }
+
+  function resetEditState() {
+    editingId = null;
+    if (submitBtn) submitBtn.textContent = "Add Retirement Account";
+  }
+
+  function renderTable() {
+    applySort();
+    tableBody.innerHTML = "";
+    if (!rows.length) {
+      tableBody.innerHTML = `<tr><td colspan="6">No retirement accounts yet.</td></tr>`;
+      return;
+    }
+    let totalValue = 0;
+    for (const item of rows) {
+      totalValue += Number(item.value);
+      const taxableLabel = Number(item.taxable) === 1 ? "Yes" : "No";
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${item.description}</td><td>${item.account_type}</td><td>${item.broker}</td><td>${taxableLabel}</td><td>${currency(item.value)}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tableBody.appendChild(tr);
+    }
+    const totalRow = document.createElement("tr");
+    totalRow.className = "totals-row";
+    totalRow.innerHTML = `<td colspan="4"><strong>Totals</strong></td><td><strong>${currency(totalValue)}</strong></td><td></td>`;
+    tableBody.appendChild(totalRow);
+  }
+
+  sortHeaders.forEach((header) => {
+    header.addEventListener("click", () => {
+      const key = header.dataset.sortRetirement;
+      if (!key) return;
+      sortDirection = sortKey === key && sortDirection === "asc" ? "desc" : "asc";
+      sortKey = key;
+      renderTable();
+    });
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      id: editingId,
+      description: document.getElementById("ret-description").value.trim(),
+      type: document.getElementById("ret-type").value.trim(),
+      broker: document.getElementById("ret-broker").value.trim(),
+      taxable: document.getElementById("ret-taxable").value,
+      value: Number(document.getElementById("ret-value").value),
+    };
+    const response = await apiFetch("/api/retirement-accounts", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save retirement account.");
+    form.reset();
+    resetEditState();
+    await loadRows();
+    renderTable();
+    setText(msg, "Retirement account saved.");
+  });
+
+  tableBody?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const item = rows.find((x) => x.id === id);
+      if (item) startEdit(item);
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm("Delete this retirement account entry?")) return;
+    await apiFetch(`/api/retirement-accounts/${id}`, { method: "DELETE" });
     if (editingId === id) {
       form?.reset();
       resetEditState();
@@ -1052,6 +1203,11 @@ async function initPageData() {
 
   if (page === "business-ventures") {
     if (!pageController) pageController = initBusinessVenturesPage();
+    return pageController.render();
+  }
+
+  if (page === "retirement-accounts") {
+    if (!pageController) pageController = initRetirementAccountsPage();
     return pageController.render();
   }
 

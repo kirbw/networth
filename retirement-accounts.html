@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Annual Finance Tracker - Stocks</title>
+  <title>Annual Finance Tracker - Retirement Accounts</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body data-page="investments">
+<body data-page="retirement-accounts">
   <div class="layout">
     <aside class="sidebar">
       <h2>Finance Tracker</h2>
@@ -62,38 +62,42 @@
         <section id="app-content" class="hidden">
           <section class="card admin-subnav-card">
             <div class="admin-subnav">
-              <a href="/investments.html" class="active">Stocks</a>
+              <a href="/investments.html">Stocks</a>
               <a href="/precious-metals.html">Precious Metals</a>
               <a href="/real-estate.html">Real Estate</a>
               <a href="/business-ventures.html">Business Ventures</a>
-              <a href="/retirement-accounts.html">Retirement Accounts</a>
+              <a href="/retirement-accounts.html" class="active">Retirement Accounts</a>
             </div>
           </section>
 
           <section class="card">
-            <h2>Add Stock</h2>
-            <form id="investment-form">
+            <h2>Add Retirement Account</h2>
+            <form id="retirement-form">
               <div class="form-grid">
-                <label>Ticker <input id="inv-ticker" type="text" required /></label>
-                <label>Shares <input id="inv-shares" type="number" min="0.0001" step="0.0001" required /></label>
-                <label>Purchase Price ($) <input id="inv-price" type="number" min="0" step="0.0001" required /></label>
-                <label>Purchase Date <input id="inv-date" type="date" required /></label>
+                <label>Description <input id="ret-description" type="text" required /></label>
+                <label>Type <input id="ret-type" type="text" required /></label>
+                <label>Broker <input id="ret-broker" type="text" required /></label>
+                <label>Taxable
+                  <select id="ret-taxable" required>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </label>
+                <label>Value ($) <input id="ret-value" type="number" min="0" step="0.01" required /></label>
               </div>
-              <button type="submit" id="stocks-submit-btn">Add Stock</button>
-              <button id="refresh-prices-btn" type="button">Refresh Current Values</button>
-              <p id="investments-message"></p>
+              <button type="submit" id="retirement-submit-btn">Add Retirement Account</button>
+              <p id="retirement-message"></p>
             </form>
           </section>
 
           <section class="card">
-            <h2>Stocks</h2>
+            <h2>Retirement Accounts</h2>
             <div class="table-wrap">
               <table>
-                <thead><tr><th data-sort-investments="ticker" class="sortable">Ticker</th><th data-sort-investments="company_name" class="sortable">Company</th><th data-sort-investments="purchase_date" class="sortable">Purchase Date</th><th data-sort-investments="shares" class="sortable">Shares</th><th data-sort-investments="purchase_price" class="sortable">Purchase Price</th><th>Purchase Value</th><th data-sort-investments="current_price" class="sortable">Current Price</th><th>Gain/Loss</th><th>Gain/Loss %</th><th>Actions</th></tr></thead>
-                <tbody id="investments-body"></tbody>
+                <thead><tr><th data-sort-retirement="description" class="sortable">Description</th><th data-sort-retirement="account_type" class="sortable">Type</th><th data-sort-retirement="broker" class="sortable">Broker</th><th data-sort-retirement="taxable" class="sortable">Taxable</th><th data-sort-retirement="value" class="sortable">Value</th><th>Actions</th></tr></thead>
+                <tbody id="retirement-body"></tbody>
               </table>
             </div>
-            <p class="small-note">Current prices are fetched from Stooq quotes (no API key required). <span id="last-refreshed">Last refreshed: Never</span></p>
           </section>
         </section>
       </main>

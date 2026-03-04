@@ -20,7 +20,7 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/admin-users.html", "/admin-email.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/admin-users.html", "/admin-email.html"}
 ADMIN_PAGES = {"/admin-users.html", "/admin-email.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
@@ -343,6 +343,22 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS retirement_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                account_type TEXT NOT NULL,
+                broker TEXT NOT NULL,
+                taxable INTEGER NOT NULL,
+                value REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS password_reset_tokens (
                 token TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -548,6 +564,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/records":
+
             user = self._require_auth()
             if not user:
                 return
@@ -607,6 +624,40 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     (user["id"],),
                 ).fetchall()
             self._send_json(200, [dict(row) for row in rows])
+            return
+
+        if parsed.path == "/api/retirement-accounts":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    "SELECT id, description, account_type, broker, taxable, value, created_at, updated_at FROM retirement_accounts WHERE user_id = ? ORDER BY id DESC",
+                    (user["id"],),
+                ).fetchall()
+            self._send_json(200, [dict(row) for row in rows])
+            return
+
+        if parsed.path == "/api/investments/summary":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                stocks = conn.execute("SELECT COALESCE(SUM(shares * current_price), 0) FROM investments WHERE user_id = ? AND current_price IS NOT NULL", (user["id"],)).fetchone()[0]
+                metals = conn.execute("SELECT COALESCE(SUM(current_value), 0) FROM precious_metals WHERE user_id = ?", (user["id"],)).fetchone()[0]
+                real_estate = conn.execute("SELECT COALESCE(SUM(current_value * (percentage_owned / 100.0)), 0) FROM real_estate WHERE user_id = ?", (user["id"],)).fetchone()[0]
+                business = conn.execute("SELECT COALESCE(SUM(business_value * (percentage_owned / 100.0)), 0) FROM business_ventures WHERE user_id = ?", (user["id"],)).fetchone()[0]
+                retirement = conn.execute("SELECT COALESCE(SUM(value), 0) FROM retirement_accounts WHERE user_id = ?", (user["id"],)).fetchone()[0]
+            combined = float(stocks) + float(metals) + float(real_estate) + float(business) + float(retirement)
+            self._send_json(200, {
+                "stocks": float(stocks),
+                "preciousMetals": float(metals),
+                "realEstateMyValue": float(real_estate),
+                "businessVenturesMyValue": float(business),
+                "retirementAccounts": float(retirement),
+                "combinedTotal": combined,
+            })
             return
 
         if parsed.path == "/api/admin/users":
@@ -959,6 +1010,45 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+        if parsed.path == "/api/retirement-accounts":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                account_type = str(data.get("type", "")).strip()
+                broker = str(data.get("broker", "")).strip()
+                taxable_raw = str(data.get("taxable", "")).strip().lower()
+                value = float(data.get("value", 0))
+                if taxable_raw not in ("yes", "no"):
+                    raise ValueError
+                taxable = 1 if taxable_raw == "yes" else 0
+                if not description or not account_type or not broker or value < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid retirement account data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute(
+                        "INSERT INTO retirement_accounts (user_id, description, account_type, broker, taxable, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (user["id"], description, account_type, broker, taxable, value, now, now),
+                    )
+                else:
+                    cursor = conn.execute(
+                        "UPDATE retirement_accounts SET description = ?, account_type = ?, broker = ?, taxable = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        (description, account_type, broker, taxable, value, now, record_id, user["id"]),
+                    )
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Retirement account record not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
         if parsed.path == "/api/investments/refresh":
             user = self._require_auth()
             if not user:
@@ -1132,6 +1222,17 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute("DELETE FROM business_ventures WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/retirement-accounts/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid retirement account id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM retirement_accounts WHERE id = ? AND user_id = ?", (item_id, user["id"]))
             self._send_json(200, {"success": True})
             return
 
