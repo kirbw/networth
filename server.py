@@ -20,6 +20,8 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/admin-users.html", "/admin-email.html"}
+ADMIN_PAGES = {"/admin-users.html", "/admin-email.html"}
 
 
 def utc_now() -> datetime:
@@ -305,6 +307,28 @@ def parse_cookie_token(handler: SimpleHTTPRequestHandler) -> str | None:
 
 
 class FinanceHandler(SimpleHTTPRequestHandler):
+    def _is_secure_request(self) -> bool:
+        if self.request_version.upper().startswith("HTTPS"):
+            return True
+        return self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+
+    def _redirect(self, location: str):
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.end_headers()
+
+    def _protected_page_redirect(self, parsed_path: str):
+        if parsed_path not in PROTECTED_PAGES:
+            return False
+        user = self._get_current_user()
+        if not user:
+            self._redirect(f"/?next={parsed_path}")
+            return True
+        if parsed_path in ADMIN_PAGES and user["role"] != "admin":
+            self._redirect("/")
+            return True
+        return False
+
     def _send_json(self, code: int, payload: dict | list, extra_headers: dict | None = None):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(code)
@@ -322,10 +346,11 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         return json.loads(raw.decode("utf-8"))
 
     def _session_cookie_header(self, token: str | None):
+        secure = "; Secure" if self._is_secure_request() else ""
         if token is None:
-            return f"{SESSION_COOKIE}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax"
+            return f"{SESSION_COOKIE}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax{secure}"
         max_age = SESSION_DAYS * 24 * 60 * 60
-        return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; Max-Age={max_age}; SameSite=Lax"
+        return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; Max-Age={max_age}; SameSite=Lax{secure}"
 
     def _get_current_user(self):
         token = parse_cookie_token(self)
@@ -383,6 +408,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+
+        if self._protected_page_redirect(parsed.path):
+            return
 
         if parsed.path == "/api/version":
             self._send_json(200, {"version": read_version()})

@@ -1,5 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/admin-users.html", "/admin-email.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -117,6 +118,11 @@ async function handleLogin(event) {
   setText(authMessage, "Logged in successfully.");
   renderAuthState();
   ensureAdminPageAccess();
+  const next = new URLSearchParams(window.location.search).get("next") || "";
+  if (NEXT_ALLOWED_PATHS.has(next)) {
+    window.location.href = next;
+    return;
+  }
   await initPageData();
 }
 
@@ -623,6 +629,13 @@ async function bootstrap() {
   await loadVersion();
   if (page !== "reset-password") {
     await loadCurrentUser();
+    if (currentUser && page === "home") {
+      const next = new URLSearchParams(window.location.search).get("next") || "";
+      if (NEXT_ALLOWED_PATHS.has(next)) {
+        window.location.replace(next);
+        return;
+      }
+    }
   } else {
     renderAuthState();
   }

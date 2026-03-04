@@ -57,6 +57,8 @@ ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
 - Live quote lookup endpoint and gain/loss calculation for each investment (quotes via Stooq)
 - Investments table totals row for purchase value, current value, and gain/loss
 - Smoother cross-page navigation by hiding login card until session check completes
+- Server-side protection for app pages (`records`, `investments`, `admin`) with one-way redirects to login when session is invalid
+- Session cookie is HTTP-only and validated against server-side session storage on every protected page request
 - Save one record per tax year
 - Update an existing year by re-submitting the same year
 - Income and giving chart by year

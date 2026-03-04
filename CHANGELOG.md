@@ -13,6 +13,7 @@ All notable changes to this project are documented in this file.
 - New Investments page for tracking ticker, shares, purchase price, and purchase date.
 - Investments API endpoints (`GET/POST/DELETE /api/investments`) plus quote lookup endpoint (`GET /api/quote`).
 - Investments table now shows Gain/Loss per holding and a totals row.
+- Server-side protected page redirects now enforce valid sessions before protected pages render.
 
 ### Changed
 - Split admin area into subpages: Admin Users and Email Settings.
@@ -21,6 +22,7 @@ All notable changes to this project are documented in this file.
 - Split UI into dedicated pages: Home, Records, Admin Users, Email Settings, and Investments.
 - Moved session + logout controls into the top navigation bar.
 - Prevent login-card flash on page switches by keeping auth UI hidden until session state loads.
+- Added `next` redirect support after login for smoother server-initiated login flow.
 
 ## [v0.0.4] - 2026-03-04
 
