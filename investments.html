@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Annual Finance Tracker - Email Settings</title>
+  <title>Annual Finance Tracker - Investments</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body data-page="admin-email">
+<body data-page="investments">
   <div class="layout">
     <aside class="sidebar">
       <h2>Finance Tracker</h2>
       <nav class="side-menu">
         <a href="/">Home</a>
         <a href="/records.html">Records</a>
-        <a href="/investments.html">Investments</a>
-        <a id="nav-admin" href="/admin-users.html" class="active">Admin</a>
+        <a href="/investments.html" class="active">Investments</a>
+        <a id="nav-admin" href="/admin-users.html" class="hidden">Admin</a>
       </nav>
     </aside>
 
@@ -60,28 +60,30 @@
         </section>
 
         <section id="app-content" class="hidden">
-          <section class="card admin-subnav-card">
-            <div class="admin-subnav">
-              <a href="/admin-users.html">User Settings</a>
-              <a href="/admin-email.html" class="active">Email Settings</a>
-            </div>
+          <section class="card">
+            <h2>Add Investment</h2>
+            <form id="investment-form">
+              <div class="form-grid">
+                <label>Ticker <input id="inv-ticker" type="text" required /></label>
+                <label>Shares <input id="inv-shares" type="number" min="0.0001" step="0.0001" required /></label>
+                <label>Purchase Price ($) <input id="inv-price" type="number" min="0" step="0.0001" required /></label>
+                <label>Purchase Date <input id="inv-date" type="date" required /></label>
+              </div>
+              <button type="submit">Add Investment</button>
+              <button id="refresh-prices-btn" type="button">Refresh Current Values</button>
+              <p id="investments-message"></p>
+            </form>
           </section>
 
           <section class="card">
-            <h2>Email / SMTP Settings</h2>
-            <form id="smtp-settings-form">
-              <div class="form-grid">
-                <label>SMTP Host <input id="smtp-host" type="text" placeholder="smtp.example.com" /></label>
-                <label>SMTP Port <input id="smtp-port" type="number" placeholder="587" /></label>
-                <label>SMTP Username <input id="smtp-username" type="text" /></label>
-                <label>SMTP Password <input id="smtp-password" type="password" /></label>
-                <label>From Email <input id="smtp-from-email" type="email" placeholder="no-reply@example.com" /></label>
-                <label>Website Host Name <input id="website-host" type="text" placeholder="https://yourdomain.com" /></label>
-                <label class="checkbox-row"><input id="smtp-use-ssl" type="checkbox" /> Use SSL (otherwise STARTTLS/plain based on server)</label>
-              </div>
-              <button type="submit">Save Email Settings</button>
-              <p id="email-settings-message"></p>
-            </form>
+            <h2>Investments</h2>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Ticker</th><th>Purchase Date</th><th>Shares</th><th>Purchase Price</th><th>Purchase Value</th><th>Current Price</th><th>Current Value</th><th>Actions</th></tr></thead>
+                <tbody id="investments-body"></tbody>
+              </table>
+            </div>
+            <p class="small-note">Current prices are fetched from Stooq quotes (no API key required).</p>
           </section>
         </section>
       </main>

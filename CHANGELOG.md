@@ -10,12 +10,14 @@ All notable changes to this project are documented in this file.
 - SMTP settings + website host configuration in admin email settings subpage.
 - User delete action in admin user settings with confirmation prompt.
 - Global version footer shown in bottom-left for troubleshooting.
+- New Investments page for tracking ticker, shares, purchase price, and purchase date.
+- Investments API endpoints (`GET/POST/DELETE /api/investments`) plus quote lookup endpoint (`GET /api/quote`).
 
 ### Changed
 - Split admin area into subpages: Admin Users and Email Settings.
 - Use a single Admin sidebar entry that reveals admin sub-navigation on admin pages.
 - Moved primary app navigation to a left sidebar and session/logout controls to top-right.
-- Split UI into dedicated pages: Home, Records, Admin Users, and Email Settings.
+- Split UI into dedicated pages: Home, Records, Admin Users, Email Settings, and Investments.
 - Moved session + logout controls into the top navigation bar.
 
 ## [v0.0.4] - 2026-03-04

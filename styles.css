@@ -155,3 +155,9 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
   .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
   .side-menu { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 }
+
+.small-note {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 0.6rem;
+}

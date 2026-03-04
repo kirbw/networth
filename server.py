@@ -1,16 +1,19 @@
+import csv
 import hashlib
 import hmac
+import io
 import json
 import os
 import secrets
 import smtplib
 import sqlite3
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from http import cookies
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 DB_PATH = Path(__file__).with_name("finance.db")
 VERSION_PATH = Path(__file__).with_name("VERSION")
@@ -28,9 +31,7 @@ def utc_now_iso() -> str:
 
 
 def read_version() -> str:
-    if not VERSION_PATH.exists():
-        return "unknown"
-    return VERSION_PATH.read_text().strip()
+    return VERSION_PATH.read_text().strip() if VERSION_PATH.exists() else "unknown"
 
 
 def hash_password(password: str, salt: bytes | None = None) -> str:
@@ -50,12 +51,33 @@ def verify_password(password: str, stored_hash: str) -> bool:
     return hmac.compare_digest(expected, stored_hash)
 
 
+def normalize_ticker(ticker: str) -> str:
+    clean = ticker.strip().lower()
+    if "." not in clean:
+        clean = f"{clean}.us"
+    return clean
+
+
+def fetch_quote_price(ticker: str) -> float:
+    symbol = normalize_ticker(ticker)
+    url = f"https://stooq.com/q/l/?s={symbol}&f=sd2t2ohlcv&h&e=csv"
+    with urllib.request.urlopen(url, timeout=10) as response:
+        text = response.read().decode("utf-8", errors="ignore")
+    reader = csv.DictReader(io.StringIO(text))
+    row = next(reader, None)
+    if not row:
+        raise ValueError("No quote data returned.")
+    close_value = row.get("Close")
+    if not close_value or close_value == "N/D":
+        raise ValueError("Ticker not found or unavailable.")
+    return float(close_value)
+
+
 def ensure_users_columns(conn: sqlite3.Connection):
     table_info = conn.execute("PRAGMA table_info(users)").fetchall()
     if not table_info:
         return
     col_names = {col[1] for col in table_info}
-
     if "full_name" not in col_names:
         conn.execute("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''")
     if "email" not in col_names:
@@ -76,11 +98,9 @@ def migrate_records_schema(conn: sqlite3.Connection):
     table_info = conn.execute("PRAGMA table_info(annual_records)").fetchall()
     if not table_info:
         return
-
     has_user_id = any(col[1] == "user_id" for col in table_info)
     net_worth_column = next((col for col in table_info if col[1] == "netWorth"), None)
     net_worth_not_null = bool(net_worth_column and net_worth_column[3] == 1)
-
     if has_user_id and not net_worth_not_null:
         return
 
@@ -98,10 +118,8 @@ def migrate_records_schema(conn: sqlite3.Connection):
         )
         """
     )
-
     admin_user = conn.execute("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1").fetchone()
     default_user_id = admin_user[0] if admin_user else 1
-
     old_cols = [col[1] for col in table_info]
     if "user_id" in old_cols:
         conn.execute(
@@ -112,7 +130,6 @@ def migrate_records_schema(conn: sqlite3.Connection):
             "INSERT INTO annual_records (user_id, year, income, donation, netWorth) SELECT ?, year, income, donation, netWorth FROM annual_records_old",
             (default_user_id,),
         )
-
     conn.execute("DROP TABLE annual_records_old")
 
 
@@ -179,7 +196,6 @@ def send_email(conn: sqlite3.Connection, to_email: str, subject: str, body: str)
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("PRAGMA foreign_keys = ON")
-
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -220,6 +236,21 @@ def init_db():
                 donation REAL NOT NULL,
                 netWorth REAL,
                 PRIMARY KEY (user_id, year),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS investments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                ticker TEXT NOT NULL,
+                shares REAL NOT NULL,
+                purchase_price REAL NOT NULL,
+                purchase_date TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             )
             """
@@ -300,26 +331,21 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         token = parse_cookie_token(self)
         if not token:
             return None
-
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 """
                 SELECT u.id, u.full_name, u.username, u.email, u.role, u.is_verified, s.expires_at
-                FROM sessions s
-                JOIN users u ON u.id = s.user_id
+                FROM sessions s JOIN users u ON u.id = s.user_id
                 WHERE s.token = ?
                 """,
                 (token,),
             ).fetchone()
             if not row:
                 return None
-
-            expires_at = datetime.fromisoformat(row["expires_at"])
-            if expires_at <= utc_now():
+            if datetime.fromisoformat(row["expires_at"]) <= utc_now():
                 conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
                 return None
-
             return dict(row)
 
     def _require_auth(self):
@@ -345,7 +371,6 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         email = email_raw if email_raw else None
         password = str(data.get("password", ""))
         role = str(data.get("role", "user")).strip()
-
         if not full_name or not username or (require_password and not password):
             raise ValueError("Missing required user fields.")
         if role not in ("user", "admin"):
@@ -354,7 +379,6 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             raise ValueError("Invalid email.")
         if password and len(password) < 8:
             raise ValueError("Password must be at least 8 characters.")
-
         return full_name, username, email, password, role
 
     def do_GET(self):
@@ -369,19 +393,24 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             if not user:
                 self._send_json(200, {"authenticated": False})
                 return
-            self._send_json(
-                200,
-                {
-                    "authenticated": True,
-                    "user": {
-                        "id": user["id"],
-                        "fullName": user["full_name"],
-                        "username": user["username"],
-                        "email": user["email"],
-                        "role": user["role"],
-                    },
-                },
-            )
+            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "role": user["role"]}})
+            return
+
+        if parsed.path == "/api/quote":
+            user = self._require_auth()
+            if not user:
+                return
+            params = parse_qs(parsed.query)
+            ticker = params.get("ticker", [""])[0].strip()
+            if not ticker:
+                self._send_json(400, {"error": "Ticker is required."})
+                return
+            try:
+                price = fetch_quote_price(ticker)
+            except Exception as error:
+                self._send_json(400, {"error": str(error)})
+                return
+            self._send_json(200, {"ticker": ticker.upper(), "currentPrice": price, "source": "Stooq"})
             return
 
         if parsed.path == "/api/records":
@@ -390,8 +419,18 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT year, income, donation, netWorth FROM annual_records WHERE user_id = ? ORDER BY year ASC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(row) for row in rows])
+            return
+
+        if parsed.path == "/api/investments":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    "SELECT year, income, donation, netWorth FROM annual_records WHERE user_id = ? ORDER BY year ASC",
+                    "SELECT id, ticker, shares, purchase_price, purchase_date, created_at, updated_at FROM investments WHERE user_id = ? ORDER BY purchase_date DESC, id DESC",
                     (user["id"],),
                 ).fetchall()
             self._send_json(200, [dict(row) for row in rows])
@@ -403,25 +442,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                rows = conn.execute(
-                    "SELECT id, full_name, username, email, role, is_verified, created_at, updated_at FROM users ORDER BY username ASC"
-                ).fetchall()
-            self._send_json(
-                200,
-                [
-                    {
-                        "id": row["id"],
-                        "fullName": row["full_name"],
-                        "username": row["username"],
-                        "email": row["email"],
-                        "role": row["role"],
-                        "isVerified": bool(row["is_verified"]),
-                        "createdAt": row["created_at"],
-                        "updatedAt": row["updated_at"],
-                    }
-                    for row in rows
-                ],
-            )
+                rows = conn.execute("SELECT id, full_name, username, email, role, is_verified, created_at, updated_at FROM users ORDER BY username ASC").fetchall()
+            self._send_json(200, [{"id": r["id"], "fullName": r["full_name"], "username": r["username"], "email": r["email"], "role": r["role"], "isVerified": bool(r["is_verified"]), "createdAt": r["created_at"], "updatedAt": r["updated_at"]} for r in rows])
             return
 
         if parsed.path == "/api/admin/smtp-settings":
@@ -459,30 +481,19 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             code = f"{secrets.randbelow(1000000):06d}"
             expires_at = (utc_now() + timedelta(minutes=15)).isoformat()
             now = utc_now_iso()
-
             try:
                 with sqlite3.connect(DB_PATH) as conn:
                     conn.execute(
-                        """
-                        INSERT INTO users (full_name, username, email, password_hash, role, is_verified, verification_code, verification_expires_at, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, 'user', 0, ?, ?, ?, ?)
-                        """,
+                        "INSERT INTO users (full_name, username, email, password_hash, role, is_verified, verification_code, verification_expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'user', 0, ?, ?, ?, ?)",
                         (full_name, username, email, hash_password(password), code, expires_at, now, now),
                     )
-
-                    send_email(
-                        conn,
-                        email,
-                        "Verify your Annual Finance Tracker account",
-                        f"Your verification code is: {code}\n\nThis code expires in 15 minutes.",
-                    )
+                    send_email(conn, email, "Verify your Annual Finance Tracker account", f"Your verification code is: {code}\n\nThis code expires in 15 minutes.")
             except sqlite3.IntegrityError:
                 self._send_json(409, {"error": "Username or email already exists."})
                 return
             except Exception as error:
                 self._send_json(500, {"error": f"Unable to send verification email: {error}"})
                 return
-
             self._send_json(200, {"success": True, "message": "Account created. Check your email for verification code."})
             return
 
@@ -496,13 +507,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             except (ValueError, TypeError, json.JSONDecodeError) as error:
                 self._send_json(400, {"error": str(error)})
                 return
-
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                user = conn.execute(
-                    "SELECT id, verification_code, verification_expires_at FROM users WHERE username = ?",
-                    (username,),
-                ).fetchone()
+                user = conn.execute("SELECT id, verification_code, verification_expires_at FROM users WHERE username = ?", (username,)).fetchone()
                 if not user:
                     self._send_json(404, {"error": "User not found."})
                     return
@@ -512,12 +519,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 if not user["verification_expires_at"] or datetime.fromisoformat(user["verification_expires_at"]) < utc_now():
                     self._send_json(400, {"error": "Verification code expired."})
                     return
-
-                conn.execute(
-                    "UPDATE users SET is_verified = 1, verification_code = NULL, verification_expires_at = NULL, updated_at = ? WHERE id = ?",
-                    (utc_now_iso(), user["id"]),
-                )
-
+                conn.execute("UPDATE users SET is_verified = 1, verification_code = NULL, verification_expires_at = NULL, updated_at = ? WHERE id = ?", (utc_now_iso(), user["id"]))
             self._send_json(200, {"success": True})
             return
 
@@ -530,33 +532,22 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             except (ValueError, TypeError, json.JSONDecodeError) as error:
                 self._send_json(400, {"error": str(error)})
                 return
-
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                user = conn.execute(
-                    "SELECT id, email, username, full_name FROM users WHERE username = ? OR email = ?",
-                    (identifier, identifier),
-                ).fetchone()
+                user = conn.execute("SELECT id, email, username, full_name FROM users WHERE username = ? OR email = ?", (identifier, identifier)).fetchone()
                 if user and user["email"]:
                     token = secrets.token_urlsafe(32)
-                    expires_at = (utc_now() + timedelta(hours=1)).isoformat()
                     conn.execute(
                         "INSERT INTO password_reset_tokens (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)",
-                        (token, user["id"], expires_at, utc_now_iso()),
+                        (token, user["id"], (utc_now() + timedelta(hours=1)).isoformat(), utc_now_iso()),
                     )
                     host = get_setting(conn, "website_host", "http://localhost:3000")
                     link = f"{host.rstrip('/')}/reset-password.html?token={token}"
                     try:
-                        send_email(
-                            conn,
-                            user["email"],
-                            "Reset your Annual Finance Tracker password",
-                            f"Hello {user['full_name'] or user['username']},\n\nUse this link to reset your password:\n{link}\n\nThis link expires in 1 hour.",
-                        )
+                        send_email(conn, user["email"], "Reset your Annual Finance Tracker password", f"Hello {user['full_name'] or user['username']},\n\nUse this link to reset your password:\n{link}\n\nThis link expires in 1 hour.")
                     except Exception as error:
                         self._send_json(500, {"error": f"Unable to send reset email: {error}"})
                         return
-
             self._send_json(200, {"success": True, "message": "If an account exists, a reset email has been sent."})
             return
 
@@ -570,13 +561,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             except (ValueError, TypeError, json.JSONDecodeError) as error:
                 self._send_json(400, {"error": str(error)})
                 return
-
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                reset_row = conn.execute(
-                    "SELECT token, user_id, expires_at FROM password_reset_tokens WHERE token = ?",
-                    (token,),
-                ).fetchone()
+                reset_row = conn.execute("SELECT token, user_id, expires_at FROM password_reset_tokens WHERE token = ?", (token,)).fetchone()
                 if not reset_row:
                     self._send_json(400, {"error": "Invalid reset token."})
                     return
@@ -584,14 +571,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     conn.execute("DELETE FROM password_reset_tokens WHERE token = ?", (token,))
                     self._send_json(400, {"error": "Reset token expired."})
                     return
-
-                conn.execute(
-                    "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
-                    (hash_password(password), utc_now_iso(), reset_row["user_id"]),
-                )
+                conn.execute("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", (hash_password(password), utc_now_iso(), reset_row["user_id"]))
                 conn.execute("DELETE FROM password_reset_tokens WHERE user_id = ?", (reset_row["user_id"],))
                 conn.execute("DELETE FROM sessions WHERE user_id = ?", (reset_row["user_id"],))
-
             self._send_json(200, {"success": True})
             return
 
@@ -605,42 +587,18 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             except (KeyError, ValueError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Invalid login data."})
                 return
-
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                user = conn.execute(
-                    "SELECT id, full_name, username, email, role, is_verified, password_hash FROM users WHERE username = ?",
-                    (username,),
-                ).fetchone()
-
+                user = conn.execute("SELECT id, full_name, username, email, role, is_verified, password_hash FROM users WHERE username = ?", (username,)).fetchone()
                 if not user or not verify_password(password, user["password_hash"]):
                     self._send_json(401, {"error": "Invalid username or password."})
                     return
                 if user["role"] != "admin" and not user["is_verified"]:
                     self._send_json(403, {"error": "Account not verified. Please verify with the emailed code."})
                     return
-
                 token = secrets.token_urlsafe(32)
-                expires_at = (utc_now() + timedelta(days=SESSION_DAYS)).isoformat()
-                conn.execute(
-                    "INSERT INTO sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)",
-                    (token, user["id"], expires_at, utc_now_iso()),
-                )
-
-            self._send_json(
-                200,
-                {
-                    "success": True,
-                    "user": {
-                        "id": user["id"],
-                        "fullName": user["full_name"],
-                        "username": user["username"],
-                        "email": user["email"],
-                        "role": user["role"],
-                    },
-                },
-                extra_headers={"Set-Cookie": self._session_cookie_header(token)},
-            )
+                conn.execute("INSERT INTO sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)", (token, user["id"], (utc_now() + timedelta(days=SESSION_DAYS)).isoformat(), utc_now_iso()))
+            self._send_json(200, {"success": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "role": user["role"]}}, extra_headers={"Set-Cookie": self._session_cookie_header(token)})
             return
 
         if parsed.path == "/api/logout":
@@ -667,18 +625,34 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             except (KeyError, ValueError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Invalid record data."})
                 return
-
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute(
-                    """
-                    INSERT INTO annual_records (user_id, year, income, donation, netWorth)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT(user_id, year) DO UPDATE SET
-                      income = excluded.income,
-                      donation = excluded.donation,
-                      netWorth = excluded.netWorth
-                    """,
+                    "INSERT INTO annual_records (user_id, year, income, donation, netWorth) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, year) DO UPDATE SET income = excluded.income, donation = excluded.donation, netWorth = excluded.netWorth",
                     (user["id"], year, income, donation, net_worth),
+                )
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/investments":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                ticker = str(data.get("ticker", "")).upper().strip()
+                shares = float(data.get("shares", 0))
+                purchase_price = float(data.get("purchasePrice", 0))
+                purchase_date = str(data.get("purchaseDate", "")).strip()
+                if not ticker or shares <= 0 or purchase_price < 0 or not purchase_date:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid investment data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute(
+                    "INSERT INTO investments (user_id, ticker, shares, purchase_price, purchase_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (user["id"], ticker, shares, purchase_price, purchase_date, now, now),
                 )
             self._send_json(200, {"success": True})
             return
@@ -693,18 +667,13 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             except (ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
                 self._send_json(400, {"error": str(error)})
                 return
-
-            now = utc_now_iso()
             try:
                 with sqlite3.connect(DB_PATH) as conn:
-                    conn.execute(
-                        "INSERT INTO users (full_name, username, email, password_hash, role, is_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
-                        (full_name, username, email, hash_password(password), role, now, now),
-                    )
+                    now = utc_now_iso()
+                    conn.execute("INSERT INTO users (full_name, username, email, password_hash, role, is_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)", (full_name, username, email, hash_password(password), role, now, now))
             except sqlite3.IntegrityError:
                 self._send_json(409, {"error": "Username or email already exists."})
                 return
-
             self._send_json(200, {"success": True})
             return
 
@@ -712,12 +681,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             admin = self._require_admin()
             if not admin:
                 return
-
             parts = parsed.path.strip("/").split("/")
             if len(parts) != 5:
                 self._send_json(404, {"error": "Not found"})
                 return
-
             try:
                 user_id = int(parts[3])
                 data = self._read_json()
@@ -727,12 +694,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             except (ValueError, KeyError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Password must be at least 8 characters."})
                 return
-
             with sqlite3.connect(DB_PATH) as conn:
-                cursor = conn.execute(
-                    "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
-                    (hash_password(new_password), utc_now_iso(), user_id),
-                )
+                cursor = conn.execute("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", (hash_password(new_password), utc_now_iso(), user_id))
                 conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
                 if cursor.rowcount == 0:
                     self._send_json(404, {"error": "User not found."})
@@ -754,12 +717,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 smtp_use_ssl = "1" if bool(data.get("smtpUseSsl", False)) else "0"
                 website_host = str(data.get("websiteHost", "http://localhost:3000")).strip()
                 int(smtp_port)
-                if smtp_from and "@" not in smtp_from:
-                    raise ValueError("Invalid SMTP from email")
             except (ValueError, TypeError, json.JSONDecodeError) as error:
                 self._send_json(400, {"error": str(error)})
                 return
-
             with sqlite3.connect(DB_PATH) as conn:
                 set_setting(conn, "smtp_host", smtp_host)
                 set_setting(conn, "smtp_port", smtp_port)
@@ -792,7 +752,6 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             if user_id == admin["id"]:
                 self._send_json(400, {"error": "You cannot delete your own admin account."})
                 return
-
             with sqlite3.connect(DB_PATH) as conn:
                 cursor = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
                 if cursor.rowcount == 0:
@@ -803,6 +762,17 @@ class FinanceHandler(SimpleHTTPRequestHandler):
 
         user = self._require_auth()
         if not user:
+            return
+
+        if parsed.path.startswith("/api/investments/"):
+            try:
+                investment_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid investment id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM investments WHERE id = ? AND user_id = ?", (investment_id, user["id"]))
+            self._send_json(200, {"success": True})
             return
 
         if parsed.path == "/api/records":
