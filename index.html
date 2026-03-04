@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Home</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body data-page="home">
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Finance Tracker</h2>
+      <nav class="side-menu">
+        <a href="/" class="active">Home</a>
+        <a href="/records.html">Records</a>
+        <a href="/investments.html">Investments</a>
+        <a id="nav-admin" href="/admin-users.html" class="hidden">Admin</a>
+      </nav>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <div class="session-controls">
+          <span id="session-name">Not signed in</span>
+          <button id="logout-btn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden">
+          <h2>Sign In</h2>
+          <form id="login-form">
+            <label>Username <input id="login-username" type="text" required /></label>
+            <label>Password <input id="login-password" type="password" required /></label>
+            <button type="submit">Log In</button>
+          </form>
+          <form id="signup-form" class="hidden">
+            <label>Full Name <input id="signup-full-name" type="text" required /></label>
+            <label>Email <input id="signup-email" type="email" required /></label>
+            <label>Username <input id="signup-username" type="text" required /></label>
+            <label>Password <input id="signup-password" type="password" required /></label>
+            <button type="submit">Create Account</button>
+          </form>
+          <form id="verify-form" class="hidden">
+            <label>Username <input id="verify-username" type="text" required /></label>
+            <label>Verification Code <input id="verify-code" type="text" required /></label>
+            <button type="submit">Verify Account</button>
+          </form>
+          <form id="forgot-password-form" class="hidden">
+            <label>Email or Username <input id="forgot-identifier" type="text" required /></label>
+            <button type="submit">Send Reset Link</button>
+          </form>
+          <div class="auth-actions">
+            <button id="toggle-signup-btn" type="button">Create account</button>
+            <button id="toggle-verify-btn" type="button">Verify account</button>
+            <button id="toggle-forgot-btn" type="button">Forgot password</button>
+            <button id="toggle-login-btn" type="button">Back to login</button>
+          </div>
+          <p id="auth-message"></p>
+        </section>
+
+        <section id="app-content" class="hidden">
+          <section class="card form-card">
+            <h2>Add Annual Data</h2>
+            <form id="finance-form">
+              <div class="form-grid">
+                <label>Tax Year
+                  <input id="year" type="number" min="1970" max="3000" list="year-options" required />
+                  <datalist id="year-options"></datalist>
+                </label>
+                <label>Total Income ($) <input id="income" type="number" min="0" step="0.01" required /></label>
+                <label>Donations ($) <input id="donation" type="number" min="0" step="0.01" required /></label>
+                <label><span class="label-title">Net Worth ($) <span class="optional">(optional)</span></span><input id="netWorth" type="number" step="0.01" /></label>
+              </div>
+              <button id="save-btn" type="submit">Save Year</button>
+              <p id="form-message"></p>
+            </form>
+          </section>
+
+          <section class="card chart-card">
+            <h2>Income & Giving by Year</h2>
+            <canvas id="income-giving-chart"></canvas>
+          </section>
+
+          <section class="card chart-card">
+            <h2>Net Worth by Year</h2>
+            <canvas id="net-worth-chart"></canvas>
+          </section>
+
+          <section class="card chart-card">
+            <h2>Cumulative Giving Progress</h2>
+            <label class="goal-label">Goal Percentage <input id="goal-percent-input" type="number" min="0" max="100" step="0.1" /></label>
+            <div id="goal-indicator" class="goal-indicator"></div>
+            <canvas id="goal-progress-chart"></canvas>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>
