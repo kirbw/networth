@@ -8,14 +8,14 @@ A simple web app for tracking yearly:
 
 ## Release
 
-Current release: **v0.0.4**
+Current release: **v0.0.5**
 
 ## Release Notes
 
-### v0.0.4 highlights
-- Promoted the multi-user authentication and admin-management build to an official release.
-- Added formal release notes and changelog entries for deployment tracking.
-- Kept all v0.0.3 functionality (auth, per-user data isolation, admin user management, user-scoped records) as the release baseline.
+### v0.0.5 highlights
+- Added edit capability across all Investments subpages (Stocks, Precious Metals, Real Estate, Business Ventures).
+- Added Real Estate description field and fixed/validated ownership-based My Value calculation (`current value × owned %`).
+- Expanded Investments with dedicated Real Estate and Business Ventures subpages, including sortable tables and per-user CRUD APIs.
 
 ## Security and multi-user update
 

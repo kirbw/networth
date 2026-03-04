@@ -356,10 +356,12 @@ function initInvestmentsPage() {
   const tableBody = document.getElementById("investments-body");
   const refreshBtn = document.getElementById("refresh-prices-btn");
   const sortHeaders = document.querySelectorAll("[data-sort-investments]");
+  const submitBtn = document.getElementById("stocks-submit-btn");
 
   let investments = [];
   let sortKey = "purchase_date";
   let sortDirection = "desc";
+  let editingId = null;
 
   async function loadInvestments() {
     const response = await apiFetch("/api/investments");
@@ -386,6 +388,21 @@ function initInvestmentsPage() {
       throw new Error(payload.error || "Quote unavailable");
     }
     return response.json();
+  }
+
+  function startEdit(item) {
+    editingId = item.id;
+    document.getElementById("inv-ticker").value = item.ticker;
+    document.getElementById("inv-shares").value = item.shares;
+    document.getElementById("inv-price").value = item.purchase_price;
+    document.getElementById("inv-date").value = item.purchase_date;
+    if (submitBtn) submitBtn.textContent = "Update Stock";
+    setText(msg, `Editing ${item.ticker}.`);
+  }
+
+  function resetEditState() {
+    editingId = null;
+    if (submitBtn) submitBtn.textContent = "Add Stock";
   }
 
   async function renderTable() {
@@ -423,7 +440,7 @@ function initInvestmentsPage() {
       }
 
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${inv.ticker}</td><td>${inv.purchase_date}</td><td>${inv.shares}</td><td>${currency(inv.purchase_price)}</td><td>${currency(purchaseValue)}</td><td>${currentPriceText}</td><td>${gainLossText}</td><td><button class="delete-btn" data-id="${inv.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${inv.ticker}</td><td>${inv.purchase_date}</td><td>${inv.shares}</td><td>${currency(inv.purchase_price)}</td><td>${currency(purchaseValue)}</td><td>${currentPriceText}</td><td>${gainLossText}</td><td><button class="edit-btn" data-id="${inv.id}" type="button">Edit</button><button class="delete-btn" data-id="${inv.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
 
@@ -449,6 +466,7 @@ function initInvestmentsPage() {
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const payload = {
+      id: editingId,
       ticker: document.getElementById("inv-ticker").value.trim().toUpperCase(),
       shares: Number(document.getElementById("inv-shares").value),
       purchasePrice: Number(document.getElementById("inv-price").value),
@@ -456,18 +474,29 @@ function initInvestmentsPage() {
     };
     const response = await apiFetch("/api/investments", { method: "POST", body: JSON.stringify(payload) });
     const data = await response.json();
-    if (!response.ok) return setText(msg, data.error || "Unable to add stock.");
+    if (!response.ok) return setText(msg, data.error || "Unable to save stock.");
     form.reset();
+    resetEditState();
     await loadInvestments();
     await renderTable();
-    setText(msg, "Stock added.");
+    setText(msg, "Stock saved.");
   });
 
   tableBody?.addEventListener("click", async (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLButtonElement) || !target.classList.contains("delete-btn")) return;
-    const id = target.dataset.id;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const item = investments.find((x) => x.id === id);
+      if (item) startEdit(item);
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
     await apiFetch(`/api/investments/${id}`, { method: "DELETE" });
+    if (editingId === id) {
+      form?.reset();
+      resetEditState();
+    }
     await loadInvestments();
     await renderTable();
   });
@@ -491,10 +520,12 @@ function initPreciousMetalsPage() {
   const msg = document.getElementById("metals-message");
   const tableBody = document.getElementById("metals-body");
   const sortHeaders = document.querySelectorAll("[data-sort-metals]");
+  const submitBtn = document.getElementById("metals-submit-btn");
 
   let metals = [];
   let sortKey = "purchase_date";
   let sortDirection = "desc";
+  let editingId = null;
 
   async function loadMetals() {
     const response = await apiFetch("/api/precious-metals");
@@ -514,6 +545,25 @@ function initPreciousMetalsPage() {
     });
   }
 
+  function startEdit(item) {
+    editingId = item.id;
+    document.getElementById("metal-type").value = item.metal_type;
+    document.getElementById("metal-description").value = item.description;
+    document.getElementById("metal-quantity").value = item.quantity;
+    document.getElementById("metal-weight").value = item.weight;
+    document.getElementById("metal-date").value = item.purchase_date;
+    document.getElementById("metal-where").value = item.where_purchased;
+    document.getElementById("metal-purchase-price").value = item.purchase_price;
+    document.getElementById("metal-current-value").value = item.current_value;
+    if (submitBtn) submitBtn.textContent = "Update Item";
+    setText(msg, `Editing ${item.description}.`);
+  }
+
+  function resetEditState() {
+    editingId = null;
+    if (submitBtn) submitBtn.textContent = "Add Item";
+  }
+
   function renderTable() {
     applySort();
     tableBody.innerHTML = "";
@@ -529,7 +579,7 @@ function initPreciousMetalsPage() {
       totalPurchase += Number(item.purchase_price);
       totalCurrent += Number(item.current_value);
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${item.metal_type}</td><td>${item.description}</td><td>${item.quantity}</td><td>${item.weight}</td><td>${item.purchase_date}</td><td>${item.where_purchased}</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${(Number(item.current_value) - Number(item.purchase_price)) >= 0 ? "+" : ""}${currency(Number(item.current_value) - Number(item.purchase_price))}</td><td><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${item.metal_type}</td><td>${item.description}</td><td>${item.quantity}</td><td>${item.weight}</td><td>${item.purchase_date}</td><td>${item.where_purchased}</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${(Number(item.current_value) - Number(item.purchase_price)) >= 0 ? "+" : ""}${currency(Number(item.current_value) - Number(item.purchase_price))}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
 
@@ -552,6 +602,7 @@ function initPreciousMetalsPage() {
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const payload = {
+      id: editingId,
       type: document.getElementById("metal-type").value.trim(),
       description: document.getElementById("metal-description").value.trim(),
       quantity: Number(document.getElementById("metal-quantity").value),
@@ -563,18 +614,29 @@ function initPreciousMetalsPage() {
     };
     const response = await apiFetch("/api/precious-metals", { method: "POST", body: JSON.stringify(payload) });
     const data = await response.json();
-    if (!response.ok) return setText(msg, data.error || "Unable to add precious metal record.");
+    if (!response.ok) return setText(msg, data.error || "Unable to save precious metal record.");
     form.reset();
+    resetEditState();
     await loadMetals();
     renderTable();
-    setText(msg, "Precious metal record added.");
+    setText(msg, "Precious metal record saved.");
   });
 
   tableBody?.addEventListener("click", async (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLButtonElement) || !target.classList.contains("delete-btn")) return;
-    const id = target.dataset.id;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const item = metals.find((x) => x.id === id);
+      if (item) startEdit(item);
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
     await apiFetch(`/api/precious-metals/${id}`, { method: "DELETE" });
+    if (editingId === id) {
+      form?.reset();
+      resetEditState();
+    }
     await loadMetals();
     renderTable();
   });
@@ -592,9 +654,11 @@ function initRealEstatePage() {
   const msg = document.getElementById("real-estate-message");
   const tableBody = document.getElementById("real-estate-body");
   const sortHeaders = document.querySelectorAll("[data-sort-real-estate]");
+  const submitBtn = document.getElementById("real-estate-submit-btn");
   let rows = [];
   let sortKey = "address";
   let sortDirection = "asc";
+  let editingId = null;
 
   async function loadRows() {
     const response = await apiFetch("/api/real-estate");
@@ -618,17 +682,33 @@ function initRealEstatePage() {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
   }
 
+  function startEdit(item) {
+    editingId = item.id;
+    document.getElementById("re-address").value = item.address;
+    document.getElementById("re-description").value = item.description || "";
+    document.getElementById("re-owned").value = item.percentage_owned;
+    document.getElementById("re-purchase-price").value = item.purchase_price;
+    document.getElementById("re-current-value").value = item.current_value;
+    if (submitBtn) submitBtn.textContent = "Update Real Estate";
+    setText(msg, `Editing ${item.address}.`);
+  }
+
+  function resetEditState() {
+    editingId = null;
+    if (submitBtn) submitBtn.textContent = "Add Real Estate";
+  }
+
   function renderTable() {
     applySort();
     tableBody.innerHTML = "";
     if (!rows.length) {
-      tableBody.innerHTML = `<tr><td colspan="6">No real estate records yet.</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="7">No real estate records yet.</td></tr>`;
       return;
     }
     for (const item of rows) {
       const myValue = Number(item.current_value) * (Number(item.percentage_owned) / 100);
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${currency(myValue)}</td><td><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.description || "—"}</td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${currency(myValue)}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
   }
@@ -646,24 +726,38 @@ function initRealEstatePage() {
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const payload = {
+      id: editingId,
       address: document.getElementById("re-address").value.trim(),
+      description: document.getElementById("re-description").value.trim(),
       percentageOwned: Number(document.getElementById("re-owned").value),
       purchasePrice: Number(document.getElementById("re-purchase-price").value),
       currentValue: Number(document.getElementById("re-current-value").value),
     };
     const response = await apiFetch("/api/real-estate", { method: "POST", body: JSON.stringify(payload) });
     const data = await response.json();
-    if (!response.ok) return setText(msg, data.error || "Unable to add real estate record.");
+    if (!response.ok) return setText(msg, data.error || "Unable to save real estate record.");
     form.reset();
+    resetEditState();
     await loadRows();
     renderTable();
-    setText(msg, "Real estate record added.");
+    setText(msg, "Real estate record saved.");
   });
 
   tableBody?.addEventListener("click", async (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLButtonElement) || !target.classList.contains("delete-btn")) return;
-    await apiFetch(`/api/real-estate/${target.dataset.id}`, { method: "DELETE" });
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const item = rows.find((x) => x.id === id);
+      if (item) startEdit(item);
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
+    await apiFetch(`/api/real-estate/${id}`, { method: "DELETE" });
+    if (editingId === id) {
+      form?.reset();
+      resetEditState();
+    }
     await loadRows();
     renderTable();
   });
@@ -676,9 +770,11 @@ function initBusinessVenturesPage() {
   const msg = document.getElementById("business-ventures-message");
   const tableBody = document.getElementById("business-ventures-body");
   const sortHeaders = document.querySelectorAll("[data-sort-business]");
+  const submitBtn = document.getElementById("business-ventures-submit-btn");
   let rows = [];
   let sortKey = "business_name";
   let sortDirection = "asc";
+  let editingId = null;
 
   async function loadRows() {
     const response = await apiFetch("/api/business-ventures");
@@ -698,6 +794,20 @@ function initBusinessVenturesPage() {
     });
   }
 
+  function startEdit(item) {
+    editingId = item.id;
+    document.getElementById("bv-name").value = item.business_name;
+    document.getElementById("bv-owned").value = item.percentage_owned;
+    document.getElementById("bv-value").value = item.business_value;
+    if (submitBtn) submitBtn.textContent = "Update Business Venture";
+    setText(msg, `Editing ${item.business_name}.`);
+  }
+
+  function resetEditState() {
+    editingId = null;
+    if (submitBtn) submitBtn.textContent = "Add Business Venture";
+  }
+
   function renderTable() {
     applySort();
     tableBody.innerHTML = "";
@@ -708,7 +818,7 @@ function initBusinessVenturesPage() {
     for (const item of rows) {
       const myValue = Number(item.business_value) * (Number(item.percentage_owned) / 100);
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${item.business_name}</td><td>${item.percentage_owned}%</td><td>${currency(item.business_value)}</td><td>${currency(myValue)}</td><td><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${item.business_name}</td><td>${item.percentage_owned}%</td><td>${currency(item.business_value)}</td><td>${currency(myValue)}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
   }
@@ -726,23 +836,36 @@ function initBusinessVenturesPage() {
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const payload = {
+      id: editingId,
       businessName: document.getElementById("bv-name").value.trim(),
       percentageOwned: Number(document.getElementById("bv-owned").value),
       businessValue: Number(document.getElementById("bv-value").value),
     };
     const response = await apiFetch("/api/business-ventures", { method: "POST", body: JSON.stringify(payload) });
     const data = await response.json();
-    if (!response.ok) return setText(msg, data.error || "Unable to add business venture.");
+    if (!response.ok) return setText(msg, data.error || "Unable to save business venture.");
     form.reset();
+    resetEditState();
     await loadRows();
     renderTable();
-    setText(msg, "Business venture added.");
+    setText(msg, "Business venture saved.");
   });
 
   tableBody?.addEventListener("click", async (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLButtonElement) || !target.classList.contains("delete-btn")) return;
-    await apiFetch(`/api/business-ventures/${target.dataset.id}`, { method: "DELETE" });
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const item = rows.find((x) => x.id === id);
+      if (item) startEdit(item);
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
+    await apiFetch(`/api/business-ventures/${id}`, { method: "DELETE" });
+    if (editingId === id) {
+      form?.reset();
+      resetEditState();
+    }
     await loadRows();
     renderTable();
   });

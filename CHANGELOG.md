@@ -32,6 +32,18 @@ All notable changes to this project are documented in this file.
 - Prevent login-card flash on page switches by keeping auth UI hidden until session state loads.
 - Added `next` redirect support after login for smoother server-initiated login flow.
 
+## [v0.0.5] - 2026-03-04
+
+### Added
+- Investments subpages for **Real Estate** and **Business Ventures** with per-user CRUD APIs.
+- Edit buttons/capability for all Investments subpages: Stocks, Precious Metals, Real Estate, and Business Ventures.
+- Real Estate records now include a **Description** field.
+
+### Changed
+- Real Estate "My Value" display is calculated as `current value * (percentage owned / 100)`.
+- Updated Investments navigation to include Stocks, Precious Metals, Real Estate, and Business Ventures.
+- Updated docs and release metadata for `v0.0.5`.
+
 ## [v0.0.4] - 2026-03-04
 
 ### Added

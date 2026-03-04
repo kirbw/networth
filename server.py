@@ -313,6 +313,7 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 address TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
                 percentage_owned REAL NOT NULL,
                 purchase_price REAL NOT NULL,
                 current_value REAL NOT NULL,
@@ -355,6 +356,10 @@ def init_db():
             )
             """
         )
+
+        table_info_real_estate = conn.execute("PRAGMA table_info(real_estate)").fetchall()
+        if table_info_real_estate and not any(col[1] == "description" for col in table_info_real_estate):
+            conn.execute("ALTER TABLE real_estate ADD COLUMN description TEXT NOT NULL DEFAULT ''")
 
         migrate_records_schema(conn)
         init_default_settings(conn)
@@ -572,7 +577,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    "SELECT id, address, percentage_owned, purchase_price, current_value, created_at, updated_at FROM real_estate WHERE user_id = ? ORDER BY id DESC",
+                    "SELECT id, address, description, percentage_owned, purchase_price, current_value, created_at, updated_at FROM real_estate WHERE user_id = ? ORDER BY id DESC",
                     (user["id"],),
                 ).fetchall()
             self._send_json(200, [dict(row) for row in rows])
@@ -803,6 +808,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             try:
                 data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
                 ticker = str(data.get("ticker", "")).upper().strip()
                 shares = float(data.get("shares", 0))
                 purchase_price = float(data.get("purchasePrice", 0))
@@ -814,10 +821,19 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute(
-                    "INSERT INTO investments (user_id, ticker, shares, purchase_price, purchase_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (user["id"], ticker, shares, purchase_price, purchase_date, now, now),
-                )
+                if record_id is None:
+                    conn.execute(
+                        "INSERT INTO investments (user_id, ticker, shares, purchase_price, purchase_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (user["id"], ticker, shares, purchase_price, purchase_date, now, now),
+                    )
+                else:
+                    cursor = conn.execute(
+                        "UPDATE investments SET ticker = ?, shares = ?, purchase_price = ?, purchase_date = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        (ticker, shares, purchase_price, purchase_date, now, record_id, user["id"]),
+                    )
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Stock record not found."})
+                        return
             self._send_json(200, {"success": True})
             return
 
@@ -827,6 +843,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             try:
                 data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
                 metal_type = str(data.get("type", "")).strip()
                 description = str(data.get("description", "")).strip()
                 quantity = float(data.get("quantity", 0))
@@ -842,10 +860,19 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute(
-                    "INSERT INTO precious_metals (user_id, metal_type, description, quantity, weight, purchase_date, where_purchased, purchase_price, current_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (user["id"], metal_type, description, quantity, weight, purchase_date, where_purchased, purchase_price, current_value, now, now),
-                )
+                if record_id is None:
+                    conn.execute(
+                        "INSERT INTO precious_metals (user_id, metal_type, description, quantity, weight, purchase_date, where_purchased, purchase_price, current_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (user["id"], metal_type, description, quantity, weight, purchase_date, where_purchased, purchase_price, current_value, now, now),
+                    )
+                else:
+                    cursor = conn.execute(
+                        "UPDATE precious_metals SET metal_type = ?, description = ?, quantity = ?, weight = ?, purchase_date = ?, where_purchased = ?, purchase_price = ?, current_value = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        (metal_type, description, quantity, weight, purchase_date, where_purchased, purchase_price, current_value, now, record_id, user["id"]),
+                    )
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Precious metals record not found."})
+                        return
             self._send_json(200, {"success": True})
             return
 
@@ -855,7 +882,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             try:
                 data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
                 address = str(data.get("address", "")).strip()
+                description = str(data.get("description", "")).strip()
                 percentage_owned = float(data.get("percentageOwned", 0))
                 purchase_price = float(data.get("purchasePrice", 0))
                 current_value = float(data.get("currentValue", 0))
@@ -866,10 +896,19 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute(
-                    "INSERT INTO real_estate (user_id, address, percentage_owned, purchase_price, current_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (user["id"], address, percentage_owned, purchase_price, current_value, now, now),
-                )
+                if record_id is None:
+                    conn.execute(
+                        "INSERT INTO real_estate (user_id, address, description, percentage_owned, purchase_price, current_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (user["id"], address, description, percentage_owned, purchase_price, current_value, now, now),
+                    )
+                else:
+                    cursor = conn.execute(
+                        "UPDATE real_estate SET address = ?, description = ?, percentage_owned = ?, purchase_price = ?, current_value = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        (address, description, percentage_owned, purchase_price, current_value, now, record_id, user["id"]),
+                    )
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Real estate record not found."})
+                        return
             self._send_json(200, {"success": True})
             return
 
@@ -879,6 +918,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             try:
                 data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
                 business_name = str(data.get("businessName", "")).strip()
                 percentage_owned = float(data.get("percentageOwned", 0))
                 business_value = float(data.get("businessValue", 0))
@@ -889,10 +930,19 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute(
-                    "INSERT INTO business_ventures (user_id, business_name, percentage_owned, business_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    (user["id"], business_name, percentage_owned, business_value, now, now),
-                )
+                if record_id is None:
+                    conn.execute(
+                        "INSERT INTO business_ventures (user_id, business_name, percentage_owned, business_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                        (user["id"], business_name, percentage_owned, business_value, now, now),
+                    )
+                else:
+                    cursor = conn.execute(
+                        "UPDATE business_ventures SET business_name = ?, percentage_owned = ?, business_value = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        (business_name, percentage_owned, business_value, now, record_id, user["id"]),
+                    )
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Business venture record not found."})
+                        return
             self._send_json(200, {"success": True})
             return
 
