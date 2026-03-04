@@ -91,9 +91,9 @@ def normalize_ticker(ticker: str) -> str:
     return clean
 
 
-def fetch_quote_price(ticker: str) -> float:
+def fetch_quote_details(ticker: str) -> tuple[float, str]:
     symbol = normalize_ticker(ticker)
-    url = f"https://stooq.com/q/l/?s={symbol}&f=sd2t2ohlcv&h&e=csv"
+    url = f"https://stooq.com/q/l/?s={symbol}&f=sd2t2ohlcvn&h&e=csv"
     with urllib.request.urlopen(url, timeout=10) as response:
         text = response.read().decode("utf-8", errors="ignore")
     reader = csv.DictReader(io.StringIO(text))
@@ -103,7 +103,8 @@ def fetch_quote_price(ticker: str) -> float:
     close_value = row.get("Close")
     if not close_value or close_value == "N/D":
         raise ValueError("Ticker not found or unavailable.")
-    return float(close_value)
+    name = (row.get("Name") or ticker.upper()).strip()
+    return float(close_value), name
 
 
 def ensure_users_columns(conn: sqlite3.Connection):
@@ -279,8 +280,11 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 ticker TEXT NOT NULL,
+                company_name TEXT,
                 shares REAL NOT NULL,
                 purchase_price REAL NOT NULL,
+                current_price REAL,
+                price_refreshed_at TEXT,
                 purchase_date TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -360,6 +364,15 @@ def init_db():
         table_info_real_estate = conn.execute("PRAGMA table_info(real_estate)").fetchall()
         if table_info_real_estate and not any(col[1] == "description" for col in table_info_real_estate):
             conn.execute("ALTER TABLE real_estate ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+
+        table_info_investments = conn.execute("PRAGMA table_info(investments)").fetchall()
+        inv_cols = {col[1] for col in table_info_investments}
+        if table_info_investments and "company_name" not in inv_cols:
+            conn.execute("ALTER TABLE investments ADD COLUMN company_name TEXT")
+        if table_info_investments and "current_price" not in inv_cols:
+            conn.execute("ALTER TABLE investments ADD COLUMN current_price REAL")
+        if table_info_investments and "price_refreshed_at" not in inv_cols:
+            conn.execute("ALTER TABLE investments ADD COLUMN price_refreshed_at TEXT")
 
         migrate_records_schema(conn)
         init_default_settings(conn)
@@ -527,11 +540,11 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 self._send_json(400, {"error": "Ticker is required."})
                 return
             try:
-                price = fetch_quote_price(ticker)
+                price, name = fetch_quote_details(ticker)
             except Exception as error:
                 self._send_json(400, {"error": str(error)})
                 return
-            self._send_json(200, {"ticker": ticker.upper(), "currentPrice": price, "source": "Stooq"})
+            self._send_json(200, {"ticker": ticker.upper(), "companyName": name, "currentPrice": price, "source": "Stooq"})
             return
 
         if parsed.path == "/api/records":
@@ -551,7 +564,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    "SELECT id, ticker, shares, purchase_price, purchase_date, created_at, updated_at FROM investments WHERE user_id = ? ORDER BY purchase_date DESC, id DESC",
+                    "SELECT id, ticker, company_name, shares, purchase_price, current_price, price_refreshed_at, purchase_date, created_at, updated_at FROM investments WHERE user_id = ? ORDER BY purchase_date DESC, id DESC",
                     (user["id"],),
                 ).fetchall()
             self._send_json(200, [dict(row) for row in rows])
@@ -944,6 +957,30 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                         self._send_json(404, {"error": "Business venture record not found."})
                         return
             self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/investments/refresh":
+            user = self._require_auth()
+            if not user:
+                return
+            refreshed_at = utc_now_iso()
+            updated = 0
+            failed = 0
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, ticker FROM investments WHERE user_id = ?", (user["id"],)).fetchall()
+                for row in rows:
+                    try:
+                        price, company_name = fetch_quote_details(row["ticker"])
+                    except Exception:
+                        failed += 1
+                        continue
+                    conn.execute(
+                        "UPDATE investments SET company_name = ?, current_price = ?, price_refreshed_at = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        (company_name, price, refreshed_at, refreshed_at, row["id"], user["id"]),
+                    )
+                    updated += 1
+            self._send_json(200, {"success": True, "updated": updated, "failed": failed, "refreshedAt": refreshed_at})
             return
 
         if parsed.path == "/api/admin/users":

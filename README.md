@@ -14,8 +14,8 @@ Current release: **v0.0.5**
 
 ### v0.0.5 highlights
 - Added edit capability across all Investments subpages (Stocks, Precious Metals, Real Estate, Business Ventures).
-- Added Real Estate description field and fixed/validated ownership-based My Value calculation (`current value × owned %`).
-- Expanded Investments with dedicated Real Estate and Business Ventures subpages, including sortable tables and per-user CRUD APIs.
+- Stocks now persist company name and current price in the database, and only refresh these when **Refresh Current Values** is clicked.
+- Added Real Estate description field and fixed ownership-based My Value calculation (`current value × owned %`), plus gain/loss color coding and wider responsive investment layouts.
 
 ## Security and multi-user update
 
@@ -59,6 +59,7 @@ ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
 - Dedicated Real Estate page for address, % owned, purchase/current value, and computed my-value (current × ownership %)
 - Dedicated Business Ventures page for business name, % owned, business value, and computed my-value
 - Live quote lookup endpoint and gain/loss calculation for each investment (quotes via Stooq)
+- Stocks page stores company name + current price and shows a last refreshed timestamp
 - Stocks, Precious Metals, Real Estate, and Business Ventures tables support click-to-sort by key columns
 - Investments table totals row for purchase value, current value, and gain/loss
 - Smoother cross-page navigation by hiding login card until session check completes

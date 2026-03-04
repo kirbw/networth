@@ -38,11 +38,14 @@ All notable changes to this project are documented in this file.
 - Investments subpages for **Real Estate** and **Business Ventures** with per-user CRUD APIs.
 - Edit buttons/capability for all Investments subpages: Stocks, Precious Metals, Real Estate, and Business Ventures.
 - Real Estate records now include a **Description** field.
+- Stocks now persist company names and current prices in DB, refreshed only via the refresh button.
 
 ### Changed
 - Real Estate "My Value" display is calculated as `current value * (percentage owned / 100)`.
 - Updated Investments navigation to include Stocks, Precious Metals, Real Estate, and Business Ventures.
 - Updated docs and release metadata for `v0.0.5`.
+- Added last-refreshed timestamp display for stock prices and widened investment pages for responsive use of screen width.
+- Gain/loss values now use green for positive and red for negative values.
 
 ## [v0.0.4] - 2026-03-04
 

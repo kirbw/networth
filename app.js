@@ -357,6 +357,7 @@ function initInvestmentsPage() {
   const refreshBtn = document.getElementById("refresh-prices-btn");
   const sortHeaders = document.querySelectorAll("[data-sort-investments]");
   const submitBtn = document.getElementById("stocks-submit-btn");
+  const lastRefreshedEl = document.getElementById("last-refreshed");
 
   let investments = [];
   let sortKey = "purchase_date";
@@ -381,15 +382,6 @@ function initInvestmentsPage() {
     });
   }
 
-  async function quote(ticker) {
-    const response = await apiFetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`);
-    if (!response.ok) {
-      const payload = await response.json();
-      throw new Error(payload.error || "Quote unavailable");
-    }
-    return response.json();
-  }
-
   function startEdit(item) {
     editingId = item.id;
     document.getElementById("inv-ticker").value = item.ticker;
@@ -409,7 +401,7 @@ function initInvestmentsPage() {
     applySort();
     tableBody.innerHTML = "";
     if (!investments.length) {
-      tableBody.innerHTML = `<tr><td colspan="8">No stocks yet.</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="9">No stocks yet.</td></tr>`;
       return;
     }
 
@@ -418,39 +410,45 @@ function initInvestmentsPage() {
     let missingCurrentValues = 0;
 
     for (const inv of investments) {
-      let currentPriceText = "—";
-      let gainLossText = "—";
-      let currentValue = null;
-      try {
-        const q = await quote(inv.ticker);
-        currentPriceText = currency(q.currentPrice);
-        currentValue = Number(inv.shares) * Number(q.currentPrice);
-      } catch {
-        currentPriceText = "N/A";
-      }
-
       const purchaseValue = Number(inv.shares) * Number(inv.purchase_price);
+      const currentPrice = inv.current_price == null ? null : Number(inv.current_price);
+      const currentValue = currentPrice == null ? null : Number(inv.shares) * currentPrice;
+      const companyName = inv.company_name || "—";
+      const currentPriceText = currentPrice == null ? "N/A" : currency(currentPrice);
+
       totalPurchaseValue += purchaseValue;
       if (currentValue !== null) totalCurrentValue += currentValue;
       else missingCurrentValues += 1;
 
+      let gainLossCell = '<span>—</span>';
       if (currentValue !== null) {
         const gainLoss = currentValue - purchaseValue;
-        gainLossText = `${gainLoss >= 0 ? "+" : ""}${currency(gainLoss)}`;
+        const cls = gainLoss >= 0 ? "gain-positive" : "gain-negative";
+        gainLossCell = `<span class="${cls}">${gainLoss >= 0 ? "+" : ""}${currency(gainLoss)}</span>`;
       }
 
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${inv.ticker}</td><td>${inv.purchase_date}</td><td>${inv.shares}</td><td>${currency(inv.purchase_price)}</td><td>${currency(purchaseValue)}</td><td>${currentPriceText}</td><td>${gainLossText}</td><td><button class="edit-btn" data-id="${inv.id}" type="button">Edit</button><button class="delete-btn" data-id="${inv.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${inv.ticker}</td><td>${companyName}</td><td>${inv.purchase_date}</td><td>${inv.shares}</td><td>${currency(inv.purchase_price)}</td><td>${currency(purchaseValue)}</td><td>${currentPriceText}</td><td>${gainLossCell}</td><td><button class="edit-btn" data-id="${inv.id}" type="button">Edit</button><button class="delete-btn" data-id="${inv.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
 
     const totalGainLoss = totalCurrentValue - totalPurchaseValue;
     const totalCurrentText = missingCurrentValues > 0 ? "N/A" : currency(totalCurrentValue);
     const totalGainLossText = missingCurrentValues > 0 ? "N/A" : `${totalGainLoss >= 0 ? "+" : ""}${currency(totalGainLoss)}`;
+    const totalGainLossClass = missingCurrentValues > 0 ? "" : (totalGainLoss >= 0 ? "gain-positive" : "gain-negative");
     const totalRow = document.createElement("tr");
     totalRow.className = "totals-row";
-    totalRow.innerHTML = `<td colspan="4"><strong>Totals</strong></td><td><strong>${currency(totalPurchaseValue)}</strong></td><td><strong>${totalCurrentText}</strong></td><td><strong>${totalGainLossText}</strong></td><td></td>`;
+    totalRow.innerHTML = `<td colspan="5"><strong>Totals</strong></td><td><strong>${currency(totalPurchaseValue)}</strong></td><td><strong>${totalCurrentText}</strong></td><td><strong class="${totalGainLossClass}">${totalGainLossText}</strong></td><td></td>`;
     tableBody.appendChild(totalRow);
+
+    if (lastRefreshedEl) {
+      const latest = investments
+        .map((x) => x.price_refreshed_at)
+        .filter(Boolean)
+        .sort()
+        .slice(-1)[0];
+      lastRefreshedEl.textContent = `Last refreshed: ${latest ? new Date(latest).toLocaleString() : "Never"}`;
+    }
   }
 
   sortHeaders.forEach((header) => {
@@ -502,9 +500,18 @@ function initInvestmentsPage() {
   });
 
   refreshBtn?.addEventListener("click", async () => {
+    const response = await apiFetch("/api/investments/refresh", { method: "POST", body: JSON.stringify({}) });
+    const payload = await response.json();
     await loadInvestments();
     await renderTable();
-    setText(msg, "Prices refreshed.");
+    if (!response.ok) {
+      setText(msg, payload.error || "Unable to refresh prices.");
+      return;
+    }
+    if (lastRefreshedEl && payload.refreshedAt) {
+      lastRefreshedEl.textContent = `Last refreshed: ${new Date(payload.refreshedAt).toLocaleString()}`;
+    }
+    setText(msg, `Prices refreshed (${payload.updated} updated${payload.failed ? `, ${payload.failed} failed` : ""}).`);
   });
 
   return {
@@ -579,13 +586,13 @@ function initPreciousMetalsPage() {
       totalPurchase += Number(item.purchase_price);
       totalCurrent += Number(item.current_value);
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${item.metal_type}</td><td>${item.description}</td><td>${item.quantity}</td><td>${item.weight}</td><td>${item.purchase_date}</td><td>${item.where_purchased}</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${(Number(item.current_value) - Number(item.purchase_price)) >= 0 ? "+" : ""}${currency(Number(item.current_value) - Number(item.purchase_price))}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${item.metal_type}</td><td>${item.description}</td><td>${item.quantity}</td><td>${item.weight}</td><td>${item.purchase_date}</td><td>${item.where_purchased}</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${(Number(item.current_value) - Number(item.purchase_price)) >= 0 ? `<span class="gain-positive">+${currency(Number(item.current_value) - Number(item.purchase_price))}</span>` : `<span class="gain-negative">${currency(Number(item.current_value) - Number(item.purchase_price))}</span>`}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
 
     const totalRow = document.createElement("tr");
     totalRow.className = "totals-row";
-    totalRow.innerHTML = `<td colspan="6"><strong>Totals</strong></td><td><strong>${currency(totalPurchase)}</strong></td><td><strong>${currency(totalCurrent)}</strong></td><td><strong>${(totalCurrent - totalPurchase) >= 0 ? "+" : ""}${currency(totalCurrent - totalPurchase)}</strong></td><td></td>`;
+    totalRow.innerHTML = `<td colspan="6"><strong>Totals</strong></td><td><strong>${currency(totalPurchase)}</strong></td><td><strong>${currency(totalCurrent)}</strong></td><td><strong>${(totalCurrent - totalPurchase) >= 0 ? `<span class="gain-positive">+${currency(totalCurrent - totalPurchase)}</span>` : `<span class="gain-negative">${currency(totalCurrent - totalPurchase)}</span>`}</strong></td><td></td>`;
     tableBody.appendChild(totalRow);
   }
 
@@ -708,7 +715,7 @@ function initRealEstatePage() {
     for (const item of rows) {
       const myValue = Number(item.current_value) * (Number(item.percentage_owned) / 100);
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.description || "—"}</td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${currency(myValue)}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.description || "—"}</td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${myValue >= 0 ? `<span class="gain-positive">${currency(myValue)}</span>` : `<span class="gain-negative">${currency(myValue)}</span>`}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
   }
@@ -818,7 +825,7 @@ function initBusinessVenturesPage() {
     for (const item of rows) {
       const myValue = Number(item.business_value) * (Number(item.percentage_owned) / 100);
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${item.business_name}</td><td>${item.percentage_owned}%</td><td>${currency(item.business_value)}</td><td>${currency(myValue)}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${item.business_name}</td><td>${item.percentage_owned}%</td><td>${currency(item.business_value)}</td><td>${myValue >= 0 ? `<span class="gain-positive">${currency(myValue)}</span>` : `<span class="gain-negative">${currency(myValue)}</span>`}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
   }
