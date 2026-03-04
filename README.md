@@ -22,15 +22,18 @@ Current release: **v0.0.4**
 This version adds:
 
 - Username/password login
-- Public self-signup (create account) flow
+- Public self-signup (create account) flow with email verification code
 - Per-user data isolation (each user sees only their own records)
 - Admin role with user management:
   - Create users
   - Reset passwords
-- Multi-page UI:
+  - Delete users (with confirmation in UI)
+- Multi-page UI with left sidebar navigation:
   - Home (data entry + charts)
   - Records (saved records list + edit)
-  - Admin (settings, admin-only)
+  - Admin (single menu entry) with sub-pages:
+    - User Settings
+    - Email Settings
 
 ### Default admin bootstrap
 
@@ -47,6 +50,9 @@ ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
 
 ## Features
 
+- SMTP + host name settings for outbound email links and verification/reset emails
+- Forgot password flow that emails reset links
+- Version display in bottom-left footer for troubleshooting
 - Save one record per tax year
 - Update an existing year by re-submitting the same year
 - Income and giving chart by year

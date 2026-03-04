@@ -7,11 +7,16 @@ const appContent = document.getElementById("app-content");
 const sessionName = document.getElementById("session-name");
 const logoutBtn = document.getElementById("logout-btn");
 const navAdmin = document.getElementById("nav-admin");
+const versionInfo = document.getElementById("version-info");
 
 const loginForm = document.getElementById("login-form");
 const signupForm = document.getElementById("signup-form");
+const verifyForm = document.getElementById("verify-form");
+const forgotPasswordForm = document.getElementById("forgot-password-form");
 const toggleSignupBtn = document.getElementById("toggle-signup-btn");
 const toggleLoginBtn = document.getElementById("toggle-login-btn");
+const toggleVerifyBtn = document.getElementById("toggle-verify-btn");
+const toggleForgotBtn = document.getElementById("toggle-forgot-btn");
 const authMessage = document.getElementById("auth-message");
 
 let currentUser = null;
@@ -54,10 +59,14 @@ function setText(el, text) {
   if (el) el.textContent = text;
 }
 
-function showSignup(show) {
-  if (!signupForm || !loginForm) return;
-  signupForm.classList.toggle("hidden", !show);
-  loginForm.classList.toggle("hidden", show);
+function showAuthMode(mode) {
+  const forms = {
+    login: loginForm,
+    signup: signupForm,
+    verify: verifyForm,
+    forgot: forgotPasswordForm,
+  };
+  Object.entries(forms).forEach(([k, form]) => form?.classList.toggle("hidden", k !== mode));
 }
 
 function sortRecords() {
@@ -88,13 +97,12 @@ function renderAuthState() {
       : "Not signed in";
   }
 
-  if (navAdmin) {
-    navAdmin.classList.toggle("hidden", !(authenticated && currentUser.role === "admin"));
-  }
+  const showAdmin = authenticated && currentUser.role === "admin";
+  navAdmin?.classList.toggle("hidden", !showAdmin);
 }
 
 function ensureAdminPageAccess() {
-  if (page !== "admin") return;
+  if (!(page === "admin-users" || page === "admin-email")) return;
   if (!currentUser || currentUser.role !== "admin") {
     window.location.href = "/";
   }
@@ -106,6 +114,16 @@ async function loadCurrentUser() {
   currentUser = payload.authenticated ? payload.user : null;
   renderAuthState();
   ensureAdminPageAccess();
+}
+
+async function loadVersion() {
+  try {
+    const response = await apiFetch("/api/version");
+    const payload = await response.json();
+    setText(versionInfo, `Version ${payload.version || "unknown"}`);
+  } catch {
+    setText(versionInfo, "Version unknown");
+  }
 }
 
 async function handleLogin(event) {
@@ -126,12 +144,7 @@ async function handleLogin(event) {
   currentUser = payload.user;
   setText(authMessage, "Logged in successfully.");
   renderAuthState();
-
-  if (page === "admin" && currentUser.role !== "admin") {
-    window.location.href = "/";
-    return;
-  }
-
+  ensureAdminPageAccess();
   await initPageData();
 }
 
@@ -152,9 +165,48 @@ async function handleSignup(event) {
     return;
   }
 
-  setText(authMessage, "Account created. You can now log in.");
+  setText(authMessage, "Account created. Check email for verification code.");
   signupForm.reset();
-  showSignup(false);
+  showAuthMode("verify");
+  document.getElementById("verify-username").value = username;
+}
+
+async function handleVerify(event) {
+  event.preventDefault();
+  const username = document.getElementById("verify-username").value.trim();
+  const code = document.getElementById("verify-code").value.trim();
+
+  const response = await apiFetch("/api/verify-account", {
+    method: "POST",
+    body: JSON.stringify({ username, code }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    setText(authMessage, payload.error || "Verification failed.");
+    return;
+  }
+
+  setText(authMessage, "Account verified. You can now log in.");
+  verifyForm.reset();
+  showAuthMode("login");
+}
+
+async function handleForgotPassword(event) {
+  event.preventDefault();
+  const identifier = document.getElementById("forgot-identifier").value.trim();
+  const response = await apiFetch("/api/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ identifier }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    setText(authMessage, payload.error || "Unable to send reset request.");
+    return;
+  }
+
+  setText(authMessage, payload.message || "If an account exists, reset email has been sent.");
+  forgotPasswordForm.reset();
+  showAuthMode("login");
 }
 
 async function handleLogout() {
@@ -167,9 +219,15 @@ async function handleLogout() {
 function bindAuthUI() {
   loginForm?.addEventListener("submit", handleLogin);
   signupForm?.addEventListener("submit", handleSignup);
+  verifyForm?.addEventListener("submit", handleVerify);
+  forgotPasswordForm?.addEventListener("submit", handleForgotPassword);
+
   logoutBtn?.addEventListener("click", handleLogout);
-  toggleSignupBtn?.addEventListener("click", () => showSignup(true));
-  toggleLoginBtn?.addEventListener("click", () => showSignup(false));
+
+  toggleSignupBtn?.addEventListener("click", () => showAuthMode("signup"));
+  toggleLoginBtn?.addEventListener("click", () => showAuthMode("login"));
+  toggleVerifyBtn?.addEventListener("click", () => showAuthMode("verify"));
+  toggleForgotBtn?.addEventListener("click", () => showAuthMode("forgot"));
 }
 
 async function loadRecords() {
@@ -371,7 +429,7 @@ function initRecordsPage() {
   return { render: renderTable };
 }
 
-function initAdminPage() {
+function initAdminUsersPage() {
   const createForm = document.getElementById("create-user-form");
   const resetForm = document.getElementById("reset-password-form");
   const userSelect = document.getElementById("reset-user-id");
@@ -392,10 +450,31 @@ function initAdminPage() {
       userSelect.appendChild(option);
 
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${user.fullName}</td><td>${user.username}</td><td>${user.email || "—"}</td><td>${user.role}</td>`;
+      tr.innerHTML = `<td>${user.fullName}</td><td>${user.username}</td><td>${user.email || "—"}</td><td>${user.role}</td><td>${user.isVerified ? "Yes" : "No"}</td><td><button class="delete-btn" data-user-id="${user.id}" data-username="${user.username}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
   }
+
+  tableBody?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    if (!target.classList.contains("delete-btn")) return;
+
+    const userId = target.dataset.userId;
+    const username = target.dataset.username;
+    const confirmed = window.confirm(`Delete user '${username}'? This cannot be undone.`);
+    if (!confirmed) return;
+
+    const response = await apiFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
+    const payload = await response.json();
+    if (!response.ok) {
+      setText(adminMessage, payload.error || "Unable to delete user.");
+      return;
+    }
+
+    setText(adminMessage, `Deleted user ${username}.`);
+    await loadUsers();
+  });
 
   createForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -437,9 +516,88 @@ function initAdminPage() {
   return { render: loadUsers };
 }
 
+function initAdminEmailPage() {
+  const form = document.getElementById("smtp-settings-form");
+  const message = document.getElementById("email-settings-message");
+
+  async function render() {
+    const response = await apiFetch("/api/admin/smtp-settings");
+    if (!response.ok) return;
+    const s = await response.json();
+
+    document.getElementById("smtp-host").value = s.smtpHost || "";
+    document.getElementById("smtp-port").value = s.smtpPort || "587";
+    document.getElementById("smtp-username").value = s.smtpUsername || "";
+    document.getElementById("smtp-password").value = s.smtpPassword || "";
+    document.getElementById("smtp-from-email").value = s.smtpFromEmail || "";
+    document.getElementById("smtp-use-ssl").checked = Boolean(s.smtpUseSsl);
+    document.getElementById("website-host").value = s.websiteHost || "http://localhost:3000";
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      smtpHost: document.getElementById("smtp-host").value.trim(),
+      smtpPort: document.getElementById("smtp-port").value.trim(),
+      smtpUsername: document.getElementById("smtp-username").value.trim(),
+      smtpPassword: document.getElementById("smtp-password").value,
+      smtpFromEmail: document.getElementById("smtp-from-email").value.trim(),
+      smtpUseSsl: document.getElementById("smtp-use-ssl").checked,
+      websiteHost: document.getElementById("website-host").value.trim(),
+    };
+
+    const response = await apiFetch("/api/admin/smtp-settings", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) {
+      setText(message, data.error || "Unable to save settings.");
+      return;
+    }
+
+    setText(message, "Settings saved.");
+  });
+
+  return { render };
+}
+
+function initResetPasswordPage() {
+  const form = document.getElementById("reset-password-page-form");
+  const message = document.getElementById("reset-password-page-message");
+  const tokenInput = document.getElementById("reset-token");
+
+  const params = new URLSearchParams(window.location.search);
+  tokenInput.value = params.get("token") || "";
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const token = tokenInput.value.trim();
+    const password = document.getElementById("reset-password-page-new").value;
+
+    const response = await apiFetch("/api/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setText(message, data.error || "Unable to reset password.");
+      return;
+    }
+
+    setText(message, "Password reset successful. Return to login page.");
+    form.reset();
+  });
+
+  return { render: async () => {} };
+}
+
 let pageController = null;
 
 async function initPageData() {
+  if (page === "reset-password") {
+    if (!pageController) pageController = initResetPasswordPage();
+    await pageController.render();
+    return;
+  }
+
   if (!currentUser) return;
 
   if (page === "home") {
@@ -456,8 +614,14 @@ async function initPageData() {
     return;
   }
 
-  if (page === "admin") {
-    if (!pageController) pageController = initAdminPage();
+  if (page === "admin-users") {
+    if (!pageController) pageController = initAdminUsersPage();
+    await pageController.render();
+    return;
+  }
+
+  if (page === "admin-email") {
+    if (!pageController) pageController = initAdminEmailPage();
     await pageController.render();
   }
 }
@@ -465,8 +629,13 @@ async function initPageData() {
 async function bootstrap() {
   bindAuthUI();
   populateYearOptions();
-  showSignup(false);
-  await loadCurrentUser();
+  showAuthMode("login");
+  await loadVersion();
+  if (page !== "reset-password") {
+    await loadCurrentUser();
+  } else {
+    renderAuthState();
+  }
   await initPageData();
 }
 
