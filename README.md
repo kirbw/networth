@@ -54,7 +54,9 @@ ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
 - Forgot password flow that emails reset links
 - Version display in bottom-left footer for troubleshooting
 - Dedicated Investments page to track ticker, shares, purchase price, and purchase date
-- Live quote lookup endpoint and current value calculation for each investment (quotes via Stooq)
+- Live quote lookup endpoint and gain/loss calculation for each investment (quotes via Stooq)
+- Investments table totals row for purchase value, current value, and gain/loss
+- Smoother cross-page navigation by hiding login card until session check completes
 - Save one record per tax year
 - Update an existing year by re-submitting the same year
 - Income and giving chart by year

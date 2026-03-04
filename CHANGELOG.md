@@ -12,6 +12,7 @@ All notable changes to this project are documented in this file.
 - Global version footer shown in bottom-left for troubleshooting.
 - New Investments page for tracking ticker, shares, purchase price, and purchase date.
 - Investments API endpoints (`GET/POST/DELETE /api/investments`) plus quote lookup endpoint (`GET /api/quote`).
+- Investments table now shows Gain/Loss per holding and a totals row.
 
 ### Changed
 - Split admin area into subpages: Admin Users and Email Settings.
@@ -19,6 +20,7 @@ All notable changes to this project are documented in this file.
 - Moved primary app navigation to a left sidebar and session/logout controls to top-right.
 - Split UI into dedicated pages: Home, Records, Admin Users, Email Settings, and Investments.
 - Moved session + logout controls into the top navigation bar.
+- Prevent login-card flash on page switches by keeping auth UI hidden until session state loads.
 
 ## [v0.0.4] - 2026-03-04
 

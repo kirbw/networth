@@ -374,22 +374,44 @@ function initInvestmentsPage() {
       return;
     }
 
+    let totalPurchaseValue = 0;
+    let totalCurrentValue = 0;
+    let missingCurrentValues = 0;
+
     for (const inv of investments) {
       let currentPriceText = "—";
-      let currentValueText = "—";
+      let gainLossText = "—";
+      let currentValue = null;
       try {
         const q = await quote(inv.ticker);
         currentPriceText = currency(q.currentPrice);
-        currentValueText = currency(Number(inv.shares) * Number(q.currentPrice));
+        currentValue = Number(inv.shares) * Number(q.currentPrice);
       } catch {
         currentPriceText = "N/A";
       }
 
       const purchaseValue = Number(inv.shares) * Number(inv.purchase_price);
+      totalPurchaseValue += purchaseValue;
+      if (currentValue !== null) totalCurrentValue += currentValue;
+      else missingCurrentValues += 1;
+
+      if (currentValue !== null) {
+        const gainLoss = currentValue - purchaseValue;
+        gainLossText = `${gainLoss >= 0 ? "+" : ""}${currency(gainLoss)}`;
+      }
+
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${inv.ticker}</td><td>${inv.purchase_date}</td><td>${inv.shares}</td><td>${currency(inv.purchase_price)}</td><td>${currency(purchaseValue)}</td><td>${currentPriceText}</td><td>${currentValueText}</td><td><button class="delete-btn" data-id="${inv.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${inv.ticker}</td><td>${inv.purchase_date}</td><td>${inv.shares}</td><td>${currency(inv.purchase_price)}</td><td>${currency(purchaseValue)}</td><td>${currentPriceText}</td><td>${gainLossText}</td><td><button class="delete-btn" data-id="${inv.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
+
+    const totalGainLoss = totalCurrentValue - totalPurchaseValue;
+    const totalCurrentText = missingCurrentValues > 0 ? "N/A" : currency(totalCurrentValue);
+    const totalGainLossText = missingCurrentValues > 0 ? "N/A" : `${totalGainLoss >= 0 ? "+" : ""}${currency(totalGainLoss)}`;
+    const totalRow = document.createElement("tr");
+    totalRow.className = "totals-row";
+    totalRow.innerHTML = `<td colspan="4"><strong>Totals</strong></td><td><strong>${currency(totalPurchaseValue)}</strong></td><td><strong>${totalCurrentText}</strong></td><td><strong>${totalGainLossText}</strong></td><td></td>`;
+    tableBody.appendChild(totalRow);
   }
 
   form?.addEventListener("submit", async (event) => {

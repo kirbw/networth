@@ -161,3 +161,8 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
   font-size: 0.85rem;
   margin-top: 0.6rem;
 }
+
+.totals-row td {
+  background: #f8faff;
+  border-top: 2px solid var(--border);
+}
