@@ -29,6 +29,7 @@ let netWorthChart;
 let goalProgressChart;
 let investmentsSummaryChart;
 let liabilitiesSummaryChart;
+let assetsSummaryChart;
 
 function apiFetch(url, options = {}) {
   const headers = options.body ? { "Content-Type": "application/json", ...(options.headers || {}) } : (options.headers || {});
@@ -236,6 +237,7 @@ function initHomePage() {
   const netWorthInput = document.getElementById("netWorth");
   const investmentsTotalEl = document.getElementById("investments-combined-total");
   const liabilitiesTotalEl = document.getElementById("liabilities-combined-total");
+  const assetsTotalEl = document.getElementById("assets-combined-total");
 
   const destroy = (c) => { if (c) c.destroy(); };
 
@@ -286,6 +288,44 @@ function initHomePage() {
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: (v) => formatCompactCurrency(v) } } } },
     });
     if (liabilitiesTotalEl) liabilitiesTotalEl.textContent = `Combined liabilities: ${currency(summary.combinedTotal || 0)}`;
+  }
+
+  async function renderAssetsSummary() {
+    const chartEl = document.getElementById("assets-summary-chart");
+    if (!chartEl) return;
+    const [vehiclesRes, gunsRes, bankRes, cashRes] = await Promise.all([
+      apiFetch("/api/assets/vehicles"),
+      apiFetch("/api/assets/guns"),
+      apiFetch("/api/assets/bank-accounts"),
+      apiFetch("/api/assets/cash"),
+    ]);
+    if (![vehiclesRes, gunsRes, bankRes, cashRes].every((r) => r.ok)) return;
+    const vehicles = await vehiclesRes.json();
+    const guns = await gunsRes.json();
+    const bankAccounts = await bankRes.json();
+    const cash = await cashRes.json();
+
+    const entries = [
+      { label: "Bank Accounts", value: bankAccounts.reduce((sum, x) => sum + Number(x.balance || 0), 0), color: "#0090d8" },
+      { label: "Vehicles", value: vehicles.reduce((sum, x) => sum + Number(x.value || 0), 0), color: "#3956f6" },
+      { label: "Guns", value: guns.reduce((sum, x) => sum + Number(x.value || 0), 0), color: "#9747ff" },
+      { label: "Cash", value: cash.reduce((sum, x) => sum + Number(x.amount || 0), 0), color: "#00a76f" },
+    ].sort((a, b) => b.value - a.value);
+
+    destroy(assetsSummaryChart);
+    assetsSummaryChart = new Chart(chartEl.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: entries.map((e) => e.label),
+        datasets: [{ label: "Total Asset Value", data: entries.map((e) => e.value), backgroundColor: entries.map((e) => e.color) }],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: (v) => formatCompactCurrency(v) } } } },
+    });
+
+    if (assetsTotalEl) {
+      const combined = entries.reduce((sum, e) => sum + e.value, 0);
+      assetsTotalEl.textContent = `Combined assets: ${currency(combined)}`;
+    }
   }
   function renderCharts() {
     const goalPercent = getGoalPercent();
@@ -352,10 +392,11 @@ function initHomePage() {
     renderCharts();
     await renderInvestmentsSummary();
     await renderLiabilitiesSummary();
+    await renderAssetsSummary();
   });
 
 
-  return { render: async () => { renderCharts(); await renderInvestmentsSummary(); await renderLiabilitiesSummary(); } };
+  return { render: async () => { renderCharts(); await renderInvestmentsSummary(); await renderLiabilitiesSummary(); await renderAssetsSummary(); } };
 }
 
 function initRecordsPage() {
