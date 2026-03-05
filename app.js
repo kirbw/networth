@@ -1611,7 +1611,7 @@ function initAdminUsersPage() {
       userSelect.appendChild(option);
 
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${user.fullName}</td><td>${user.username}</td><td>${user.email || "—"}</td><td>${user.role}</td><td>${user.isVerified ? "Yes" : "No"}</td><td><button class="delete-btn" data-user-id="${user.id}" data-username="${user.username}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${user.fullName}</td><td>${user.username}</td><td>${user.email || "—"}</td><td>${user.role}</td><td>${user.isVerified ? "Yes" : "No"}</td><td>${user.dbUsageHuman || "0 B"}</td><td><button class="delete-btn" data-user-id="${user.id}" data-username="${user.username}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
   }

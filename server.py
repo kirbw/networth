@@ -67,6 +67,21 @@ def is_strong_password(password: str) -> bool:
     return len(password) >= 10
 
 
+
+
+def _format_bytes(num_bytes: int) -> str:
+    units = ["B", "KB", "MB", "GB", "TB"]
+    value = float(max(0, num_bytes))
+    unit = units[0]
+    for u in units:
+        unit = u
+        if value < 1024 or u == units[-1]:
+            break
+        value /= 1024.0
+    if unit == "B":
+        return f"{int(value)} {unit}"
+    return f"{value:.2f} {unit}"
+
 def is_login_allowed(key: str) -> bool:
     now = utc_now().timestamp()
     cutoff = now - LOGIN_WINDOW_SECONDS
@@ -669,6 +684,33 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return None
         return user
 
+    def _estimate_user_storage_bytes(self, conn: sqlite3.Connection, user_id: int):
+        total = 0
+
+        def add(query: str, params=()):
+            nonlocal total
+            row = conn.execute(query, params).fetchone()
+            if row and row[0] is not None:
+                total += int(row[0])
+
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(full_name,'')) + LENGTH(COALESCE(username,'')) + LENGTH(COALESCE(email,'')) + LENGTH(COALESCE(phone,'')) + LENGTH(COALESCE(street_address,'')) + LENGTH(COALESCE(city,'')) + LENGTH(COALESCE(state,'')) + LENGTH(COALESCE(zip,'')) + LENGTH(COALESCE(password_hash,'')) + 96), 0) FROM users WHERE id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(token,'')) + LENGTH(COALESCE(expires_at,'')) + LENGTH(COALESCE(created_at,'')) + 48), 0) FROM sessions WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(CAST(year AS TEXT)) + LENGTH(CAST(income AS TEXT)) + LENGTH(CAST(donation AS TEXT)) + LENGTH(COALESCE(CAST(netWorth AS TEXT), '')) + 48), 0) FROM annual_records WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(ticker,'')) + LENGTH(COALESCE(company_name,'')) + LENGTH(CAST(shares AS TEXT)) + LENGTH(CAST(purchase_price AS TEXT)) + LENGTH(COALESCE(CAST(current_price AS TEXT), '')) + LENGTH(COALESCE(price_refreshed_at,'')) + LENGTH(COALESCE(purchase_date,'')) + 64), 0) FROM investments WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(metal_type,'')) + LENGTH(COALESCE(description,'')) + LENGTH(CAST(quantity AS TEXT)) + LENGTH(CAST(weight AS TEXT)) + LENGTH(COALESCE(purchase_date,'')) + LENGTH(COALESCE(where_purchased,'')) + LENGTH(CAST(purchase_price AS TEXT)) + LENGTH(CAST(current_value AS TEXT)) + 64), 0) FROM precious_metals WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(address,'')) + LENGTH(CAST(percentage_owned AS TEXT)) + LENGTH(CAST(purchase_price AS TEXT)) + LENGTH(CAST(current_value AS TEXT)) + 64), 0) FROM real_estate WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(business_name,'')) + LENGTH(CAST(percentage_owned AS TEXT)) + LENGTH(CAST(business_value AS TEXT)) + 48), 0) FROM business_ventures WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(account_type,'')) + LENGTH(COALESCE(broker,'')) + LENGTH(CAST(taxable AS TEXT)) + LENGTH(CAST(value AS TEXT)) + 48), 0) FROM retirement_accounts WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(make,'')) + LENGTH(COALESCE(model,'')) + LENGTH(COALESCE(CAST(model_year AS TEXT), '')) + LENGTH(CAST(value AS TEXT)) + 48), 0) FROM asset_vehicles WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(gun_type,'')) + LENGTH(CAST(value AS TEXT)) + 40), 0) FROM asset_guns WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(institution,'')) + LENGTH(COALESCE(account_type,'')) + LENGTH(CAST(balance AS TEXT)) + 48), 0) FROM asset_bank_accounts WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(CAST(amount AS TEXT)) + 32), 0) FROM asset_cash WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(CAST(interest_rate AS TEXT)) + LENGTH(CAST(monthly_payment AS TEXT)) + LENGTH(COALESCE(start_date,'')) + LENGTH(CAST(initial_amount AS TEXT)) + LENGTH(CAST(current_balance AS TEXT)) + LENGTH(COALESCE(end_date,'')) + LENGTH(COALESCE(interest_change_date,'')) + 64), 0) FROM liability_mortgages WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(CAST(interest_rate AS TEXT)) + LENGTH(COALESCE(CAST(special_interest_rate AS TEXT), '')) + LENGTH(COALESCE(special_rate_end_date,'')) + LENGTH(CAST(monthly_payment AS TEXT)) + LENGTH(COALESCE(start_date,'')) + LENGTH(CAST(initial_amount AS TEXT)) + LENGTH(CAST(current_balance AS TEXT)) + LENGTH(COALESCE(end_date,'')) + LENGTH(CAST(credit_limit AS TEXT)) + 64), 0) FROM liability_credit_cards WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(loan_type,'')) + LENGTH(CAST(is_private AS TEXT)) + LENGTH(CAST(is_secured AS TEXT)) + LENGTH(CAST(interest_only AS TEXT)) + LENGTH(CAST(interest_rate AS TEXT)) + LENGTH(CAST(payment_amount AS TEXT)) + LENGTH(COALESCE(payment_frequency,'')) + LENGTH(COALESCE(start_date,'')) + LENGTH(CAST(initial_amount AS TEXT)) + LENGTH(CAST(current_balance AS TEXT)) + LENGTH(COALESCE(end_date,'')) + 72), 0) FROM liability_loans WHERE user_id = ?", (user_id,))
+
+        return total
+
     def _extract_user_payload(self, data: dict, require_password: bool):
         full_name = str(data.get("fullName", "")).strip()
         username = str(data.get("username", "")).strip()
@@ -1249,10 +1291,25 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             admin = self._require_admin()
             if not admin:
                 return
+            payload = []
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute("SELECT id, full_name, username, email, role, is_verified, created_at, updated_at FROM users ORDER BY username ASC").fetchall()
-            self._send_json(200, [{"id": r["id"], "fullName": r["full_name"], "username": r["username"], "email": r["email"], "role": r["role"], "isVerified": bool(r["is_verified"]), "createdAt": r["created_at"], "updatedAt": r["updated_at"]} for r in rows])
+                for r in rows:
+                    usage_bytes = self._estimate_user_storage_bytes(conn, r["id"])
+                    payload.append({
+                        "id": r["id"],
+                        "fullName": r["full_name"],
+                        "username": r["username"],
+                        "email": r["email"],
+                        "role": r["role"],
+                        "isVerified": bool(r["is_verified"]),
+                        "createdAt": r["created_at"],
+                        "updatedAt": r["updated_at"],
+                        "dbUsageBytes": usage_bytes,
+                        "dbUsageHuman": _format_bytes(usage_bytes),
+                    })
+            self._send_json(200, payload)
             return
 
         if parsed.path == "/api/admin/smtp-settings":
