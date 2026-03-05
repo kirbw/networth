@@ -21,12 +21,20 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
 PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/profile.html", "/net-worth-report.html", "/monthly-payments-report.html", "/notifications.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html"}
 ADMIN_PAGES = {"/admin-users.html", "/admin-email.html", "/admin-backups.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
 BACKUP_DIR = Path(os.getenv("BACKUP_DIR", str(Path.home() / ".networth_backups")))
+=======
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/profile.html", "/net-worth-report.html", "/admin-users.html", "/admin-email.html"}
+ADMIN_PAGES = {"/admin-users.html", "/admin-email.html"}
+LOGIN_WINDOW_SECONDS = 15 * 60
+MAX_LOGIN_ATTEMPTS = 8
+LOGIN_ATTEMPTS: dict[str, list[float]] = {}
+>>>>>>> main
 
 
 def utc_now() -> datetime:
@@ -517,6 +525,7 @@ def init_db():
         )
         conn.execute(
             """
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
             CREATE TABLE IF NOT EXISTS notifications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -561,6 +570,8 @@ def init_db():
 
         conn.execute(
             """
+=======
+>>>>>>> main
             CREATE TABLE IF NOT EXISTS password_reset_tokens (
                 token TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -784,11 +795,19 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return "assets"
         if path in ("/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html"):
             return "liabilities"
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
         if path in ("/net-worth-report.html", "/monthly-payments-report.html"):
             return "reports"
         if path == "/profile.html":
             return "profile"
         if path in ("/admin-users.html", "/admin-email.html", "/admin-backups.html"):
+=======
+        if path == "/net-worth-report.html":
+            return "net-worth"
+        if path == "/profile.html":
+            return "profile"
+        if path in ("/admin-users.html", "/admin-email.html"):
+>>>>>>> main
             return "admin"
         return ""
 
@@ -804,7 +823,11 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             f'<a href="/investments.html"{active("investments")}>Investments</a>'
             f'<a href="/assets-vehicles.html"{active("assets")}>Assets</a>'
             f'<a href="/liabilities-mortgages.html"{active("liabilities")}>Liabilities</a>'
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
             f'<a href="/net-worth-report.html"{active("reports")}>Reports</a>'
+=======
+            f'<a href="/net-worth-report.html"{active("net-worth")}>Net Worth Report</a>'
+>>>>>>> main
             f'<a href="/profile.html"{active("profile")}>My Profile</a>'
             f'<a id="nav-admin" href="/admin-users.html" class="hidden{(" active" if group == "admin" else "")}">Admin</a>'
             '</nav></aside>'
@@ -821,9 +844,13 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return False
         html = Path(file_path).read_text(encoding='utf-8')
         sidebar = self._render_sidebar(path)
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
         html = re.sub(r'<aside class=\"sidebar\">.*?</aside>', sidebar, html, flags=re.S)
         topbar_controls = '<div class=\"session-controls\"><button id=\"notifications-btn\" class=\"icon-btn\" type=\"button\" title=\"Notifications\">🔔<span id=\"notifications-badge\" class=\"notif-badge hidden\">0</span></button><span id=\"session-name\">Not signed in</span><button id=\"logout-btn\" type=\"button\">Logout</button></div>'
         html = re.sub(r'<div class=\"session-controls\">.*?</div>', topbar_controls, html, flags=re.S)
+=======
+        html = re.sub(r'<aside class="sidebar">.*?</aside>', sidebar, html, flags=re.S)
+>>>>>>> main
         body = html.encode('utf-8')
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -832,6 +859,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
         return True
 
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
 
     def _create_notification_if_missing(self, conn: sqlite3.Connection, user_id: int, kind: str, title: str, message: str, related_type: str | None = None, related_id: int | None = None):
         now = utc_now_iso()
@@ -912,6 +940,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         if utc_now() >= due:
             self._create_backup(conn, row)
 
+=======
+>>>>>>> main
     def do_GET(self):
         parsed = urlparse(self.path)
 
@@ -947,6 +977,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"ticker": ticker.upper(), "companyName": name, "currentPrice": price, "source": "Stooq"})
             return
 
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
         if parsed.path == "/api/precious-metals/spot":
             user = self._require_auth()
             if not user:
@@ -961,6 +992,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, out)
             return
 
+=======
+>>>>>>> main
         if parsed.path == "/api/records":
 
             user = self._require_auth()
@@ -1428,6 +1461,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
 
         if parsed.path == "/api/notifications":
             user = self._require_auth()
@@ -1498,6 +1532,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self.wfile.write(data)
             return
 
+=======
+>>>>>>> main
         if parsed.path == "/api/admin/users":
             admin = self._require_admin()
             if not admin:
@@ -1816,6 +1852,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
                 if record_id is None:
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
                     cursor = conn.execute(
                         "INSERT INTO real_estate (user_id, address, description, percentage_owned, purchase_price, current_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                         (user["id"], address, description, percentage_owned, purchase_price, current_value, now, now),
@@ -1833,6 +1870,20 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     )
                     if float(existing[0]) != float(current_value):
                         conn.execute("INSERT INTO real_estate_value_history (user_id, real_estate_id, value, recorded_at) VALUES (?, ?, ?, ?)", (user["id"], record_id, current_value, now))
+=======
+                    conn.execute(
+                        "INSERT INTO real_estate (user_id, address, description, percentage_owned, purchase_price, current_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (user["id"], address, description, percentage_owned, purchase_price, current_value, now, now),
+                    )
+                else:
+                    cursor = conn.execute(
+                        "UPDATE real_estate SET address = ?, description = ?, percentage_owned = ?, purchase_price = ?, current_value = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        (address, description, percentage_owned, purchase_price, current_value, now, record_id, user["id"]),
+                    )
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Real estate record not found."})
+                        return
+>>>>>>> main
             self._send_json(200, {"success": True})
             return
 
@@ -2206,6 +2257,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
 
         if parsed.path == "/api/notifications":
             user = self._require_auth()
@@ -2313,6 +2365,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"ok": True, "name": name})
             return
 
+=======
+>>>>>>> main
         if parsed.path == "/api/admin/users":
             admin = self._require_admin()
             if not admin:
@@ -2553,6 +2607,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
 
         if parsed.path.startswith("/api/notifications/"):
             user = self._require_auth()
@@ -2564,6 +2619,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"ok": True})
             return
 
+=======
+>>>>>>> main
         if parsed.path == "/api/records":
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute("DELETE FROM annual_records WHERE user_id = ?", (user["id"],))

@@ -1,6 +1,10 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
 const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/notifications.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html"]);
+=======
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/admin-users.html", "/admin-email.html"]);
+>>>>>>> main
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -8,8 +12,11 @@ const sessionName = document.getElementById("session-name");
 const logoutBtn = document.getElementById("logout-btn");
 const navAdmin = document.getElementById("nav-admin");
 const versionInfo = document.getElementById("version-info");
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
 const notificationsBtn = document.getElementById("notifications-btn");
 const notificationsBadge = document.getElementById("notifications-badge");
+=======
+>>>>>>> main
 
 const loginForm = document.getElementById("login-form");
 const signupForm = document.getElementById("signup-form");
@@ -43,6 +50,7 @@ function percent(value) {
   return `${(value * 100).toFixed(2)}%`;
 }
 
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
 
 function formatCompactCurrency(value) {
   const num = Number(value || 0);
@@ -53,6 +61,8 @@ function formatCompactCurrency(value) {
   return `$${num.toFixed(0)}`;
 }
 
+=======
+>>>>>>> main
 function setText(el, text) {
   if (el) el.textContent = text;
 }
@@ -86,11 +96,18 @@ function renderAuthState() {
     sessionName.title = authenticated ? "Open profile" : "";
   }
   navAdmin?.classList.toggle("hidden", !(authenticated && currentUser.role === "admin"));
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
   notificationsBtn?.classList.toggle("hidden", !authenticated);
 }
 
 function ensureAdminPageAccess() {
   if (!["admin-users", "admin-email", "admin-backups"].includes(page)) return;
+=======
+}
+
+function ensureAdminPageAccess() {
+  if (!["admin-users", "admin-email"].includes(page)) return;
+>>>>>>> main
   if (!currentUser || currentUser.role !== "admin") window.location.href = "/";
 }
 
@@ -118,6 +135,7 @@ async function loadVersion() {
   }
 }
 
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
 async function loadUnreadNotifications() {
   if (!currentUser || !notificationsBadge) return;
   try {
@@ -130,6 +148,8 @@ async function loadUnreadNotifications() {
   } catch {}
 }
 
+=======
+>>>>>>> main
 async function loadCurrentUser() {
   const response = await apiFetch("/api/me");
   const payload = await response.json();
@@ -209,7 +229,10 @@ function bindAuthUI() {
   verifyForm?.addEventListener("submit", handleVerify);
   forgotPasswordForm?.addEventListener("submit", handleForgotPassword);
   logoutBtn?.addEventListener("click", handleLogout);
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
 notificationsBtn?.addEventListener("click", () => { if (currentUser) window.location.href = "/notifications.html"; });
+=======
+>>>>>>> main
   sessionName?.addEventListener("click", () => { if (currentUser) window.location.href = "/profile.html"; });
   toggleSignupBtn?.addEventListener("click", () => showAuthMode("signup"));
   toggleLoginBtn?.addEventListener("click", () => showAuthMode("login"));
@@ -258,7 +281,11 @@ function initHomePage() {
         labels: entries.map((e) => e.label),
         datasets: [{ label: "Total Value", data: entries.map((e) => e.value), backgroundColor: entries.map((e) => e.color) }],
       },
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: (v) => formatCompactCurrency(v) } } } },
+=======
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+>>>>>>> main
     });
     if (investmentsTotalEl) investmentsTotalEl.textContent = `Combined total: ${currency(summary.combinedTotal || 0)}`;
   }
@@ -282,7 +309,11 @@ function initHomePage() {
         labels: entries.map((e) => e.label),
         datasets: [{ label: "Total Liability", data: entries.map((e) => e.value), backgroundColor: entries.map((e) => e.color) }],
       },
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: (v) => formatCompactCurrency(v) } } } },
+=======
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+>>>>>>> main
     });
     if (liabilitiesTotalEl) liabilitiesTotalEl.textContent = `Combined liabilities: ${currency(summary.combinedTotal || 0)}`;
   }
@@ -295,7 +326,11 @@ function initHomePage() {
     incomeGivingChart = new Chart(document.getElementById("income-giving-chart").getContext("2d"), {
       type: "line",
       data: { labels: records.map((r) => r.year), datasets: [{ label: "Income", data: records.map((r) => r.income), borderColor: "#3956f6", tension: 0.2 }, { label: "Donations", data: records.map((r) => r.donation), borderColor: "#00a76f", tension: 0.2 }] },
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom" } }, scales: { y: { ticks: { callback: (v) => formatCompactCurrency(v) } } } },
+=======
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+>>>>>>> main
     });
 
     const nw = records.filter((r) => r.netWorth != null);
@@ -303,7 +338,11 @@ function initHomePage() {
     netWorthChart = new Chart(document.getElementById("net-worth-chart").getContext("2d"), {
       type: "line",
       data: { labels: nw.map((r) => r.year), datasets: [{ label: "Net Worth", data: nw.map((r) => r.netWorth), borderColor: "#9747ff", tension: 0.2 }] },
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom" } }, scales: { y: { ticks: { callback: (v) => formatCompactCurrency(v) } } } },
+=======
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+>>>>>>> main
     });
 
     let cumIncome = 0;
@@ -329,7 +368,11 @@ function initHomePage() {
     goalProgressChart = new Chart(document.getElementById("goal-progress-chart").getContext("2d"), {
       type: "line",
       data: { labels: records.map((r) => r.year), datasets: [{ label: "Cumulative Income", data: cumIncomeSeries, borderColor: "#3956f6" }, { label: "Cumulative Donations", data: cumDonationSeries, borderColor: "#00a76f" }, { label: `${goalPercent.toFixed(1)}% Target`, data: targetSeries, borderColor: "#f08c00", borderDash: [6, 6], pointRadius: 0 }] },
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom" } }, scales: { y: { ticks: { callback: (v) => formatCompactCurrency(v) } } } },
+=======
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+>>>>>>> main
     });
   }
 
@@ -816,7 +859,11 @@ function initRealEstatePage() {
     for (const item of rows) {
       const myValue = Number(item.current_value) * (Number(item.percentage_owned) / 100);
       const tr = document.createElement("tr");
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
       tr.innerHTML = `<td>${item.description || "—"}</td><td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${myValue >= 0 ? `<span class="gain-positive">${currency(myValue)}</span>` : `<span class="gain-negative">${currency(myValue)}</span>`}</td><td><button class="history-btn" data-id="${item.id}" type="button">History</button><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+=======
+      tr.innerHTML = `<td>${item.description || "—"}</td><td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${myValue >= 0 ? `<span class="gain-positive">${currency(myValue)}</span>` : `<span class="gain-negative">${currency(myValue)}</span>`}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+>>>>>>> main
       tableBody.appendChild(tr);
     }
   }
@@ -855,6 +902,7 @@ function initRealEstatePage() {
     const target = event.target;
     if (!(target instanceof HTMLButtonElement)) return;
     const id = Number(target.dataset.id);
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
     if (target.classList.contains("history-btn")) {
       const response = await apiFetch(`/api/real-estate/${id}/history`);
       if (!response.ok) return;
@@ -864,6 +912,8 @@ function initRealEstatePage() {
       window.alert(`Value history\n\n${lines}`);
       return;
     }
+=======
+>>>>>>> main
     if (target.classList.contains("edit-btn")) {
       const item = rows.find((x) => x.id === id);
       if (item) startEdit(item);
@@ -1318,7 +1368,10 @@ function initProfilePage() {
     const data = await response.json();
     if (!response.ok) return setText(msg, data.error || "Unable to save profile.");
     await loadCurrentUser();
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
     await loadUnreadNotifications();
+=======
+>>>>>>> main
     if (currentPasswordInput) currentPasswordInput.value = "";
     if (newPasswordInput) newPasswordInput.value = "";
     setText(msg, "Profile updated.");
@@ -1735,6 +1788,7 @@ function initAdminEmailPage() {
   return { render };
 }
 
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
 
 function initNotificationsPage() {
   const list = document.getElementById("notifications-list");
@@ -1837,6 +1891,8 @@ function initAdminBackupsPage() {
   return { render };
 }
 
+=======
+>>>>>>> main
 function initResetPasswordPage() {
   const form = document.getElementById("reset-password-page-form");
   const msg = document.getElementById("reset-password-page-message");
@@ -1907,6 +1963,7 @@ async function initPageData() {
     return pageController.render();
   }
 
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
   if (page === "monthly-payments-report") {
     if (!pageController) pageController = initMonthlyPaymentsReportPage();
     return pageController.render();
@@ -1917,6 +1974,8 @@ async function initPageData() {
     return pageController.render();
   }
 
+=======
+>>>>>>> main
   if (page === "profile") {
     if (!pageController) pageController = initProfilePage();
     return pageController.render();
@@ -1966,11 +2025,14 @@ async function initPageData() {
     if (!pageController) pageController = initAdminEmailPage();
     return pageController.render();
   }
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
 
   if (page === "admin-backups") {
     if (!pageController) pageController = initAdminBackupsPage();
     return pageController.render();
   }
+=======
+>>>>>>> main
 }
 
 async function bootstrap() {
@@ -1980,7 +2042,10 @@ async function bootstrap() {
   await loadVersion();
   if (page !== "reset-password") {
     await loadCurrentUser();
+<<<<<<< codex/develop-web-app-for-income-and-net-worth-tracking
     await loadUnreadNotifications();
+=======
+>>>>>>> main
     if (currentUser && page === "home") {
       const next = new URLSearchParams(window.location.search).get("next") || "";
       if (NEXT_ALLOWED_PATHS.has(next)) {
