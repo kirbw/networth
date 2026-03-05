@@ -23,7 +23,7 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/profile.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/profile.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/notifications.html"}
 ADMIN_PAGES = {"/admin-users.html", "/admin-email.html", "/admin-backups.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
@@ -606,6 +606,23 @@ def init_db():
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'unread',
+                dedupe_key TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_user_dedupe ON notifications(user_id, dedupe_key) WHERE dedupe_key IS NOT NULL")
 
         table_info_real_estate = conn.execute("PRAGMA table_info(real_estate)").fetchall()
         if table_info_real_estate and not any(col[1] == "description" for col in table_info_real_estate):
@@ -648,6 +665,10 @@ def init_db():
             conn.execute("ALTER TABLE investments ADD COLUMN current_price REAL")
         if table_info_investments and "price_refreshed_at" not in inv_cols:
             conn.execute("ALTER TABLE investments ADD COLUMN price_refreshed_at TEXT")
+        if table_info_investments and "broker" not in inv_cols:
+            conn.execute("ALTER TABLE investments ADD COLUMN broker TEXT NOT NULL DEFAULT ''")
+        if table_info_investments and "manual_quote" not in inv_cols:
+            conn.execute("ALTER TABLE investments ADD COLUMN manual_quote INTEGER NOT NULL DEFAULT 0")
 
         migrate_records_schema(conn)
         init_default_settings(conn)
@@ -898,10 +919,12 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return "assets"
         if path in ("/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html"):
             return "liabilities"
-        if path in ("/net-worth-report.html", "/monthly-payments-report.html"):
+        if path in ("/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html"):
             return "reports"
         if path == "/profile.html":
             return "profile"
+        if path == "/notifications.html":
+            return "notifications"
         if path in ("/admin-users.html", "/admin-email.html", "/admin-backups.html"):
             return "admin"
         return ""
@@ -920,9 +943,31 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             f'<a href="/liabilities-mortgages.html"{active("liabilities")}>Liabilities</a>'
             f'<a href="/net-worth-report.html"{active("reports")}>Reports</a>'
             f'<a href="/profile.html"{active("profile")}>My Profile</a>'
+            f'<a href="/notifications.html"{active("notifications")}>Notifications</a>'
             f'<a id="nav-admin" href="/admin-users.html" class="hidden{(" active" if group == "admin" else "")}">Admin</a>'
             '</nav></aside>'
         )
+
+    def _upsert_credit_card_promo_notifications(self, user_id: int):
+        now = utc_now()
+        window_end = now + timedelta(days=30)
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("SELECT id, description, special_rate_end_date FROM liability_credit_cards WHERE user_id = ? AND special_interest_rate IS NOT NULL AND special_rate_end_date IS NOT NULL", (user_id,)).fetchall()
+            for row in rows:
+                try:
+                    end_dt = datetime.fromisoformat((row["special_rate_end_date"] or "")[:10])
+                    end_dt = end_dt.replace(tzinfo=timezone.utc)
+                except ValueError:
+                    continue
+                if now <= end_dt <= window_end:
+                    dedupe_key = f"cc-promo-expiry:{row['id']}:{end_dt.date().isoformat()}"
+                    title = "Credit card promo rate ending soon"
+                    message = f"{row['description']} promo rate ends on {end_dt.date().isoformat()}."
+                    ts = utc_now_iso()
+                    exists = conn.execute("SELECT 1 FROM notifications WHERE user_id = ? AND dedupe_key = ?", (user_id, dedupe_key)).fetchone()
+                    if not exists:
+                        conn.execute("INSERT INTO notifications (user_id, type, title, message, status, dedupe_key, created_at, updated_at) VALUES (?, 'credit-card-promo-expiry', ?, ?, 'unread', ?, ?, ?)", (user_id, title, message, dedupe_key, ts, ts))
 
     def _serve_templated_html(self, path: str) -> bool:
         if path == "/":
@@ -962,7 +1007,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             if not user:
                 self._send_json(200, {"authenticated": False})
                 return
-            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "streetAddress": user["street_address"], "city": user["city"], "state": user["state"], "zip": user["zip"], "role": user["role"]}})
+            self._upsert_credit_card_promo_notifications(user["id"])
+            with sqlite3.connect(DB_PATH) as conn:
+                unread_count = conn.execute("SELECT COUNT(1) FROM notifications WHERE user_id = ? AND status = 'unread'", (user["id"],)).fetchone()[0]
+            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "streetAddress": user["street_address"], "city": user["city"], "state": user["state"], "zip": user["zip"], "role": user["role"], "unreadNotifications": int(unread_count)}})
             return
 
         if parsed.path == "/api/quote":
@@ -1000,7 +1048,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    "SELECT id, ticker, company_name, shares, purchase_price, current_price, price_refreshed_at, purchase_date, created_at, updated_at FROM investments WHERE user_id = ? ORDER BY purchase_date DESC, id DESC",
+                    "SELECT id, ticker, broker, company_name, shares, purchase_price, current_price, manual_quote, price_refreshed_at, purchase_date, created_at, updated_at FROM investments WHERE user_id = ? ORDER BY purchase_date DESC, id DESC",
                     (user["id"],),
                 ).fetchall()
             self._send_json(200, [dict(row) for row in rows])
@@ -1191,6 +1239,31 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, payload)
             return
 
+        if parsed.path == "/api/reports/liquid-cash":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                bank_rows = conn.execute("SELECT description, institution, account_type, balance FROM asset_bank_accounts WHERE user_id = ? ORDER BY description ASC", (user["id"],)).fetchall()
+                cash_rows = conn.execute("SELECT description, amount FROM asset_cash WHERE user_id = ? ORDER BY description ASC", (user["id"],)).fetchall()
+            self._send_json(200, {
+                "bankAccounts": [dict(r) for r in bank_rows],
+                "cashAccounts": [dict(r) for r in cash_rows],
+            })
+            return
+
+        if parsed.path == "/api/notifications":
+            user = self._require_auth()
+            if not user:
+                return
+            self._upsert_credit_card_promo_notifications(user["id"])
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, type, title, message, status, created_at, updated_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(r) for r in rows])
+            return
+
         if parsed.path == "/api/reports/monthly-payments":
             user = self._require_auth()
             if not user:
@@ -1263,6 +1336,24 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 "monthlyPayments": monthly_items,
                 "periodicPayments": periodic_items,
             })
+            return
+
+        if parsed.path == "/api/notifications/mark":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                notif_id = int(data.get("id"))
+                status = str(data.get("status", "")).strip().lower()
+                if status not in ("read", "unread"):
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid notification update."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("UPDATE notifications SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?", (status, utc_now_iso(), notif_id, user["id"]))
+            self._send_json(200, {"success": True})
             return
 
         if parsed.path == "/api/profile":
@@ -1828,10 +1919,17 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 record_id_raw = data.get("id")
                 record_id = None if record_id_raw in (None, "") else int(record_id_raw)
                 ticker = str(data.get("ticker", "")).upper().strip()
+                broker = str(data.get("broker", "")).strip()
+                company_name = str(data.get("companyName", "")).strip() or None
+                current_price_raw = data.get("currentPrice")
+                current_price = None if current_price_raw in (None, "") else float(current_price_raw)
+                manual_quote = 1 if bool(data.get("manualQuote", False)) else 0
                 shares = float(data.get("shares", 0))
                 purchase_price = float(data.get("purchasePrice", 0))
                 purchase_date = str(data.get("purchaseDate", "")).strip()
                 if not ticker or shares <= 0 or purchase_price < 0 or not purchase_date:
+                    raise ValueError
+                if current_price is not None and current_price < 0:
                     raise ValueError
             except (ValueError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Invalid investment data."})
@@ -1840,13 +1938,13 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as conn:
                 if record_id is None:
                     conn.execute(
-                        "INSERT INTO investments (user_id, ticker, shares, purchase_price, purchase_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (user["id"], ticker, shares, purchase_price, purchase_date, now, now),
+                        "INSERT INTO investments (user_id, ticker, broker, company_name, shares, purchase_price, current_price, manual_quote, purchase_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (user["id"], ticker, broker, company_name, shares, purchase_price, current_price, manual_quote, purchase_date, now, now),
                     )
                 else:
                     cursor = conn.execute(
-                        "UPDATE investments SET ticker = ?, shares = ?, purchase_price = ?, purchase_date = ?, updated_at = ? WHERE id = ? AND user_id = ?",
-                        (ticker, shares, purchase_price, purchase_date, now, record_id, user["id"]),
+                        "UPDATE investments SET ticker = ?, broker = ?, company_name = ?, shares = ?, purchase_price = ?, current_price = ?, manual_quote = ?, purchase_date = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        (ticker, broker, company_name, shares, purchase_price, current_price, manual_quote, purchase_date, now, record_id, user["id"]),
                     )
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Stock record not found."})
@@ -2011,19 +2109,39 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             failed = 0
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                rows = conn.execute("SELECT id, ticker FROM investments WHERE user_id = ?", (user["id"],)).fetchall()
+                rows = conn.execute("SELECT id, ticker, manual_quote FROM investments WHERE user_id = ?", (user["id"],)).fetchall()
                 for row in rows:
                     try:
                         price, company_name = fetch_quote_details(row["ticker"])
                     except Exception:
+                        if int(row["manual_quote"] or 0) == 1:
+                            continue
                         failed += 1
                         continue
                     conn.execute(
-                        "UPDATE investments SET company_name = ?, current_price = ?, price_refreshed_at = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        "UPDATE investments SET company_name = ?, current_price = ?, manual_quote = 0, price_refreshed_at = ?, updated_at = ? WHERE id = ? AND user_id = ?",
                         (company_name, price, refreshed_at, refreshed_at, row["id"], user["id"]),
                     )
                     updated += 1
             self._send_json(200, {"success": True, "updated": updated, "failed": failed, "refreshedAt": refreshed_at})
+            return
+
+        if parsed.path == "/api/notifications/mark":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                notif_id = int(data.get("id"))
+                status = str(data.get("status", "")).strip().lower()
+                if status not in ("read", "unread"):
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid notification update."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("UPDATE notifications SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?", (status, utc_now_iso(), notif_id, user["id"]))
+            self._send_json(200, {"success": True})
             return
 
         if parsed.path == "/api/profile":
@@ -2422,6 +2540,22 @@ class FinanceHandler(SimpleHTTPRequestHandler):
     def do_DELETE(self):
         parsed = urlparse(self.path)
 
+        if parsed.path.startswith("/api/admin/backups/"):
+            admin = self._require_admin()
+            if not admin:
+                return
+            file_name = parsed.path.rsplit("/", 1)[-1]
+            if not re.fullmatch(r"finance-backup-\d{8}T\d{6}Z\.sqlite3", file_name):
+                self._send_json(400, {"error": "Invalid backup file name."})
+                return
+            backup_file = BACKUP_DIR / file_name
+            if not backup_file.exists() or not backup_file.is_file():
+                self._send_json(404, {"error": "Backup not found."})
+                return
+            backup_file.unlink(missing_ok=True)
+            self._send_json(200, {"success": True})
+            return
+
         if parsed.path.startswith("/api/admin/users/"):
             admin = self._require_admin()
             if not admin:
@@ -2448,6 +2582,20 @@ class FinanceHandler(SimpleHTTPRequestHandler):
 
         user = self._require_auth()
         if not user:
+            return
+
+        if parsed.path.startswith("/api/notifications/"):
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                notif_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid notification id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM notifications WHERE id = ? AND user_id = ?", (notif_id, user["id"]))
+            self._send_json(200, {"success": True})
             return
 
         if parsed.path.startswith("/api/investments/"):
