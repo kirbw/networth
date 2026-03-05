@@ -74,6 +74,9 @@ ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
 - Net Worth Report now includes Assets/Investments subtotal and Liabilities subtotal before total net worth
 - Print styles tightened so report cards print back-to-back with reduced whitespace
 - Liabilities section in Net Worth Report with category totals and subtraction from assets/investments for total net worth
+- Mortgage liabilities linked to real estate are scaled by ownership percentage (and labeled with ownership %)
+- Net Worth Report includes a signature attestation statement with signature/date lines for printing
+- Loans now support secured yes/no, interest-only yes/no, and payment frequency (monthly/quarterly/annual)
 - Edit on Records now scrolls directly to the edit form; deletes/clear actions now prompt for confirmation
 - Smoother cross-page navigation by hiding login card until session check completes
 - Server-side protection for app pages (`records`, `investments`, `assets`, `liabilities`, `admin`) with one-way redirects to login when session is invalid

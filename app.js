@@ -1160,7 +1160,16 @@ function initNetWorthReportPage() {
     ];
 
     const liabilityCategories = [
-      { title: "Mortgages", items: mortgages.map((x) => ({ description: `${x.description}${x.real_estate_address ? ` (${x.real_estate_address})` : ""}`, value: Number(x.current_balance) })) },
+      { title: "Mortgages", items: mortgages.map((x) => {
+        const ownedPct = x.real_estate_percentage_owned == null ? null : Number(x.real_estate_percentage_owned);
+        const effectivePct = ownedPct == null || Number.isNaN(ownedPct) ? 100 : ownedPct;
+        const scaledValue = Number(x.current_balance) * (effectivePct / 100);
+        const ownershipNote = x.real_estate_percentage_owned == null ? "" : ` (${effectivePct.toFixed(0)}% owned)`;
+        return {
+          description: `${x.description}${x.real_estate_address ? ` (${x.real_estate_address})` : ""}${ownershipNote}`,
+          value: scaledValue,
+        };
+      }) },
       { title: "Credit Cards", items: creditCards.map((x) => ({ description: x.description, value: Number(x.current_balance) })) },
       { title: "Loans", items: loans.map((x) => ({ description: `${x.description} — ${x.loan_type}`, value: Number(x.current_balance) })) },
     ];
@@ -1545,11 +1554,11 @@ function initLiabilitiesLoansPage() {
   return initLiabilityCrudPage({
     formId: "loans-form", messageId: "loans-message", bodyId: "loans-body", sortSelector: "[data-sort-loans]", submitBtnId: "loans-submit-btn",
     defaultSort: "description", sortDataset: "sortLoans", apiBase: "/api/liabilities/loans", addLabel: "Add Loan", updateLabel: "Update Loan",
-    emptyText: "No loans yet.", colspan: 11, totalLabelColspan: 9, savedText: "Loan saved.", deleteConfirm: "Delete this loan entry?",
+    emptyText: "No loans yet.", colspan: 14, totalLabelColspan: 12, savedText: "Loan saved.", deleteConfirm: "Delete this loan entry?",
     balanceGetter: (x) => x.current_balance,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.loan_type}</td><td>${x.is_private ? "Yes" : "No"}</td><td>${x.vehicle_description || "—"}</td><td>${x.interest_rate}%</td><td>${x.monthly_payment ? currency(x.monthly_payment) : "—"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${x.end_date || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
-    collectPayload: (id) => ({ id, description: document.getElementById("loan-description").value.trim(), loanType: document.getElementById("loan-type").value.trim(), isPrivate: document.getElementById("loan-is-private").value, vehicleId: document.getElementById("loan-vehicle-id").value, interestRate: Number(document.getElementById("loan-interest-rate").value), monthlyPayment: Number(document.getElementById("loan-monthly-payment").value || 0), startDate: document.getElementById("loan-start-date").value, initialAmount: Number(document.getElementById("loan-initial-amount").value), currentBalance: Number(document.getElementById("loan-current-balance").value), endDate: document.getElementById("loan-end-date").value }),
-    startEdit: (x) => { document.getElementById("loan-description").value = x.description; document.getElementById("loan-type").value = x.loan_type; document.getElementById("loan-is-private").value = x.is_private ? "yes" : "no"; document.getElementById("loan-vehicle-id").value = x.vehicle_id || ""; document.getElementById("loan-interest-rate").value = x.interest_rate; document.getElementById("loan-monthly-payment").value = x.monthly_payment || ""; document.getElementById("loan-start-date").value = x.start_date || ""; document.getElementById("loan-initial-amount").value = x.initial_amount; document.getElementById("loan-current-balance").value = x.current_balance; document.getElementById("loan-end-date").value = x.end_date || ""; },
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.loan_type}</td><td>${x.is_private ? "Yes" : "No"}</td><td>${x.is_secured ? "Yes" : "No"}</td><td>${x.interest_only ? "Yes" : "No"}</td><td>${x.vehicle_description || "—"}</td><td>${x.interest_rate}%</td><td>${x.payment_amount ? currency(x.payment_amount) : "—"}</td><td>${x.payment_frequency || "monthly"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${x.end_date || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("loan-description").value.trim(), loanType: document.getElementById("loan-type").value.trim(), isPrivate: document.getElementById("loan-is-private").value, isSecured: document.getElementById("loan-is-secured").value, interestOnly: document.getElementById("loan-interest-only").value, vehicleId: document.getElementById("loan-vehicle-id").value, interestRate: Number(document.getElementById("loan-interest-rate").value), paymentAmount: Number(document.getElementById("loan-payment-amount").value || 0), paymentFrequency: document.getElementById("loan-payment-frequency").value, startDate: document.getElementById("loan-start-date").value, initialAmount: Number(document.getElementById("loan-initial-amount").value), currentBalance: Number(document.getElementById("loan-current-balance").value), endDate: document.getElementById("loan-end-date").value }),
+    startEdit: (x) => { document.getElementById("loan-description").value = x.description; document.getElementById("loan-type").value = x.loan_type; document.getElementById("loan-is-private").value = x.is_private ? "yes" : "no"; document.getElementById("loan-is-secured").value = x.is_secured ? "yes" : "no"; document.getElementById("loan-interest-only").value = x.interest_only ? "yes" : "no"; document.getElementById("loan-vehicle-id").value = x.vehicle_id || ""; document.getElementById("loan-interest-rate").value = x.interest_rate; document.getElementById("loan-payment-amount").value = x.payment_amount || ""; document.getElementById("loan-payment-frequency").value = x.payment_frequency || "monthly"; document.getElementById("loan-start-date").value = x.start_date || ""; document.getElementById("loan-initial-amount").value = x.initial_amount; document.getElementById("loan-current-balance").value = x.current_balance; document.getElementById("loan-end-date").value = x.end_date || ""; },
     beforeLoad: loadVehicleOptions,
   });
 }

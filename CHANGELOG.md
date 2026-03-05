@@ -27,6 +27,8 @@ All notable changes to this project are documented in this file.
 - Added address fields (street, city, state, zip) and password-change capability on the profile page.
 - Added Liabilities section with subpages/APIs for Mortgages, Credit Cards, and Loans, including rates, payments, balances, and optional links to Real Estate/Vehicles.
 - Added Condensed view option on Net Worth Report for totals-only printing.
+- Added signature attestation statement with signature/date lines on Net Worth Report.
+- Added loan fields for secured flag, interest-only flag, and payment frequency (monthly/quarterly/annual).
 
 - Security hardening: login rate limiting, hashed password-reset tokens, and stricter minimum password length.
 - Admin SMTP settings reads now redact stored SMTP password values.
@@ -48,6 +50,7 @@ All notable changes to this project are documented in this file.
 - Net Worth statement header now includes the logged-in user name and date.
 - Server now injects sidebar navigation server-side for all app HTML pages to centralize menu updates.
 - Net Worth report now includes liabilities by category and subtracts total liabilities from assets/investments to compute total net worth.
+- Mortgage liabilities linked to real estate now use ownership percentage when calculating liability totals and include ownership text in descriptions.
 - Net Worth report now shows explicit Assets/Investments subtotal and Liabilities subtotal sections.
 - Print layout tightened so report sections flow without large whitespace gaps between cards/pages.
 - Removed Records from sidebar and added an "Edit Prior Years" button next to "Save Year" on Home.

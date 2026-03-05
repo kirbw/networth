@@ -484,6 +484,10 @@ def init_db():
                 vehicle_id INTEGER,
                 interest_rate REAL NOT NULL,
                 monthly_payment REAL NOT NULL,
+                payment_amount REAL NOT NULL,
+                payment_frequency TEXT NOT NULL DEFAULT 'monthly',
+                is_secured INTEGER NOT NULL DEFAULT 0,
+                interest_only INTEGER NOT NULL DEFAULT 0,
                 start_date TEXT,
                 initial_amount REAL NOT NULL,
                 current_balance REAL NOT NULL,
@@ -518,6 +522,22 @@ def init_db():
         table_info_real_estate = conn.execute("PRAGMA table_info(real_estate)").fetchall()
         if table_info_real_estate and not any(col[1] == "description" for col in table_info_real_estate):
             conn.execute("ALTER TABLE real_estate ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+
+        table_info_liability_loans = conn.execute("PRAGMA table_info(liability_loans)").fetchall()
+        loan_cols = {col[1] for col in table_info_liability_loans}
+        if table_info_liability_loans and "payment_amount" not in loan_cols:
+            conn.execute("ALTER TABLE liability_loans ADD COLUMN payment_amount REAL NOT NULL DEFAULT 0")
+        if table_info_liability_loans and "monthly_payment" not in loan_cols:
+            conn.execute("ALTER TABLE liability_loans ADD COLUMN monthly_payment REAL NOT NULL DEFAULT 0")
+        if table_info_liability_loans and "payment_frequency" not in loan_cols:
+            conn.execute("ALTER TABLE liability_loans ADD COLUMN payment_frequency TEXT NOT NULL DEFAULT 'monthly'")
+        if table_info_liability_loans and "is_secured" not in loan_cols:
+            conn.execute("ALTER TABLE liability_loans ADD COLUMN is_secured INTEGER NOT NULL DEFAULT 0")
+        if table_info_liability_loans and "interest_only" not in loan_cols:
+            conn.execute("ALTER TABLE liability_loans ADD COLUMN interest_only INTEGER NOT NULL DEFAULT 0")
+        if table_info_liability_loans and "monthly_payment" in loan_cols and "payment_amount" in loan_cols:
+            conn.execute("UPDATE liability_loans SET payment_amount = monthly_payment WHERE payment_amount = 0")
+            conn.execute("UPDATE liability_loans SET monthly_payment = payment_amount WHERE monthly_payment = 0")
 
         table_info_investments = conn.execute("PRAGMA table_info(investments)").fetchall()
         inv_cols = {col[1] for col in table_info_investments}
@@ -902,7 +922,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    "SELECT m.id, m.description, m.real_estate_id, r.description AS real_estate_description, r.address AS real_estate_address, m.interest_rate, m.monthly_payment, m.start_date, m.initial_amount, m.current_balance, m.end_date, m.interest_change_date, m.created_at, m.updated_at FROM liability_mortgages m LEFT JOIN real_estate r ON r.id = m.real_estate_id WHERE m.user_id = ? ORDER BY m.id DESC",
+                    "SELECT m.id, m.description, m.real_estate_id, r.description AS real_estate_description, r.address AS real_estate_address, r.percentage_owned AS real_estate_percentage_owned, m.interest_rate, m.monthly_payment, m.start_date, m.initial_amount, m.current_balance, m.end_date, m.interest_change_date, m.created_at, m.updated_at FROM liability_mortgages m LEFT JOIN real_estate r ON r.id = m.real_estate_id WHERE m.user_id = ? ORDER BY m.id DESC",
                     (user["id"],),
                 ).fetchall()
             self._send_json(200, [dict(row) for row in rows])
@@ -925,7 +945,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    "SELECT l.id, l.description, l.loan_type, l.is_private, l.vehicle_id, v.description AS vehicle_description, v.make AS vehicle_make, v.model AS vehicle_model, l.interest_rate, l.monthly_payment, l.start_date, l.initial_amount, l.current_balance, l.end_date, l.created_at, l.updated_at FROM liability_loans l LEFT JOIN asset_vehicles v ON v.id = l.vehicle_id WHERE l.user_id = ? ORDER BY l.id DESC",
+                    "SELECT l.id, l.description, l.loan_type, l.is_private, l.vehicle_id, v.description AS vehicle_description, v.make AS vehicle_make, v.model AS vehicle_model, l.interest_rate, l.payment_amount, l.payment_frequency, l.is_secured, l.interest_only, l.start_date, l.initial_amount, l.current_balance, l.end_date, l.created_at, l.updated_at FROM liability_loans l LEFT JOIN asset_vehicles v ON v.id = l.vehicle_id WHERE l.user_id = ? ORDER BY l.id DESC",
                     (user["id"],),
                 ).fetchall()
             self._send_json(200, [dict(row) for row in rows])
@@ -1175,12 +1195,19 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 vehicle_id_raw = data.get("vehicleId")
                 vehicle_id = None if vehicle_id_raw in (None, "") else int(vehicle_id_raw)
                 interest_rate = float(data.get("interestRate", 0))
-                monthly_payment = float(data.get("monthlyPayment", 0))
+                payment_amount = float(data.get("paymentAmount", data.get("monthlyPayment", 0)))
                 start_date = str(data.get("startDate", "")).strip() or None
                 initial_amount = float(data.get("initialAmount", 0))
                 current_balance = float(data.get("currentBalance", 0))
                 end_date = str(data.get("endDate", "")).strip() or None
-                if not description or not loan_type or interest_rate < 0 or monthly_payment < 0 or initial_amount < 0 or current_balance < 0:
+                is_secured_raw = str(data.get("isSecured", "no")).strip().lower()
+                is_secured = 1 if is_secured_raw in ("1", "true", "yes") else 0
+                interest_only_raw = str(data.get("interestOnly", "no")).strip().lower()
+                interest_only = 1 if interest_only_raw in ("1", "true", "yes") else 0
+                payment_frequency = str(data.get("paymentFrequency", "monthly")).strip().lower()
+                if payment_frequency not in ("monthly", "quarterly", "annual"):
+                    raise ValueError
+                if not description or not loan_type or interest_rate < 0 or payment_amount < 0 or initial_amount < 0 or current_balance < 0:
                     raise ValueError
             except (ValueError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Invalid loan data."})
@@ -1188,9 +1215,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
                 if record_id is None:
-                    conn.execute("INSERT INTO liability_loans (user_id, description, loan_type, is_private, vehicle_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, loan_type, is_private, vehicle_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, now, now))
+                    conn.execute("INSERT INTO liability_loans (user_id, description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, monthly_payment, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, now, now))
                 else:
-                    cursor = conn.execute("UPDATE liability_loans SET description = ?, loan_type = ?, is_private = ?, vehicle_id = ?, interest_rate = ?, monthly_payment = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, loan_type, is_private, vehicle_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, now, record_id, user["id"]))
+                    cursor = conn.execute("UPDATE liability_loans SET description = ?, loan_type = ?, is_private = ?, is_secured = ?, interest_only = ?, vehicle_id = ?, interest_rate = ?, monthly_payment = ?, payment_amount = ?, payment_frequency = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, now, record_id, user["id"]))
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Loan not found."})
                         return
@@ -1856,12 +1883,19 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 vehicle_id_raw = data.get("vehicleId")
                 vehicle_id = None if vehicle_id_raw in (None, "") else int(vehicle_id_raw)
                 interest_rate = float(data.get("interestRate", 0))
-                monthly_payment = float(data.get("monthlyPayment", 0))
+                payment_amount = float(data.get("paymentAmount", data.get("monthlyPayment", 0)))
                 start_date = str(data.get("startDate", "")).strip() or None
                 initial_amount = float(data.get("initialAmount", 0))
                 current_balance = float(data.get("currentBalance", 0))
                 end_date = str(data.get("endDate", "")).strip() or None
-                if not description or not loan_type or interest_rate < 0 or monthly_payment < 0 or initial_amount < 0 or current_balance < 0:
+                is_secured_raw = str(data.get("isSecured", "no")).strip().lower()
+                is_secured = 1 if is_secured_raw in ("1", "true", "yes") else 0
+                interest_only_raw = str(data.get("interestOnly", "no")).strip().lower()
+                interest_only = 1 if interest_only_raw in ("1", "true", "yes") else 0
+                payment_frequency = str(data.get("paymentFrequency", "monthly")).strip().lower()
+                if payment_frequency not in ("monthly", "quarterly", "annual"):
+                    raise ValueError
+                if not description or not loan_type or interest_rate < 0 or payment_amount < 0 or initial_amount < 0 or current_balance < 0:
                     raise ValueError
             except (ValueError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Invalid loan data."})
@@ -1869,9 +1903,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
                 if record_id is None:
-                    conn.execute("INSERT INTO liability_loans (user_id, description, loan_type, is_private, vehicle_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, loan_type, is_private, vehicle_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, now, now))
+                    conn.execute("INSERT INTO liability_loans (user_id, description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, monthly_payment, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, now, now))
                 else:
-                    cursor = conn.execute("UPDATE liability_loans SET description = ?, loan_type = ?, is_private = ?, vehicle_id = ?, interest_rate = ?, monthly_payment = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, loan_type, is_private, vehicle_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, now, record_id, user["id"]))
+                    cursor = conn.execute("UPDATE liability_loans SET description = ?, loan_type = ?, is_private = ?, is_secured = ?, interest_only = ?, vehicle_id = ?, interest_rate = ?, monthly_payment = ?, payment_amount = ?, payment_frequency = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, now, record_id, user["id"]))
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Loan not found."})
                         return

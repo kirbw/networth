@@ -1,1 +1,117 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Annual Finance Tracker - Liabilities Loans</title><link rel="stylesheet" href="styles.css" /></head><body data-page="liabilities-loans"><div class="layout"><aside class="sidebar"></aside><div class="main-column"><header class="topbar"><div class="session-controls"><span id="session-name">Not signed in</span><button id="logout-btn" type="button">Logout</button></div></header><main class="container"><section id="auth-card" class="card auth-card hidden"><h2>Sign In</h2><form id="login-form"><label>Username <input id="login-username" type="text" required /></label><label>Password <input id="login-password" type="password" required /></label><button type="submit">Log In</button></form><form id="signup-form" class="hidden"><label>Full Name <input id="signup-full-name" type="text" required /></label><label>Email <input id="signup-email" type="email" required /></label><label>Username <input id="signup-username" type="text" required /></label><label>Password <input id="signup-password" type="password" required /></label><button type="submit">Create Account</button></form><form id="verify-form" class="hidden"><label>Username <input id="verify-username" type="text" required /></label><label>Verification Code <input id="verify-code" type="text" required /></label><button type="submit">Verify Account</button></form><form id="forgot-password-form" class="hidden"><label>Email or Username <input id="forgot-identifier" type="text" required /></label><button type="submit">Send Reset Link</button></form><div class="auth-actions"><button id="toggle-signup-btn" type="button">Create account</button><button id="toggle-verify-btn" type="button">Verify account</button><button id="toggle-forgot-btn" type="button">Forgot password</button><button id="toggle-login-btn" type="button">Back to login</button></div><p id="auth-message"></p></section><section id="app-content" class="hidden"><section class="card admin-subnav-card"><div class="admin-subnav"><a href="/liabilities-mortgages.html">Mortgages</a><a href="/liabilities-credit-cards.html">Credit Cards</a><a href="/liabilities-loans.html" class="active">Loans</a></div></section><section class="card"><h2>Add Loan</h2><form id="loans-form"><div class="form-grid"><label>Description <input id="loan-description" type="text" required /></label><label>Loan Type <input id="loan-type" type="text" required /></label><label>Private Loan? <select id="loan-is-private"><option value="no">No</option><option value="yes">Yes</option></select></label><label>Linked Vehicle <select id="loan-vehicle-id"></select></label><label>Interest Rate (%) <input id="loan-interest-rate" type="number" min="0" step="0.01" required /></label><label>Monthly Payment ($) <input id="loan-monthly-payment" type="number" min="0" step="0.01" /></label><label>Start Date <input id="loan-start-date" type="date" /></label><label>Initial Amount ($) <input id="loan-initial-amount" type="number" min="0" step="0.01" required /></label><label>Current Balance ($) <input id="loan-current-balance" type="number" min="0" step="0.01" required /></label><label>End Date <input id="loan-end-date" type="date" /></label></div><button type="submit" id="loans-submit-btn">Add Loan</button><p id="loans-message"></p></form></section><section class="card"><h2>Loans</h2><div class="table-wrap"><table><thead><tr><th data-sort-loans="description" class="sortable">Description</th><th data-sort-loans="loan_type" class="sortable">Type</th><th data-sort-loans="is_private" class="sortable">Private</th><th>Linked Vehicle</th><th data-sort-loans="interest_rate" class="sortable">Rate</th><th data-sort-loans="monthly_payment" class="sortable">Monthly Payment</th><th data-sort-loans="start_date" class="sortable">Start Date</th><th data-sort-loans="initial_amount" class="sortable">Initial Amount</th><th data-sort-loans="current_balance" class="sortable">Current Balance</th><th data-sort-loans="end_date" class="sortable">End Date</th><th>Actions</th></tr></thead><tbody id="loans-body"></tbody></table></div></section></section></main></div></div><footer class="version-footer"><span id="version-info">Version ...</span></footer><script src="app.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Liabilities Loans</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="liabilities-loans">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <div class="main-column">
+      <header class="topbar">
+        <div class="session-controls">
+          <span id="session-name">Not signed in</span>
+          <button id="logout-btn" type="button">Logout</button>
+        </div>
+      </header>
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden">
+          <h2>Sign In</h2>
+          <form id="login-form">
+            <label>Username <input id="login-username" type="text" required /></label>
+            <label>Password <input id="login-password" type="password" required /></label>
+            <button type="submit">Log In</button>
+          </form>
+          <form id="signup-form" class="hidden">
+            <label>Full Name <input id="signup-full-name" type="text" required /></label>
+            <label>Email <input id="signup-email" type="email" required /></label>
+            <label>Username <input id="signup-username" type="text" required /></label>
+            <label>Password <input id="signup-password" type="password" required /></label>
+            <button type="submit">Create Account</button>
+          </form>
+          <form id="verify-form" class="hidden">
+            <label>Username <input id="verify-username" type="text" required /></label>
+            <label>Verification Code <input id="verify-code" type="text" required /></label>
+            <button type="submit">Verify Account</button>
+          </form>
+          <form id="forgot-password-form" class="hidden">
+            <label>Email or Username <input id="forgot-identifier" type="text" required /></label>
+            <button type="submit">Send Reset Link</button>
+          </form>
+          <div class="auth-actions">
+            <button id="toggle-signup-btn" type="button">Create account</button>
+            <button id="toggle-verify-btn" type="button">Verify account</button>
+            <button id="toggle-forgot-btn" type="button">Forgot password</button>
+            <button id="toggle-login-btn" type="button">Back to login</button>
+          </div>
+          <p id="auth-message"></p>
+        </section>
+
+        <section id="app-content" class="hidden">
+          <section class="card admin-subnav-card">
+            <div class="admin-subnav">
+              <a href="/liabilities-mortgages.html">Mortgages</a>
+              <a href="/liabilities-credit-cards.html">Credit Cards</a>
+              <a href="/liabilities-loans.html" class="active">Loans</a>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Add Loan</h2>
+            <form id="loans-form">
+              <div class="form-grid">
+                <label>Description <input id="loan-description" type="text" required /></label>
+                <label>Loan Type <input id="loan-type" type="text" required /></label>
+                <label>Private Loan? <select id="loan-is-private"><option value="no">No</option><option value="yes">Yes</option></select></label>
+                <label>Secured Loan? <select id="loan-is-secured"><option value="no">No</option><option value="yes">Yes</option></select></label>
+                <label>Interest Only? <select id="loan-interest-only"><option value="no">No</option><option value="yes">Yes</option></select></label>
+                <label>Linked Vehicle <select id="loan-vehicle-id"></select></label>
+                <label>Interest Rate (%) <input id="loan-interest-rate" type="number" min="0" step="0.01" required /></label>
+                <label>Payment Amount ($) <input id="loan-payment-amount" type="number" min="0" step="0.01" /></label>
+                <label>Payment Frequency <select id="loan-payment-frequency"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>
+                <label>Start Date <input id="loan-start-date" type="date" /></label>
+                <label>Initial Amount ($) <input id="loan-initial-amount" type="number" min="0" step="0.01" required /></label>
+                <label>Current Balance ($) <input id="loan-current-balance" type="number" min="0" step="0.01" required /></label>
+                <label>End Date <input id="loan-end-date" type="date" /></label>
+              </div>
+              <button type="submit" id="loans-submit-btn">Add Loan</button>
+              <p id="loans-message"></p>
+            </form>
+          </section>
+
+          <section class="card">
+            <h2>Loans</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th data-sort-loans="description" class="sortable">Description</th>
+                    <th data-sort-loans="loan_type" class="sortable">Type</th>
+                    <th data-sort-loans="is_private" class="sortable">Private</th>
+                    <th data-sort-loans="is_secured" class="sortable">Secured</th>
+                    <th data-sort-loans="interest_only" class="sortable">Interest Only</th>
+                    <th>Linked Vehicle</th>
+                    <th data-sort-loans="interest_rate" class="sortable">Rate</th>
+                    <th data-sort-loans="payment_amount" class="sortable">Payment</th>
+                    <th data-sort-loans="payment_frequency" class="sortable">Frequency</th>
+                    <th data-sort-loans="start_date" class="sortable">Start Date</th>
+                    <th data-sort-loans="initial_amount" class="sortable">Initial Amount</th>
+                    <th data-sort-loans="current_balance" class="sortable">Current Balance</th>
+                    <th data-sort-loans="end_date" class="sortable">End Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="loans-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>
