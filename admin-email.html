@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Email Settings</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="admin-email">
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Finance Tracker</h2>
+      <nav class="side-menu">
+        <a href="/">Home</a>
+        <a href="/records.html">Records</a>
+        <a href="/investments.html">Investments</a>
+        <a href="/assets-vehicles.html">Assets</a>
+        <a href="/net-worth-report.html">Net Worth Report</a>
+        <a id="nav-admin" href="/admin-users.html" class="active">Admin</a>
+      </nav>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <div class="session-controls">
+          <span id="session-name">Not signed in</span>
+          <button id="logout-btn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden">
+          <h2>Sign In</h2>
+          <form id="login-form">
+            <label>Username <input id="login-username" type="text" required /></label>
+            <label>Password <input id="login-password" type="password" required /></label>
+            <button type="submit">Log In</button>
+          </form>
+          <form id="signup-form" class="hidden">
+            <label>Full Name <input id="signup-full-name" type="text" required /></label>
+            <label>Email <input id="signup-email" type="email" required /></label>
+            <label>Username <input id="signup-username" type="text" required /></label>
+            <label>Password <input id="signup-password" type="password" required /></label>
+            <button type="submit">Create Account</button>
+          </form>
+          <form id="verify-form" class="hidden">
+            <label>Username <input id="verify-username" type="text" required /></label>
+            <label>Verification Code <input id="verify-code" type="text" required /></label>
+            <button type="submit">Verify Account</button>
+          </form>
+          <form id="forgot-password-form" class="hidden">
+            <label>Email or Username <input id="forgot-identifier" type="text" required /></label>
+            <button type="submit">Send Reset Link</button>
+          </form>
+          <div class="auth-actions">
+            <button id="toggle-signup-btn" type="button">Create account</button>
+            <button id="toggle-verify-btn" type="button">Verify account</button>
+            <button id="toggle-forgot-btn" type="button">Forgot password</button>
+            <button id="toggle-login-btn" type="button">Back to login</button>
+          </div>
+          <p id="auth-message"></p>
+        </section>
+
+        <section id="app-content" class="hidden">
+          <section class="card admin-subnav-card">
+            <div class="admin-subnav">
+              <a href="/admin-users.html">User Settings</a>
+              <a href="/admin-email.html" class="active">Email Settings</a>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Email / SMTP Settings</h2>
+            <form id="smtp-settings-form">
+              <div class="form-grid">
+                <label>SMTP Host <input id="smtp-host" type="text" placeholder="smtp.example.com" /></label>
+                <label>SMTP Port <input id="smtp-port" type="number" placeholder="587" /></label>
+                <label>SMTP Username <input id="smtp-username" type="text" /></label>
+                <label>SMTP Password <input id="smtp-password" type="password" /></label>
+                <label>From Email <input id="smtp-from-email" type="email" placeholder="no-reply@example.com" /></label>
+                <label>Website Host Name <input id="website-host" type="text" placeholder="https://yourdomain.com" /></label>
+                <label class="checkbox-row"><input id="smtp-use-ssl" type="checkbox" /> Use SSL (otherwise STARTTLS/plain based on server)</label>
+              </div>
+              <button type="submit">Save Email Settings</button>
+              <p id="email-settings-message"></p>
+            </form>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>
