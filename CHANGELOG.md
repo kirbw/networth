@@ -24,6 +24,8 @@ All notable changes to this project are documented in this file.
 - Added Net Worth Report page with print/save-as-PDF support, category subtotals, and grand total.
 - Added Assets top-level section with Vehicles, Guns, Bank Accounts, and Cash subpages (sortable CRUD tables).
 - Added Profile page for updating user full name, email, and contact phone.
+- Added address fields (street, city, state, zip) and password-change capability on the profile page.
+- Added Liabilities section with subpages/APIs for Mortgages, Credit Cards, and Loans, including rates, payments, balances, and optional links to Real Estate/Vehicles.
 
 - Security hardening: login rate limiting, hashed password-reset tokens, and stricter minimum password length.
 - Admin SMTP settings reads now redact stored SMTP password values.
@@ -43,6 +45,8 @@ All notable changes to this project are documented in this file.
 - Records edit now scrolls to the edit form; delete/clear actions now require confirmation prompts across record/investment pages.
 - Investments Overview bar chart labels now omit "My Value" wording and are sorted by value (largest to smallest).
 - Net Worth statement header now includes the logged-in user name and date.
+- Server now injects sidebar navigation server-side for all app HTML pages to centralize menu updates.
+- Net Worth report now includes liabilities by category and subtracts total liabilities from assets/investments to compute total net worth.
 
 ## [v0.0.5] - 2026-03-04
 

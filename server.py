@@ -4,6 +4,7 @@ import hmac
 import io
 import json
 import os
+import re
 import secrets
 import smtplib
 import sqlite3
@@ -20,7 +21,7 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/profile.html", "/net-worth-report.html", "/admin-users.html", "/admin-email.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/profile.html", "/net-worth-report.html", "/admin-users.html", "/admin-email.html"}
 ADMIN_PAGES = {"/admin-users.html", "/admin-email.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
@@ -432,6 +433,70 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS liability_mortgages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                real_estate_id INTEGER,
+                interest_rate REAL NOT NULL,
+                monthly_payment REAL NOT NULL,
+                start_date TEXT,
+                initial_amount REAL NOT NULL,
+                current_balance REAL NOT NULL,
+                end_date TEXT,
+                interest_change_date TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(real_estate_id) REFERENCES real_estate(id) ON DELETE SET NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS liability_credit_cards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                interest_rate REAL NOT NULL,
+                special_interest_rate REAL,
+                special_rate_end_date TEXT,
+                monthly_payment REAL NOT NULL,
+                start_date TEXT,
+                initial_amount REAL NOT NULL,
+                current_balance REAL NOT NULL,
+                end_date TEXT,
+                credit_limit REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS liability_loans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                loan_type TEXT NOT NULL,
+                is_private INTEGER NOT NULL,
+                vehicle_id INTEGER,
+                interest_rate REAL NOT NULL,
+                monthly_payment REAL NOT NULL,
+                start_date TEXT,
+                initial_amount REAL NOT NULL,
+                current_balance REAL NOT NULL,
+                end_date TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(vehicle_id) REFERENCES asset_vehicles(id) ON DELETE SET NULL
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS password_reset_tokens (
                 token TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -600,6 +665,64 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         if password and not is_strong_password(password):
             raise ValueError("Password must be at least 10 characters.")
         return full_name, username, email, password, role
+
+    def _nav_group_for_path(self, path: str) -> str:
+        if path in ("/", "/index.html"):
+            return "home"
+        if path == "/records.html":
+            return "records"
+        if path in ("/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html"):
+            return "investments"
+        if path in ("/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html"):
+            return "assets"
+        if path in ("/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html"):
+            return "liabilities"
+        if path == "/net-worth-report.html":
+            return "net-worth"
+        if path == "/profile.html":
+            return "profile"
+        if path in ("/admin-users.html", "/admin-email.html"):
+            return "admin"
+        return ""
+
+    def _render_sidebar(self, path: str) -> str:
+        group = self._nav_group_for_path(path)
+        def active(name: str) -> str:
+            return ' class="active"' if group == name else ''
+        return (
+            '<aside class="sidebar">'
+            '<h2>Finance Tracker</h2>'
+            '<nav class="side-menu">'
+            f'<a href="/"{active("home")}>Home</a>'
+            f'<a href="/records.html"{active("records")}>Records</a>'
+            f'<a href="/investments.html"{active("investments")}>Investments</a>'
+            f'<a href="/assets-vehicles.html"{active("assets")}>Assets</a>'
+            f'<a href="/liabilities-mortgages.html"{active("liabilities")}>Liabilities</a>'
+            f'<a href="/net-worth-report.html"{active("net-worth")}>Net Worth Report</a>'
+            f'<a href="/profile.html"{active("profile")}>My Profile</a>'
+            f'<a id="nav-admin" href="/admin-users.html" class="hidden{(" active" if group == "admin" else "")}">Admin</a>'
+            '</nav></aside>'
+        )
+
+    def _serve_templated_html(self, path: str) -> bool:
+        if path == "/":
+            file_path = "index.html"
+        else:
+            file_path = path.lstrip("/")
+        if not file_path.endswith('.html') or not os.path.exists(file_path):
+            return False
+        if file_path == "reset-password.html":
+            return False
+        html = Path(file_path).read_text(encoding='utf-8')
+        sidebar = self._render_sidebar(path)
+        html = re.sub(r'<aside class="sidebar">.*?</aside>', sidebar, html, flags=re.S)
+        body = html.encode('utf-8')
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return True
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -773,6 +896,42 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, [dict(row) for row in rows])
             return
 
+        if parsed.path == "/api/liabilities/mortgages":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    "SELECT m.id, m.description, m.real_estate_id, r.description AS real_estate_description, r.address AS real_estate_address, m.interest_rate, m.monthly_payment, m.start_date, m.initial_amount, m.current_balance, m.end_date, m.interest_change_date, m.created_at, m.updated_at FROM liability_mortgages m LEFT JOIN real_estate r ON r.id = m.real_estate_id WHERE m.user_id = ? ORDER BY m.id DESC",
+                    (user["id"],),
+                ).fetchall()
+            self._send_json(200, [dict(row) for row in rows])
+            return
+
+        if parsed.path == "/api/liabilities/credit-cards":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, description, interest_rate, special_interest_rate, special_rate_end_date, monthly_payment, start_date, initial_amount, current_balance, end_date, credit_limit, created_at, updated_at FROM liability_credit_cards WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(row) for row in rows])
+            return
+
+        if parsed.path == "/api/liabilities/loans":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    "SELECT l.id, l.description, l.loan_type, l.is_private, l.vehicle_id, v.description AS vehicle_description, v.make AS vehicle_make, v.model AS vehicle_model, l.interest_rate, l.monthly_payment, l.start_date, l.initial_amount, l.current_balance, l.end_date, l.created_at, l.updated_at FROM liability_loans l LEFT JOIN asset_vehicles v ON v.id = l.vehicle_id WHERE l.user_id = ? ORDER BY l.id DESC",
+                    (user["id"],),
+                ).fetchall()
+            self._send_json(200, [dict(row) for row in rows])
+            return
+
         if parsed.path == "/api/profile":
             user = self._require_auth()
             if not user:
@@ -931,6 +1090,114 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+        if parsed.path == "/api/liabilities/mortgages":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                real_estate_id_raw = data.get("realEstateId")
+                real_estate_id = None if real_estate_id_raw in (None, "") else int(real_estate_id_raw)
+                interest_rate = float(data.get("interestRate", 0))
+                monthly_payment = float(data.get("monthlyPayment", 0))
+                start_date = str(data.get("startDate", "")).strip() or None
+                initial_amount = float(data.get("initialAmount", 0))
+                current_balance = float(data.get("currentBalance", 0))
+                end_date = str(data.get("endDate", "")).strip() or None
+                interest_change_date = str(data.get("interestChangeDate", "")).strip() or None
+                if not description or interest_rate < 0 or monthly_payment < 0 or initial_amount < 0 or current_balance < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid mortgage data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO liability_mortgages (user_id, description, real_estate_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, interest_change_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, real_estate_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, interest_change_date, now, now))
+                else:
+                    cursor = conn.execute("UPDATE liability_mortgages SET description = ?, real_estate_id = ?, interest_rate = ?, monthly_payment = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, interest_change_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, real_estate_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, interest_change_date, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Mortgage not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/liabilities/credit-cards":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                interest_rate = float(data.get("interestRate", 0))
+                special_interest_rate_raw = data.get("specialInterestRate")
+                special_interest_rate = None if special_interest_rate_raw in (None, "") else float(special_interest_rate_raw)
+                special_rate_end_date = str(data.get("specialRateEndDate", "")).strip() or None
+                monthly_payment = float(data.get("monthlyPayment", 0))
+                start_date = str(data.get("startDate", "")).strip() or None
+                initial_amount = float(data.get("initialAmount", 0))
+                current_balance = float(data.get("currentBalance", 0))
+                end_date = str(data.get("endDate", "")).strip() or None
+                credit_limit = float(data.get("creditLimit", 0))
+                if not description or interest_rate < 0 or monthly_payment < 0 or initial_amount < 0 or current_balance < 0 or credit_limit < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid credit card data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO liability_credit_cards (user_id, description, interest_rate, special_interest_rate, special_rate_end_date, monthly_payment, start_date, initial_amount, current_balance, end_date, credit_limit, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, interest_rate, special_interest_rate, special_rate_end_date, monthly_payment, start_date, initial_amount, current_balance, end_date, credit_limit, now, now))
+                else:
+                    cursor = conn.execute("UPDATE liability_credit_cards SET description = ?, interest_rate = ?, special_interest_rate = ?, special_rate_end_date = ?, monthly_payment = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, credit_limit = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, interest_rate, special_interest_rate, special_rate_end_date, monthly_payment, start_date, initial_amount, current_balance, end_date, credit_limit, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Credit card not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/liabilities/loans":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                loan_type = str(data.get("loanType", "")).strip()
+                is_private_raw = str(data.get("isPrivate", "no")).strip().lower()
+                is_private = 1 if is_private_raw in ("1", "true", "yes") else 0
+                vehicle_id_raw = data.get("vehicleId")
+                vehicle_id = None if vehicle_id_raw in (None, "") else int(vehicle_id_raw)
+                interest_rate = float(data.get("interestRate", 0))
+                monthly_payment = float(data.get("monthlyPayment", 0))
+                start_date = str(data.get("startDate", "")).strip() or None
+                initial_amount = float(data.get("initialAmount", 0))
+                current_balance = float(data.get("currentBalance", 0))
+                end_date = str(data.get("endDate", "")).strip() or None
+                if not description or not loan_type or interest_rate < 0 or monthly_payment < 0 or initial_amount < 0 or current_balance < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid loan data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO liability_loans (user_id, description, loan_type, is_private, vehicle_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, loan_type, is_private, vehicle_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, now, now))
+                else:
+                    cursor = conn.execute("UPDATE liability_loans SET description = ?, loan_type = ?, is_private = ?, vehicle_id = ?, interest_rate = ?, monthly_payment = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, loan_type, is_private, vehicle_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Loan not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
         if parsed.path == "/api/admin/users":
             admin = self._require_admin()
             if not admin:
@@ -958,6 +1225,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, settings)
             return
 
+        if self._serve_templated_html(parsed.path):
+            return
         return super().do_GET()
 
     def do_POST(self):
@@ -1502,6 +1771,114 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+        if parsed.path == "/api/liabilities/mortgages":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                real_estate_id_raw = data.get("realEstateId")
+                real_estate_id = None if real_estate_id_raw in (None, "") else int(real_estate_id_raw)
+                interest_rate = float(data.get("interestRate", 0))
+                monthly_payment = float(data.get("monthlyPayment", 0))
+                start_date = str(data.get("startDate", "")).strip() or None
+                initial_amount = float(data.get("initialAmount", 0))
+                current_balance = float(data.get("currentBalance", 0))
+                end_date = str(data.get("endDate", "")).strip() or None
+                interest_change_date = str(data.get("interestChangeDate", "")).strip() or None
+                if not description or interest_rate < 0 or monthly_payment < 0 or initial_amount < 0 or current_balance < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid mortgage data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO liability_mortgages (user_id, description, real_estate_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, interest_change_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, real_estate_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, interest_change_date, now, now))
+                else:
+                    cursor = conn.execute("UPDATE liability_mortgages SET description = ?, real_estate_id = ?, interest_rate = ?, monthly_payment = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, interest_change_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, real_estate_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, interest_change_date, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Mortgage not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/liabilities/credit-cards":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                interest_rate = float(data.get("interestRate", 0))
+                special_interest_rate_raw = data.get("specialInterestRate")
+                special_interest_rate = None if special_interest_rate_raw in (None, "") else float(special_interest_rate_raw)
+                special_rate_end_date = str(data.get("specialRateEndDate", "")).strip() or None
+                monthly_payment = float(data.get("monthlyPayment", 0))
+                start_date = str(data.get("startDate", "")).strip() or None
+                initial_amount = float(data.get("initialAmount", 0))
+                current_balance = float(data.get("currentBalance", 0))
+                end_date = str(data.get("endDate", "")).strip() or None
+                credit_limit = float(data.get("creditLimit", 0))
+                if not description or interest_rate < 0 or monthly_payment < 0 or initial_amount < 0 or current_balance < 0 or credit_limit < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid credit card data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO liability_credit_cards (user_id, description, interest_rate, special_interest_rate, special_rate_end_date, monthly_payment, start_date, initial_amount, current_balance, end_date, credit_limit, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, interest_rate, special_interest_rate, special_rate_end_date, monthly_payment, start_date, initial_amount, current_balance, end_date, credit_limit, now, now))
+                else:
+                    cursor = conn.execute("UPDATE liability_credit_cards SET description = ?, interest_rate = ?, special_interest_rate = ?, special_rate_end_date = ?, monthly_payment = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, credit_limit = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, interest_rate, special_interest_rate, special_rate_end_date, monthly_payment, start_date, initial_amount, current_balance, end_date, credit_limit, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Credit card not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/liabilities/loans":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                loan_type = str(data.get("loanType", "")).strip()
+                is_private_raw = str(data.get("isPrivate", "no")).strip().lower()
+                is_private = 1 if is_private_raw in ("1", "true", "yes") else 0
+                vehicle_id_raw = data.get("vehicleId")
+                vehicle_id = None if vehicle_id_raw in (None, "") else int(vehicle_id_raw)
+                interest_rate = float(data.get("interestRate", 0))
+                monthly_payment = float(data.get("monthlyPayment", 0))
+                start_date = str(data.get("startDate", "")).strip() or None
+                initial_amount = float(data.get("initialAmount", 0))
+                current_balance = float(data.get("currentBalance", 0))
+                end_date = str(data.get("endDate", "")).strip() or None
+                if not description or not loan_type or interest_rate < 0 or monthly_payment < 0 or initial_amount < 0 or current_balance < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid loan data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO liability_loans (user_id, description, loan_type, is_private, vehicle_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, loan_type, is_private, vehicle_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, now, now))
+                else:
+                    cursor = conn.execute("UPDATE liability_loans SET description = ?, loan_type = ?, is_private = ?, vehicle_id = ?, interest_rate = ?, monthly_payment = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, loan_type, is_private, vehicle_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Loan not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
         if parsed.path == "/api/admin/users":
             admin = self._require_admin()
             if not admin:
@@ -1706,6 +2083,39 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute("DELETE FROM asset_cash WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/liabilities/mortgages/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid mortgage id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM liability_mortgages WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/liabilities/credit-cards/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid credit card id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM liability_credit_cards WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/liabilities/loans/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid loan id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM liability_loans WHERE id = ? AND user_id = ?", (item_id, user["id"]))
             self._send_json(200, {"success": True})
             return
 

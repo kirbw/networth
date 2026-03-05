@@ -61,17 +61,20 @@ ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
 - Dedicated Business Ventures page for business name, % owned, business value, and computed my-value
 - Dedicated Retirement Accounts page for description, type, broker, taxable flag, and account value
 - Assets section with subpages for Vehicles, Guns, Bank Accounts, and Cash
+- Liabilities section with subpages for Mortgages, Credit Cards, and Loans
 - Live quote lookup endpoint and gain/loss calculation for each investment (quotes via Stooq)
 - Stocks page stores company name + current price and shows a last refreshed timestamp
 - Stocks totals now automatically exclude positions that do not have a current price (for unsupported tickers such as some OTC symbols)
 - Stocks, Precious Metals, Real Estate, and Business Ventures tables support click-to-sort by key columns
 - Investments table totals row for purchase value, current value, and gain/loss
 - Home dashboard includes an investments summary chart (stocks, precious metals, real estate, business ventures, retirement accounts) plus combined total (sorted highest-to-lowest and without "My Value" wording in labels)
-- User profile page (click your name in the top-right) for updating full name, email, and phone/contact info
+- User profile page (click your name in the top-right) for updating full name, email, phone/contact info, street/city/state/zip, and password changes
 - Net Worth Report header now includes statement owner and date
+- Liabilities section in Net Worth Report with category totals and subtraction from assets/investments for total net worth
 - Edit on Records now scrolls directly to the edit form; deletes/clear actions now prompt for confirmation
 - Smoother cross-page navigation by hiding login card until session check completes
-- Server-side protection for app pages (`records`, `investments`, `admin`) with one-way redirects to login when session is invalid
+- Server-side protection for app pages (`records`, `investments`, `assets`, `liabilities`, `admin`) with one-way redirects to login when session is invalid
+- Sidebar navigation rendered server-side to avoid duplicating menu edits across every page
 - Session cookie is HTTP-only and validated against server-side session storage on every protected page request
 - Login protection includes basic server-side rate limiting to reduce brute-force attempts
 - Password reset tokens are stored as hashes in the database (not plaintext)

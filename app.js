@@ -1092,7 +1092,7 @@ function initNetWorthReportPage() {
   }
 
   async function renderReport() {
-    const [stocksRes, metalsRes, realEstateRes, businessRes, retirementRes, vehiclesRes, gunsRes, bankRes, cashRes] = await Promise.all([
+    const [stocksRes, metalsRes, realEstateRes, businessRes, retirementRes, vehiclesRes, gunsRes, bankRes, cashRes, mortgagesRes, cardsRes, loansRes] = await Promise.all([
       apiFetch("/api/investments"),
       apiFetch("/api/precious-metals"),
       apiFetch("/api/real-estate"),
@@ -1102,8 +1102,11 @@ function initNetWorthReportPage() {
       apiFetch("/api/assets/guns"),
       apiFetch("/api/assets/bank-accounts"),
       apiFetch("/api/assets/cash"),
+      apiFetch("/api/liabilities/mortgages"),
+      apiFetch("/api/liabilities/credit-cards"),
+      apiFetch("/api/liabilities/loans"),
     ]);
-    if (![stocksRes, metalsRes, realEstateRes, businessRes, retirementRes, vehiclesRes, gunsRes, bankRes, cashRes].every((r) => r.ok)) return;
+    if (![stocksRes, metalsRes, realEstateRes, businessRes, retirementRes, vehiclesRes, gunsRes, bankRes, cashRes, mortgagesRes, cardsRes, loansRes].every((r) => r.ok)) return;
 
     const stocks = await stocksRes.json();
     const metals = await metalsRes.json();
@@ -1114,6 +1117,9 @@ function initNetWorthReportPage() {
     const guns = await gunsRes.json();
     const bankAccounts = await bankRes.json();
     const cash = await cashRes.json();
+    const mortgages = await mortgagesRes.json();
+    const creditCards = await cardsRes.json();
+    const loans = await loansRes.json();
 
     const categories = [
       {
@@ -1130,17 +1136,36 @@ function initNetWorthReportPage() {
       { title: "Cash", items: cash.map((x) => ({ description: x.description, value: Number(x.amount) })) },
     ];
 
+    const liabilityCategories = [
+      { title: "Mortgages", items: mortgages.map((x) => ({ description: `${x.description}${x.real_estate_address ? ` (${x.real_estate_address})` : ""}`, value: Number(x.current_balance) })) },
+      { title: "Credit Cards", items: creditCards.map((x) => ({ description: x.description, value: Number(x.current_balance) })) },
+      { title: "Loans", items: loans.map((x) => ({ description: `${x.description} — ${x.loan_type}`, value: Number(x.current_balance) })) },
+    ];
+
     content.innerHTML = "";
-    let grandTotal = 0;
+    let assetTotal = 0;
     for (const category of categories) {
       const { section, total } = renderCategory(category.title, category.items);
       content.appendChild(section);
-      grandTotal += total;
+      assetTotal += total;
     }
 
+    const liabilitiesHeader = document.createElement("h3");
+    liabilitiesHeader.textContent = "Liabilities";
+    liabilitiesHeader.className = "report-liabilities-heading";
+    content.appendChild(liabilitiesHeader);
+
+    let liabilitiesTotal = 0;
+    for (const category of liabilityCategories) {
+      const { section, total } = renderCategory(category.title, category.items);
+      content.appendChild(section);
+      liabilitiesTotal += total;
+    }
+
+    const netWorth = assetTotal - liabilitiesTotal;
     if (titleEl) titleEl.textContent = `Net Worth Statement for ${currentUser?.fullName || currentUser?.username || "User"}`;
     if (dateEl) dateEl.textContent = new Date().toLocaleDateString();
-    totalEl.textContent = `Total Net Worth: ${currency(grandTotal)}`;
+    totalEl.textContent = `Total Net Worth: ${currency(netWorth)} (Assets/Investments: ${currency(assetTotal)} − Liabilities: ${currency(liabilitiesTotal)})`;
     generated.textContent = `Generated on ${new Date().toLocaleString()}`;
   }
 
@@ -1344,6 +1369,165 @@ function initAssetsCashPage() {
   });
 }
 
+function initLiabilityCrudPage(config) {
+  const form = document.getElementById(config.formId);
+  const msg = document.getElementById(config.messageId);
+  const tableBody = document.getElementById(config.bodyId);
+  const sortHeaders = document.querySelectorAll(config.sortSelector);
+  const submitBtn = document.getElementById(config.submitBtnId);
+  let rows = [];
+  let sortKey = config.defaultSort;
+  let sortDirection = "asc";
+  let editingId = null;
+
+  async function loadRows() {
+    const response = await apiFetch(config.apiBase);
+    if (!response.ok) return;
+    rows = await response.json();
+  }
+
+  function applySort() {
+    const direction = sortDirection === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      const aNum = Number(av);
+      const bNum = Number(bv);
+      if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return (aNum - bNum) * direction;
+      return String(av).localeCompare(String(bv)) * direction;
+    });
+  }
+
+  function resetEdit() { editingId = null; if (submitBtn) submitBtn.textContent = config.addLabel; }
+
+  function renderTable() {
+    applySort();
+    tableBody.innerHTML = "";
+    if (!rows.length) {
+      tableBody.innerHTML = `<tr><td colspan="${config.colspan}">${config.emptyText}</td></tr>`;
+      return;
+    }
+    let total = 0;
+    for (const row of rows) {
+      total += Number(config.balanceGetter(row));
+      const tr = document.createElement("tr");
+      tr.innerHTML = config.rowHtml(row);
+      tableBody.appendChild(tr);
+    }
+    const t = document.createElement("tr");
+    t.className = "totals-row";
+    t.innerHTML = `<td colspan="${config.totalLabelColspan}"><strong>Total Current Balance</strong></td><td><strong>${currency(total)}</strong></td><td></td>`;
+    tableBody.appendChild(t);
+  }
+
+  sortHeaders.forEach((h) => h.addEventListener("click", () => {
+    const key = h.dataset[config.sortDataset];
+    if (!key) return;
+    sortDirection = sortKey === key && sortDirection === "asc" ? "desc" : "asc";
+    sortKey = key;
+    renderTable();
+  }));
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = config.collectPayload(editingId);
+    const response = await apiFetch(config.apiBase, { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save.");
+    form.reset();
+    resetEdit();
+    await loadRows();
+    renderTable();
+    setText(msg, config.savedText);
+  });
+
+  tableBody?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const row = rows.find((x) => x.id === id);
+      if (!row) return;
+      config.startEdit(row);
+      editingId = id;
+      if (submitBtn) submitBtn.textContent = config.updateLabel;
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm(config.deleteConfirm)) return;
+    await apiFetch(`${config.apiBase}/${id}`, { method: "DELETE" });
+    if (editingId === id) { form?.reset(); resetEdit(); }
+    await loadRows();
+    renderTable();
+  });
+
+  return { render: async () => { await config.beforeLoad?.(); await loadRows(); renderTable(); } };
+}
+
+function initLiabilitiesMortgagesPage() {
+  const realEstateSelect = document.getElementById("mort-real-estate-id");
+  async function loadRealEstateOptions() {
+    const response = await apiFetch("/api/real-estate");
+    if (!response.ok || !realEstateSelect) return;
+    const rows = await response.json();
+    realEstateSelect.innerHTML = '<option value="">(optional)</option>';
+    for (const row of rows) {
+      const option = document.createElement("option");
+      option.value = String(row.id);
+      option.textContent = `${row.description || row.address} (${row.address})`;
+      realEstateSelect.appendChild(option);
+    }
+  }
+  return initLiabilityCrudPage({
+    formId: "mortgages-form", messageId: "mortgages-message", bodyId: "mortgages-body", sortSelector: "[data-sort-mortgages]", submitBtnId: "mortgages-submit-btn",
+    defaultSort: "description", sortDataset: "sortMortgages", apiBase: "/api/liabilities/mortgages", addLabel: "Add Mortgage", updateLabel: "Update Mortgage",
+    emptyText: "No mortgages yet.", colspan: 11, totalLabelColspan: 9, savedText: "Mortgage saved.", deleteConfirm: "Delete this mortgage entry?",
+    balanceGetter: (x) => x.current_balance,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.real_estate_address || "—"}</td><td>${x.interest_rate}%</td><td>${x.monthly_payment ? currency(x.monthly_payment) : "—"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${x.interest_change_date || "—"}</td><td>${x.end_date || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("mort-description").value.trim(), realEstateId: document.getElementById("mort-real-estate-id").value, interestRate: Number(document.getElementById("mort-interest-rate").value), monthlyPayment: Number(document.getElementById("mort-monthly-payment").value || 0), startDate: document.getElementById("mort-start-date").value, initialAmount: Number(document.getElementById("mort-initial-amount").value), currentBalance: Number(document.getElementById("mort-current-balance").value), endDate: document.getElementById("mort-end-date").value, interestChangeDate: document.getElementById("mort-interest-change-date").value }),
+    startEdit: (x) => { document.getElementById("mort-description").value = x.description; document.getElementById("mort-real-estate-id").value = x.real_estate_id || ""; document.getElementById("mort-interest-rate").value = x.interest_rate; document.getElementById("mort-monthly-payment").value = x.monthly_payment || ""; document.getElementById("mort-start-date").value = x.start_date || ""; document.getElementById("mort-initial-amount").value = x.initial_amount; document.getElementById("mort-current-balance").value = x.current_balance; document.getElementById("mort-end-date").value = x.end_date || ""; document.getElementById("mort-interest-change-date").value = x.interest_change_date || ""; },
+    beforeLoad: loadRealEstateOptions,
+  });
+}
+
+function initLiabilitiesCreditCardsPage() {
+  return initLiabilityCrudPage({
+    formId: "credit-cards-form", messageId: "credit-cards-message", bodyId: "credit-cards-body", sortSelector: "[data-sort-credit-cards]", submitBtnId: "credit-cards-submit-btn",
+    defaultSort: "description", sortDataset: "sortCreditCards", apiBase: "/api/liabilities/credit-cards", addLabel: "Add Credit Card", updateLabel: "Update Credit Card",
+    emptyText: "No credit cards yet.", colspan: 11, totalLabelColspan: 9, savedText: "Credit card saved.", deleteConfirm: "Delete this credit card entry?",
+    balanceGetter: (x) => x.current_balance,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.interest_rate}%</td><td>${x.special_interest_rate == null ? "—" : `${x.special_interest_rate}%`}</td><td>${x.special_rate_end_date || "—"}</td><td>${x.monthly_payment ? currency(x.monthly_payment) : "—"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${currency(x.credit_limit)}</td><td>${x.end_date || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("cc-description").value.trim(), interestRate: Number(document.getElementById("cc-interest-rate").value), specialInterestRate: document.getElementById("cc-special-rate").value.trim(), specialRateEndDate: document.getElementById("cc-special-rate-end").value, monthlyPayment: Number(document.getElementById("cc-monthly-payment").value || 0), startDate: document.getElementById("cc-start-date").value, initialAmount: Number(document.getElementById("cc-initial-amount").value), currentBalance: Number(document.getElementById("cc-current-balance").value), endDate: document.getElementById("cc-end-date").value, creditLimit: Number(document.getElementById("cc-credit-limit").value) }),
+    startEdit: (x) => { document.getElementById("cc-description").value = x.description; document.getElementById("cc-interest-rate").value = x.interest_rate; document.getElementById("cc-special-rate").value = x.special_interest_rate ?? ""; document.getElementById("cc-special-rate-end").value = x.special_rate_end_date || ""; document.getElementById("cc-monthly-payment").value = x.monthly_payment || ""; document.getElementById("cc-start-date").value = x.start_date || ""; document.getElementById("cc-initial-amount").value = x.initial_amount; document.getElementById("cc-current-balance").value = x.current_balance; document.getElementById("cc-end-date").value = x.end_date || ""; document.getElementById("cc-credit-limit").value = x.credit_limit; },
+  });
+}
+
+function initLiabilitiesLoansPage() {
+  const vehicleSelect = document.getElementById("loan-vehicle-id");
+  async function loadVehicleOptions() {
+    const response = await apiFetch("/api/assets/vehicles");
+    if (!response.ok || !vehicleSelect) return;
+    const rows = await response.json();
+    vehicleSelect.innerHTML = '<option value="">(optional)</option>';
+    for (const row of rows) {
+      const option = document.createElement("option");
+      option.value = String(row.id);
+      option.textContent = `${row.description} (${row.make} ${row.model})`;
+      vehicleSelect.appendChild(option);
+    }
+  }
+  return initLiabilityCrudPage({
+    formId: "loans-form", messageId: "loans-message", bodyId: "loans-body", sortSelector: "[data-sort-loans]", submitBtnId: "loans-submit-btn",
+    defaultSort: "description", sortDataset: "sortLoans", apiBase: "/api/liabilities/loans", addLabel: "Add Loan", updateLabel: "Update Loan",
+    emptyText: "No loans yet.", colspan: 11, totalLabelColspan: 9, savedText: "Loan saved.", deleteConfirm: "Delete this loan entry?",
+    balanceGetter: (x) => x.current_balance,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.loan_type}</td><td>${x.is_private ? "Yes" : "No"}</td><td>${x.vehicle_description || "—"}</td><td>${x.interest_rate}%</td><td>${x.monthly_payment ? currency(x.monthly_payment) : "—"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${x.end_date || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("loan-description").value.trim(), loanType: document.getElementById("loan-type").value.trim(), isPrivate: document.getElementById("loan-is-private").value, vehicleId: document.getElementById("loan-vehicle-id").value, interestRate: Number(document.getElementById("loan-interest-rate").value), monthlyPayment: Number(document.getElementById("loan-monthly-payment").value || 0), startDate: document.getElementById("loan-start-date").value, initialAmount: Number(document.getElementById("loan-initial-amount").value), currentBalance: Number(document.getElementById("loan-current-balance").value), endDate: document.getElementById("loan-end-date").value }),
+    startEdit: (x) => { document.getElementById("loan-description").value = x.description; document.getElementById("loan-type").value = x.loan_type; document.getElementById("loan-is-private").value = x.is_private ? "yes" : "no"; document.getElementById("loan-vehicle-id").value = x.vehicle_id || ""; document.getElementById("loan-interest-rate").value = x.interest_rate; document.getElementById("loan-monthly-payment").value = x.monthly_payment || ""; document.getElementById("loan-start-date").value = x.start_date || ""; document.getElementById("loan-initial-amount").value = x.initial_amount; document.getElementById("loan-current-balance").value = x.current_balance; document.getElementById("loan-end-date").value = x.end_date || ""; },
+    beforeLoad: loadVehicleOptions,
+  });
+}
+
 function initAdminUsersPage() {
   const createForm = document.getElementById("create-user-form");
   const resetForm = document.getElementById("reset-password-form");
@@ -1542,6 +1726,21 @@ async function initPageData() {
 
   if (page === "assets-cash") {
     if (!pageController) pageController = initAssetsCashPage();
+    return pageController.render();
+  }
+
+  if (page === "liabilities-mortgages") {
+    if (!pageController) pageController = initLiabilitiesMortgagesPage();
+    return pageController.render();
+  }
+
+  if (page === "liabilities-credit-cards") {
+    if (!pageController) pageController = initLiabilitiesCreditCardsPage();
+    return pageController.render();
+  }
+
+  if (page === "liabilities-loans") {
+    if (!pageController) pageController = initLiabilitiesLoansPage();
     return pageController.render();
   }
 
