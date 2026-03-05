@@ -330,3 +330,8 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
   border-top: 1px solid var(--border);
   border-bottom: none;
 }
+
+
+#notifications-btn { min-width: 44px; position: relative; }
+#notifications-btn.has-unread { border-color: #f08c00; }
+#notifications-badge { display: inline-block; margin-left: 4px; background: #d92d20; color: #fff; border-radius: 10px; padding: 0 6px; font-size: 0.75rem; line-height: 1.4; }
