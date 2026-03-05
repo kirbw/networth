@@ -1,11 +1,13 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/admin-users.html", "/admin-email.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
 const sessionName = document.getElementById("session-name");
 const logoutBtn = document.getElementById("logout-btn");
+let notificationsBtn = document.getElementById("notifications-btn");
+let notificationsBadge = document.getElementById("notifications-badge");
 const navAdmin = document.getElementById("nav-admin");
 const versionInfo = document.getElementById("version-info");
 
@@ -83,11 +85,22 @@ function renderAuthState() {
     sessionName.style.cursor = authenticated ? "pointer" : "default";
     sessionName.title = authenticated ? "Open profile" : "";
   }
+  if (notificationsBtn) {
+    notificationsBtn.classList.toggle("hidden", !authenticated);
+    const unread = Number(currentUser?.unreadNotifications || 0);
+    notificationsBtn.classList.toggle("has-unread", unread > 0);
+    notificationsBtn.title = unread > 0 ? `${unread} unread notifications` : "Notifications";
+  }
+  if (notificationsBadge) {
+    const unread = Number(currentUser?.unreadNotifications || 0);
+    notificationsBadge.textContent = unread > 99 ? "99+" : String(unread);
+    notificationsBadge.classList.toggle("hidden", unread <= 0);
+  }
   navAdmin?.classList.toggle("hidden", !(authenticated && currentUser.role === "admin"));
 }
 
 function ensureAdminPageAccess() {
-  if (!["admin-users", "admin-email"].includes(page)) return;
+  if (!["admin-users", "admin-email", "admin-backups", "admin-notifications"].includes(page)) return;
   if (!currentUser || currentUser.role !== "admin") window.location.href = "/";
 }
 
@@ -189,11 +202,24 @@ async function handleLogout() {
 }
 
 function bindAuthUI() {
+  if (!notificationsBtn) {
+    const controls = document.querySelector(".session-controls");
+    if (controls) {
+      notificationsBtn = document.createElement("button");
+      notificationsBtn.id = "notifications-btn";
+      notificationsBtn.type = "button";
+      notificationsBtn.className = "hidden";
+      notificationsBtn.innerHTML = '🔔 <span id="notifications-badge" class="hidden">0</span>';
+      controls.insertBefore(notificationsBtn, logoutBtn || null);
+      notificationsBadge = notificationsBtn.querySelector("#notifications-badge");
+    }
+  }
   loginForm?.addEventListener("submit", handleLogin);
   signupForm?.addEventListener("submit", handleSignup);
   verifyForm?.addEventListener("submit", handleVerify);
   forgotPasswordForm?.addEventListener("submit", handleForgotPassword);
   logoutBtn?.addEventListener("click", handleLogout);
+  notificationsBtn?.addEventListener("click", () => { if (currentUser) window.location.href = "/notifications.html"; });
   sessionName?.addEventListener("click", () => { if (currentUser) window.location.href = "/profile.html"; });
   toggleSignupBtn?.addEventListener("click", () => showAuthMode("signup"));
   toggleLoginBtn?.addEventListener("click", () => showAuthMode("login"));
@@ -459,6 +485,10 @@ function initInvestmentsPage() {
   function startEdit(item) {
     editingId = item.id;
     document.getElementById("inv-ticker").value = item.ticker;
+    document.getElementById("inv-broker").value = item.broker || "";
+    document.getElementById("inv-company-name").value = item.company_name || "";
+    document.getElementById("inv-current-price").value = item.current_price ?? "";
+    document.getElementById("inv-manual-quote").checked = Boolean(item.manual_quote);
     document.getElementById("inv-shares").value = item.shares;
     document.getElementById("inv-price").value = item.purchase_price;
     document.getElementById("inv-date").value = item.purchase_date;
@@ -475,7 +505,7 @@ function initInvestmentsPage() {
     applySort();
     tableBody.innerHTML = "";
     if (!investments.length) {
-      tableBody.innerHTML = `<tr><td colspan="10">No stocks yet.</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="12">No stocks yet.</td></tr>`;
       return;
     }
 
@@ -504,7 +534,8 @@ function initInvestmentsPage() {
       }
 
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${inv.ticker}</td><td>${companyName}</td><td>${inv.purchase_date}</td><td>${inv.shares}</td><td>${currency(inv.purchase_price)}</td><td>${currency(purchaseValue)}</td><td>${currentPriceText}</td><td>${gainLossCell}</td><td>${gainLossPctCell}</td><td><button class="edit-btn" data-id="${inv.id}" type="button">Edit</button><button class="delete-btn" data-id="${inv.id}" type="button">Delete</button></td>`;
+      const quoteSource = inv.manual_quote ? "Manual" : "Market";
+      tr.innerHTML = `<td>${inv.ticker}</td><td>${inv.broker || "—"}</td><td>${companyName}</td><td>${inv.purchase_date}</td><td>${inv.shares}</td><td>${currency(inv.purchase_price)}</td><td>${currency(purchaseValue)}</td><td>${currentPriceText}</td><td>${quoteSource}</td><td>${gainLossCell}</td><td>${gainLossPctCell}</td><td><button class="edit-btn" data-id="${inv.id}" type="button">Edit</button><button class="delete-btn" data-id="${inv.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
 
@@ -517,7 +548,7 @@ function initInvestmentsPage() {
     const totalGainLossClass = !hasValuedData ? "" : (totalGainLoss >= 0 ? "gain-positive" : "gain-negative");
     const totalRow = document.createElement("tr");
     totalRow.className = "totals-row";
-    totalRow.innerHTML = `<td colspan="5"><strong>Totals (priced holdings)</strong></td><td><strong>${hasValuedData ? currency(totalPurchaseValue) : "N/A"}</strong></td><td><strong>${totalCurrentText}</strong></td><td><strong class="${totalGainLossClass}">${totalGainLossText}</strong></td><td><strong class="${totalGainLossClass}">${totalGainLossPctText}</strong></td><td></td>`;
+    totalRow.innerHTML = `<td colspan="6"><strong>Totals (priced holdings)</strong></td><td><strong>${hasValuedData ? currency(totalPurchaseValue) : "N/A"}</strong></td><td><strong>${totalCurrentText}</strong></td><td></td><td><strong class="${totalGainLossClass}">${totalGainLossText}</strong></td><td><strong class="${totalGainLossClass}">${totalGainLossPctText}</strong></td><td></td>`;
     tableBody.appendChild(totalRow);
 
     if (lastRefreshedEl) {
@@ -545,6 +576,10 @@ function initInvestmentsPage() {
     const payload = {
       id: editingId,
       ticker: document.getElementById("inv-ticker").value.trim().toUpperCase(),
+      broker: document.getElementById("inv-broker").value.trim(),
+      companyName: document.getElementById("inv-company-name").value.trim(),
+      currentPrice: document.getElementById("inv-current-price").value,
+      manualQuote: document.getElementById("inv-manual-quote").checked,
       shares: Number(document.getElementById("inv-shares").value),
       purchasePrice: Number(document.getElementById("inv-price").value),
       purchaseDate: document.getElementById("inv-date").value,
@@ -1190,7 +1225,7 @@ function initNetWorthReportPage() {
         items: stocks.map((x) => ({ description: `${x.ticker}${x.company_name ? ` — ${x.company_name}` : ""}`, value: x.current_price == null ? null : Number(x.shares) * Number(x.current_price) })),
       },
       { title: "Precious Metals", items: metals.map((x) => ({ description: `${x.metal_type} — ${x.description}`, value: Number(x.current_value) })) },
-      { title: "Real Estate", items: realEstate.map((x) => ({ description: `${x.description || x.address} (${x.address})`, value: Number(x.current_value) * (Number(x.percentage_owned) / 100) })) },
+      { title: "Real Estate", items: realEstate.map((x) => ({ description: `${x.description || x.address} (${x.address})${Number(x.percentage_owned) < 100 ? ` (${Number(x.percentage_owned).toFixed(0)}% owned)` : ""}`, value: Number(x.current_value) * (Number(x.percentage_owned) / 100) })) },
       { title: "Business Ventures", items: business.map((x) => ({ description: x.business_name, value: Number(x.business_value) * (Number(x.percentage_owned) / 100) })) },
       { title: "Retirement Accounts", items: retirement.map((x) => ({ description: `${x.description} — ${x.account_type} (${x.broker})`, value: Number(x.value) })) },
       { title: "Vehicles", items: vehicles.map((x) => ({ description: `${x.description} — ${x.model_year || ""} ${x.make} ${x.model}`.trim(), value: Number(x.value) })) },
@@ -1298,6 +1333,7 @@ function initProfilePage() {
     setText(msg, "Profile updated.");
   });
 
+  printBtn?.addEventListener("click", () => window.print());
   return { render };
 }
 
@@ -1412,15 +1448,16 @@ function initAssetsGunsPage() {
   return initAssetCrudPage({
     formId: "guns-form", messageId: "guns-message", bodyId: "guns-body", sortSelector: "[data-sort-guns]", submitBtnId: "guns-submit-btn",
     defaultSort: "description", sortDataset: "sortGuns", apiBase: "/api/assets/guns", addLabel: "Add Gun", updateLabel: "Update Gun",
-    emptyText: "No guns yet.", colspan: 5, totalLabelColspan: 3, savedText: "Gun entry saved.", deleteConfirm: "Delete this gun entry?",
+    emptyText: "No guns yet.", colspan: 9, totalLabelColspan: 7, savedText: "Gun entry saved.", deleteConfirm: "Delete this gun entry?",
     valueGetter: (x) => x.value,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.gun_type}</td><td>${currency(x.value)}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
-    collectPayload: (id) => ({ id, description: document.getElementById("gun-description").value.trim(), type: document.getElementById("gun-type").value.trim(), value: Number(document.getElementById("gun-value").value) }),
-    startEdit: (x) => { document.getElementById("gun-description").value = x.description; document.getElementById("gun-type").value = x.gun_type; document.getElementById("gun-value").value = x.value; },
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.gun_type}</td><td>${x.manufacturer || "—"}</td><td>${x.model || "—"}</td><td>${x.year_acquired || "—"}</td><td>${x.notes || "—"}</td><td>${currency(x.value)}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("gun-description").value.trim(), type: document.getElementById("gun-type").value, manufacturer: document.getElementById("gun-manufacturer").value.trim(), model: document.getElementById("gun-model").value.trim(), yearAcquired: document.getElementById("gun-year-acquired").value, notes: document.getElementById("gun-notes").value.trim(), value: Number(document.getElementById("gun-value").value) }),
+    startEdit: (x) => { document.getElementById("gun-description").value = x.description; document.getElementById("gun-type").value = x.gun_type; document.getElementById("gun-manufacturer").value = x.manufacturer || ""; document.getElementById("gun-model").value = x.model || ""; document.getElementById("gun-year-acquired").value = x.year_acquired || ""; document.getElementById("gun-notes").value = x.notes || ""; document.getElementById("gun-value").value = x.value; },
   });
 }
 
 function initAssetsBankAccountsPage() {
+
   return initAssetCrudPage({
     formId: "bank-form", messageId: "bank-message", bodyId: "bank-body", sortSelector: "[data-sort-bank]", submitBtnId: "bank-submit-btn",
     defaultSort: "description", sortDataset: "sortBank", apiBase: "/api/assets/bank-accounts", addLabel: "Add Bank Account", updateLabel: "Update Bank Account",
@@ -1709,6 +1746,216 @@ function initAdminEmailPage() {
   return { render };
 }
 
+function initAdminBackupsPage() {
+  const form = document.getElementById("backup-settings-form");
+  const runBtn = document.getElementById("run-backup-btn");
+  const msg = document.getElementById("backup-settings-message");
+  const listBody = document.getElementById("backup-files-body");
+
+  async function loadBackups() {
+    const response = await apiFetch("/api/admin/backups");
+    if (!response.ok) return;
+    const files = await response.json();
+    if (!listBody) return;
+    listBody.innerHTML = "";
+    files.forEach((file) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${file.name}</td><td>${file.sizeHuman}</td><td>${new Date(file.createdAt).toLocaleString()}</td><td><a href="/api/admin/backups/download?name=${encodeURIComponent(file.name)}">Download</a> <button class="delete-backup-btn" data-name="${file.name}" type="button">Delete</button></td>`;
+      listBody.appendChild(tr);
+    });
+  }
+
+  async function render() {
+    const response = await apiFetch("/api/admin/backup-settings");
+    if (response.ok) {
+      const s = await response.json();
+      document.getElementById("backup-enabled").checked = Boolean(s.enabled);
+      document.getElementById("backup-interval-hours").value = s.intervalHours || 24;
+      document.getElementById("backup-keep-count").value = s.keepCount || 10;
+      document.getElementById("backup-next-run").textContent = s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : "Not scheduled";
+    }
+    await loadBackups();
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      enabled: document.getElementById("backup-enabled").checked,
+      intervalHours: Number(document.getElementById("backup-interval-hours").value),
+      keepCount: Number(document.getElementById("backup-keep-count").value),
+    };
+    const response = await apiFetch("/api/admin/backup-settings", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save backup settings.");
+    setText(msg, "Backup settings saved.");
+    await render();
+  });
+
+  listBody?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    if (!target.classList.contains("delete-backup-btn")) return;
+    const name = target.dataset.name;
+    if (!name) return;
+    if (!window.confirm(`Delete backup ${name}?`)) return;
+    const response = await apiFetch(`/api/admin/backups/${encodeURIComponent(name)}`, { method: "DELETE" });
+    if (!response.ok) return;
+    await loadBackups();
+  });
+
+  runBtn?.addEventListener("click", async () => {
+    const response = await apiFetch("/api/admin/backups/run", { method: "POST", body: JSON.stringify({}) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Backup failed.");
+    setText(msg, `Backup created: ${data.name}`);
+    await loadBackups();
+  });
+
+  return { render };
+}
+
+function initMonthlyPaymentsReportPage() {
+  const monthInput = document.getElementById("report-month");
+  const runBtn = document.getElementById("run-monthly-report-btn");
+  const printBtn = document.getElementById("print-monthly-report-btn");
+  const printTitle = document.getElementById("monthly-print-title");
+  const monthlyBody = document.getElementById("monthly-payments-body");
+  const periodicBody = document.getElementById("periodic-payments-body");
+
+  async function render() {
+    const current = new Date();
+    if (!monthInput.value) monthInput.value = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}`;
+    const response = await apiFetch(`/api/reports/monthly-payments?month=${encodeURIComponent(monthInput.value)}`);
+    if (!response.ok) return;
+    const data = await response.json();
+    if (printTitle) {
+      const [yy, mm] = (data.month || monthInput.value || "").split("-");
+      const monthName = yy && mm ? new Date(Number(yy), Number(mm) - 1, 1).toLocaleString(undefined, { month: "long", year: "numeric" }) : monthInput.value;
+      printTitle.textContent = `Monthly Payments Report for ${monthName}`;
+    }
+
+    monthlyBody.innerHTML = "";
+    data.monthlyPayments.forEach((item) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${item.dueDate}</td><td>${item.category}</td><td>${item.description}</td><td>${currency(item.amount)}</td>`;
+      monthlyBody.appendChild(tr);
+    });
+
+    periodicBody.innerHTML = "";
+    data.periodicPayments.forEach((item) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${item.dueDate}</td><td>${item.frequency}</td><td>${item.description}</td><td>${currency(item.amount)}</td>`;
+      periodicBody.appendChild(tr);
+    });
+  }
+
+  runBtn?.addEventListener("click", render);
+  printBtn?.addEventListener("click", () => window.print());
+  return { render };
+}
+
+
+function initLiquidCashReportPage() {
+  const bankBody = document.getElementById("liquid-bank-body");
+  const cashBody = document.getElementById("liquid-cash-body");
+  const printBtn = document.getElementById("print-liquid-report-btn");
+  const printTitle = document.getElementById("liquid-print-title");
+  async function render() {
+    const response = await apiFetch("/api/reports/liquid-cash");
+    if (printTitle) printTitle.textContent = "Liquid Cash Report";
+    if (!response.ok) return;
+    const data = await response.json();
+    bankBody.innerHTML = "";
+    (data.bankAccounts || []).forEach((row) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${row.description}</td><td>${row.institution}</td><td>${row.account_type}</td><td>${currency(row.balance)}</td>`;
+      bankBody.appendChild(tr);
+    });
+    cashBody.innerHTML = "";
+    (data.cashAccounts || []).forEach((row) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${row.description}</td><td>${currency(row.amount)}</td>`;
+      cashBody.appendChild(tr);
+    });
+  }
+  printBtn?.addEventListener("click", () => window.print());
+  return { render };
+}
+
+function initNotificationsPage() {
+  const body = document.getElementById("notifications-body");
+  const msg = document.getElementById("notifications-message");
+
+  async function loadAndRender() {
+    const response = await apiFetch("/api/notifications");
+    if (!response.ok) return;
+    const items = await response.json();
+    body.innerHTML = "";
+    if (!items.length) {
+      body.innerHTML = '<tr><td colspan="5">No notifications.</td></tr>';
+      return;
+    }
+    items.forEach((n) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${new Date(n.created_at).toLocaleString()}</td><td>${n.title}</td><td>${n.message}</td><td>${n.status}</td><td><button class="mark-read-btn" data-id="${n.id}" type="button">Mark Read</button><button class="mark-unread-btn" data-id="${n.id}" type="button">Mark Unread</button><button class="delete-btn" data-id="${n.id}" type="button">Delete</button></td>`;
+      body.appendChild(tr);
+    });
+  }
+
+  body?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("delete-btn")) {
+      await apiFetch(`/api/notifications/${id}`, { method: "DELETE" });
+    } else if (target.classList.contains("mark-read-btn")) {
+      await apiFetch("/api/notifications/mark", { method: "POST", body: JSON.stringify({ id, status: "read" }) });
+    } else if (target.classList.contains("mark-unread-btn")) {
+      await apiFetch("/api/notifications/mark", { method: "POST", body: JSON.stringify({ id, status: "unread" }) });
+    } else return;
+    await loadCurrentUser();
+    await loadAndRender();
+    setText(msg, "Notification updated.");
+  });
+
+  return { render: loadAndRender };
+}
+
+function initAdminNotificationsPage() {
+  const form = document.getElementById("admin-notification-form");
+  const msg = document.getElementById("admin-notification-message");
+  const body = document.getElementById("admin-notification-history-body");
+
+  async function renderHistory() {
+    const response = await apiFetch("/api/admin/notifications-broadcasts");
+    if (!response.ok || !body) return;
+    const rows = await response.json();
+    body.innerHTML = "";
+    rows.forEach((r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${new Date(r.created_at).toLocaleString()}</td><td>${r.title}</td><td>${r.message}</td><td>${r.sender_username}</td>`;
+      body.appendChild(tr);
+    });
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      title: document.getElementById("admin-notification-title").value.trim(),
+      message: document.getElementById("admin-notification-body").value.trim(),
+    };
+    const response = await apiFetch("/api/admin/notifications-broadcasts", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to send notification.");
+    form.reset();
+    setText(msg, "Notification sent to all users.");
+    await loadCurrentUser();
+    await renderHistory();
+  });
+
+  return { render: renderHistory };
+}
+
 function initResetPasswordPage() {
   const form = document.getElementById("reset-password-page-form");
   const msg = document.getElementById("reset-password-page-message");
@@ -1779,6 +2026,16 @@ async function initPageData() {
     return pageController.render();
   }
 
+  if (page === "monthly-payments-report") {
+    if (!pageController) pageController = initMonthlyPaymentsReportPage();
+    return pageController.render();
+  }
+
+  if (page === "liquid-cash-report") {
+    if (!pageController) pageController = initLiquidCashReportPage();
+    return pageController.render();
+  }
+
   if (page === "profile") {
     if (!pageController) pageController = initProfilePage();
     return pageController.render();
@@ -1826,6 +2083,21 @@ async function initPageData() {
 
   if (page === "admin-email") {
     if (!pageController) pageController = initAdminEmailPage();
+    return pageController.render();
+  }
+
+  if (page === "admin-backups") {
+    if (!pageController) pageController = initAdminBackupsPage();
+    return pageController.render();
+  }
+
+  if (page === "admin-notifications") {
+    if (!pageController) pageController = initAdminNotificationsPage();
+    return pageController.render();
+  }
+
+  if (page === "notifications") {
+    if (!pageController) pageController = initNotificationsPage();
     return pageController.render();
   }
 }
