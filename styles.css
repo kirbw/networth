@@ -156,13 +156,18 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 
 .home-charts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
 }
 
 .chart-card-sm canvas {
   width: 100% !important;
-  height: 280px !important;
+  height: 240px !important;
+}
+
+.home-charts-grid .chart-card-sm {
+  margin: 0;
+  padding: 1rem;
 }
 
 
@@ -235,6 +240,10 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 }
 
 
+@media (max-width: 1200px) {
+  .home-charts-grid { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
   .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
@@ -264,7 +273,7 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 .gain-positive { color: #137333; font-weight: 600; }
 .gain-negative { color: #b3261e; font-weight: 600; }
 
-.report-section { margin-bottom: 1rem; }
+.report-section { margin-bottom: 0.75rem; }
 .report-section h3 { margin: 0 0 0.5rem; }
 
 .report-table { width: 100%; table-layout: fixed; }
@@ -281,11 +290,10 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
   .report-header h2 { margin: 0 0 0.2rem; }
   .report-header .small-note { margin: 0.12rem 0; }
   #networth-report-content { margin-top: 0; }
+  .report-section.condensed { margin-bottom: 0.2rem; }
+  .report-section.condensed .totals-row td { padding: 0.25rem 0.4rem; font-size: 0.9rem; }
+  .report-subtotal-section .totals-row td { font-size: 0.95rem; }
   body { background: #fff; }
-}
-
-.report-section.condensed table tbody tr td {
-  font-weight: 600;
 }
 
 .report-section.report-assets.condensed .totals-row td {
@@ -298,4 +306,23 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 
 .report-liabilities-heading {
   margin: 1rem 0 0.5rem;
+}
+
+.report-section.condensed {
+  margin-bottom: 0.4rem;
+}
+
+.report-section.condensed .report-table {
+  margin: 0;
+}
+
+.report-section.condensed .totals-row td {
+  border-top: 1px solid var(--border);
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+  font-weight: 400;
+}
+
+.report-subtotal-section .totals-row td {
+  font-weight: 700;
 }

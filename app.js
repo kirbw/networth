@@ -1118,7 +1118,9 @@ function initNetWorthReportPage() {
 
     const totalRow = document.createElement("tr");
     totalRow.className = "totals-row";
-    totalRow.innerHTML = `<td class="report-col-label"><strong>${condensed ? title : `${title} Total`}</strong></td><td class="report-col-value"><strong>${currency(total)}</strong></td>`;
+    totalRow.innerHTML = condensed
+      ? `<td class="report-col-label">${title}</td><td class="report-col-value">${currency(total)}</td>`
+      : `<td class="report-col-label"><strong>${title} Total</strong></td><td class="report-col-value"><strong>${currency(total)}</strong></td>`;
     tbody.appendChild(totalRow);
     table.appendChild(tbody);
     section.appendChild(table);
