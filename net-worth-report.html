@@ -66,7 +66,10 @@
             <h2 id="networth-report-title">Net Worth Statement</h2>
             <p class="small-note">Date: <span id="networth-report-date"></span></p>
             <p class="small-note" id="networth-report-generated"></p>
-            <button id="print-networth-btn" type="button">Print / Save as PDF</button>
+            <div class="report-actions">
+              <button id="print-networth-btn" type="button">Print / Save as PDF</button>
+              <label class="checkbox-row report-condensed-toggle"><input id="networth-condensed" type="checkbox" /> Condensed view (totals only)</label>
+            </div>
           </section>
 
           <section class="card" id="networth-report-content"></section>

@@ -70,11 +70,15 @@ ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
 - Home dashboard includes an investments summary chart (stocks, precious metals, real estate, business ventures, retirement accounts) plus combined total (sorted highest-to-lowest and without "My Value" wording in labels)
 - User profile page (click your name in the top-right) for updating full name, email, phone/contact info, street/city/state/zip, and password changes
 - Net Worth Report header now includes statement owner and date
+- Condensed (totals-only) checkbox on Net Worth Report for cleaner banker printouts
+- Net Worth Report now includes Assets/Investments subtotal and Liabilities subtotal before total net worth
+- Print styles tightened so report cards print back-to-back with reduced whitespace
 - Liabilities section in Net Worth Report with category totals and subtraction from assets/investments for total net worth
 - Edit on Records now scrolls directly to the edit form; deletes/clear actions now prompt for confirmation
 - Smoother cross-page navigation by hiding login card until session check completes
 - Server-side protection for app pages (`records`, `investments`, `assets`, `liabilities`, `admin`) with one-way redirects to login when session is invalid
 - Sidebar navigation rendered server-side to avoid duplicating menu edits across every page
+- Records link removed from sidebar; use "Edit Prior Years" button on Home next to "Save Year"
 - Session cookie is HTTP-only and validated against server-side session storage on every protected page request
 - Login protection includes basic server-side rate limiting to reduce brute-force attempts
 - Password reset tokens are stored as hashes in the database (not plaintext)

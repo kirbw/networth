@@ -155,6 +155,46 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 }
 
 
+.inline-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.button-link {
+  margin-top: 0.7rem;
+  background: #4b5563;
+  color: #fff;
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  font-size: 0.95rem;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.button-link:hover {
+  opacity: 0.92;
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.report-condensed-toggle {
+  margin-top: 0.7rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.report-subtotal-section {
+  margin-top: 0.35rem;
+}
+
+
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
   .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
@@ -192,10 +232,14 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 .report-col-value { width: 25%; text-align: right; white-space: nowrap; }
 
 @media print {
-  .sidebar, .topbar, .version-footer, #print-networth-btn { display: none !important; }
+  .sidebar, .topbar, .version-footer, #print-networth-btn, .report-condensed-toggle { display: none !important; }
   .layout { display: block; }
   .main-column { display: block; }
   .container { max-width: 100%; margin: 0; padding: 0; gap: 0.5rem; }
-  .card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+  .card { box-shadow: none; border: 1px solid #ddd; break-inside: auto; padding: 0.55rem 0.7rem; margin: 0 0 0.35rem; }
+  #app-content > .card { break-inside: auto; }
+  .report-header h2 { margin: 0 0 0.2rem; }
+  .report-header .small-note { margin: 0.12rem 0; }
+  #networth-report-content { margin-top: 0; }
   body { background: #fff; }
 }

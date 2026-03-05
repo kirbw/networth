@@ -694,7 +694,6 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             '<h2>Finance Tracker</h2>'
             '<nav class="side-menu">'
             f'<a href="/"{active("home")}>Home</a>'
-            f'<a href="/records.html"{active("records")}>Records</a>'
             f'<a href="/investments.html"{active("investments")}>Investments</a>'
             f'<a href="/assets-vehicles.html"{active("assets")}>Assets</a>'
             f'<a href="/liabilities-mortgages.html"{active("liabilities")}>Liabilities</a>'

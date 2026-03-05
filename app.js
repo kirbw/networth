@@ -1057,12 +1057,13 @@ function initNetWorthReportPage() {
   const dateEl = document.getElementById("networth-report-date");
   const totalEl = document.getElementById("networth-grand-total");
   const printBtn = document.getElementById("print-networth-btn");
+  const condensedToggle = document.getElementById("networth-condensed");
 
   function fmtValue(value) {
     return value == null ? "N/A" : currency(value);
   }
 
-  function renderCategory(title, items) {
+  function renderCategory(title, items, condensed = false) {
     const section = document.createElement("section");
     section.className = "report-section";
     const heading = document.createElement("h3");
@@ -1074,11 +1075,17 @@ function initNetWorthReportPage() {
     const tbody = document.createElement("tbody");
 
     let total = 0;
-    for (const item of items) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td class="report-col-label">${item.description}</td><td class="report-col-value">${fmtValue(item.value)}</td>`;
-      tbody.appendChild(tr);
-      if (item.value != null) total += Number(item.value);
+    if (!condensed) {
+      for (const item of items) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td class="report-col-label">${item.description}</td><td class="report-col-value">${fmtValue(item.value)}</td>`;
+        tbody.appendChild(tr);
+        if (item.value != null) total += Number(item.value);
+      }
+    } else {
+      for (const item of items) {
+        if (item.value != null) total += Number(item.value);
+      }
     }
 
     const totalRow = document.createElement("tr");
@@ -1091,7 +1098,23 @@ function initNetWorthReportPage() {
     return { section, total };
   }
 
+  function appendSubtotalRow(label, value) {
+    const section = document.createElement("section");
+    section.className = "report-section report-subtotal-section";
+    const table = document.createElement("table");
+    table.className = "report-table";
+    const tbody = document.createElement("tbody");
+    const tr = document.createElement("tr");
+    tr.className = "totals-row";
+    tr.innerHTML = `<td class="report-col-label"><strong>${label}</strong></td><td class="report-col-value"><strong>${currency(value)}</strong></td>`;
+    tbody.appendChild(tr);
+    table.appendChild(tbody);
+    section.appendChild(table);
+    content.appendChild(section);
+  }
+
   async function renderReport() {
+    const condensed = Boolean(condensedToggle?.checked);
     const [stocksRes, metalsRes, realEstateRes, businessRes, retirementRes, vehiclesRes, gunsRes, bankRes, cashRes, mortgagesRes, cardsRes, loansRes] = await Promise.all([
       apiFetch("/api/investments"),
       apiFetch("/api/precious-metals"),
@@ -1145,10 +1168,11 @@ function initNetWorthReportPage() {
     content.innerHTML = "";
     let assetTotal = 0;
     for (const category of categories) {
-      const { section, total } = renderCategory(category.title, category.items);
+      const { section, total } = renderCategory(category.title, category.items, condensed);
       content.appendChild(section);
       assetTotal += total;
     }
+    appendSubtotalRow("Assets & Investments Subtotal", assetTotal);
 
     const liabilitiesHeader = document.createElement("h3");
     liabilitiesHeader.textContent = "Liabilities";
@@ -1157,10 +1181,11 @@ function initNetWorthReportPage() {
 
     let liabilitiesTotal = 0;
     for (const category of liabilityCategories) {
-      const { section, total } = renderCategory(category.title, category.items);
+      const { section, total } = renderCategory(category.title, category.items, condensed);
       content.appendChild(section);
       liabilitiesTotal += total;
     }
+    appendSubtotalRow("Liabilities Subtotal", liabilitiesTotal);
 
     const netWorth = assetTotal - liabilitiesTotal;
     if (titleEl) titleEl.textContent = `Net Worth Statement for ${currentUser?.fullName || currentUser?.username || "User"}`;
@@ -1170,6 +1195,7 @@ function initNetWorthReportPage() {
   }
 
   printBtn?.addEventListener("click", () => window.print());
+  condensedToggle?.addEventListener("change", renderReport);
 
   return { render: renderReport };
 }
