@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Monthly Payments Report</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="monthly-payments-report">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <div class="main-column">
+      <header class="topbar"><div class="session-controls"><span id="session-name">Not signed in</span><button id="logout-btn" type="button">Logout</button></div></header>
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden"></section>
+        <section id="app-content" class="hidden">
+          <section class="card admin-subnav-card"><div class="admin-subnav"><a href="/net-worth-report.html">Net Worth</a><a href="/monthly-payments-report.html" class="active">Monthly Payments</a></div></section>
+          <section class="card report-header">
+            <h2>Monthly Payments Report</h2>
+            <button id="print-monthly-payments-btn" type="button">Print</button>
+            <p class="small-note">Monthly payments are sorted from smallest to largest. Quarterly and annual payments are listed at the bottom.</p>
+          </section>
+          <section class="card">
+            <h3>Monthly Payments</h3>
+            <div class="table-wrap"><table><thead><tr><th>Category</th><th>Description</th><th>Frequency</th><th class="align-right">Payment</th></tr></thead><tbody id="monthly-payments-monthly-body"></tbody></table></div>
+          </section>
+          <section class="card">
+            <h3>Quarterly / Annual Payments</h3>
+            <div class="table-wrap"><table><thead><tr><th>Category</th><th>Description</th><th>Frequency</th><th class="align-right">Payment</th></tr></thead><tbody id="monthly-payments-other-body"></tbody></table></div>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Admin Backups</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="admin-backups">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <div class="main-column">
+      <header class="topbar"><div class="session-controls"><span id="session-name">Not signed in</span><button id="logout-btn" type="button">Logout</button></div></header>
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden"></section>
+        <section id="app-content" class="hidden">
+          <section class="card admin-subnav-card"><div class="admin-subnav"><a href="/admin-users.html">Users</a><a href="/admin-email.html">Email</a><a href="/admin-backups.html" class="active">Backups</a></div></section>
+          <section class="card">
+            <h2>Backup Settings</h2>
+            <form id="backup-settings-form">
+              <div class="form-grid">
+                <label><span class="label-title">Enable Scheduled Backups</span><input id="backup-enabled" type="checkbox" /></label>
+                <label>Run every N hours <input id="backup-interval-hours" type="number" min="1" value="24" /></label>
+                <label>Backups to keep <input id="backup-keep-count" type="number" min="1" value="7" /></label>
+              </div>
+              <div class="inline-actions"><button type="submit">Save Settings</button><button id="backup-run-now" type="button">Run Backup Now</button></div>
+              <p id="backup-message"></p>
+            </form>
+          </section>
+          <section class="card">
+            <h2>Backups</h2>
+            <div class="table-wrap"><table><thead><tr><th>Name</th><th>Modified</th><th>Size</th><th>Action</th></tr></thead><tbody id="backup-files-body"></tbody></table></div>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -21,11 +21,12 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/profile.html", "/net-worth-report.html", "/admin-users.html", "/admin-email.html"}
-ADMIN_PAGES = {"/admin-users.html", "/admin-email.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/profile.html", "/net-worth-report.html", "/monthly-payments-report.html", "/notifications.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html"}
+ADMIN_PAGES = {"/admin-users.html", "/admin-email.html", "/admin-backups.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
+BACKUP_DIR = Path(os.getenv("BACKUP_DIR", str(Path.home() / ".networth_backups")))
 
 
 def utc_now() -> datetime:
@@ -516,6 +517,50 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                related_type TEXT,
+                related_id INTEGER,
+                read_at TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(user_id, kind, related_type, related_id, message),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS real_estate_value_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                real_estate_id INTEGER NOT NULL,
+                value REAL NOT NULL,
+                recorded_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(real_estate_id) REFERENCES real_estate(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS backup_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                enabled INTEGER NOT NULL DEFAULT 0,
+                interval_hours INTEGER NOT NULL DEFAULT 24,
+                keep_count INTEGER NOT NULL DEFAULT 7,
+                next_run_at TEXT,
+                last_run_at TEXT
+            )
+            """
+        )
+        conn.execute("INSERT OR IGNORE INTO backup_settings (id, enabled, interval_hours, keep_count, next_run_at, last_run_at) VALUES (1, 0, 24, 7, NULL, NULL)")
+
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS password_reset_tokens (
                 token TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -739,11 +784,11 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return "assets"
         if path in ("/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html"):
             return "liabilities"
-        if path == "/net-worth-report.html":
-            return "net-worth"
+        if path in ("/net-worth-report.html", "/monthly-payments-report.html"):
+            return "reports"
         if path == "/profile.html":
             return "profile"
-        if path in ("/admin-users.html", "/admin-email.html"):
+        if path in ("/admin-users.html", "/admin-email.html", "/admin-backups.html"):
             return "admin"
         return ""
 
@@ -759,7 +804,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             f'<a href="/investments.html"{active("investments")}>Investments</a>'
             f'<a href="/assets-vehicles.html"{active("assets")}>Assets</a>'
             f'<a href="/liabilities-mortgages.html"{active("liabilities")}>Liabilities</a>'
-            f'<a href="/net-worth-report.html"{active("net-worth")}>Net Worth Report</a>'
+            f'<a href="/net-worth-report.html"{active("reports")}>Reports</a>'
             f'<a href="/profile.html"{active("profile")}>My Profile</a>'
             f'<a id="nav-admin" href="/admin-users.html" class="hidden{(" active" if group == "admin" else "")}">Admin</a>'
             '</nav></aside>'
@@ -776,7 +821,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return False
         html = Path(file_path).read_text(encoding='utf-8')
         sidebar = self._render_sidebar(path)
-        html = re.sub(r'<aside class="sidebar">.*?</aside>', sidebar, html, flags=re.S)
+        html = re.sub(r'<aside class=\"sidebar\">.*?</aside>', sidebar, html, flags=re.S)
+        topbar_controls = '<div class=\"session-controls\"><button id=\"notifications-btn\" class=\"icon-btn\" type=\"button\" title=\"Notifications\">🔔<span id=\"notifications-badge\" class=\"notif-badge hidden\">0</span></button><span id=\"session-name\">Not signed in</span><button id=\"logout-btn\" type=\"button\">Logout</button></div>'
+        html = re.sub(r'<div class=\"session-controls\">.*?</div>', topbar_controls, html, flags=re.S)
         body = html.encode('utf-8')
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -784,6 +831,86 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
         return True
+
+
+    def _create_notification_if_missing(self, conn: sqlite3.Connection, user_id: int, kind: str, title: str, message: str, related_type: str | None = None, related_id: int | None = None):
+        now = utc_now_iso()
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO notifications (user_id, kind, title, message, related_type, related_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (user_id, kind, title, message, related_type, related_id, now),
+        )
+
+    def _refresh_credit_card_notifications(self, conn: sqlite3.Connection, user: sqlite3.Row):
+        now = utc_now()
+        rows = conn.execute(
+            "SELECT id, description, special_rate_end_date FROM liability_credit_cards WHERE user_id = ? AND special_interest_rate IS NOT NULL AND special_rate_end_date IS NOT NULL",
+            (user["id"],),
+        ).fetchall()
+        for row in rows:
+            try:
+                end_date = datetime.fromisoformat(row["special_rate_end_date"]).date()
+            except Exception:
+                continue
+            days_remaining = (end_date - now.date()).days
+            if 0 <= days_remaining <= 30:
+                msg = f"Promo rate on '{row['description']}' expires on {end_date.isoformat()} ({days_remaining} days)."
+                self._create_notification_if_missing(conn, user["id"], "credit_card_promo_expiring", "Promo rate expiring soon", msg, "credit_card", row["id"])
+
+    def _list_backups(self):
+        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        files = sorted(BACKUP_DIR.glob("finance-backup-*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+        out = []
+        for f in files:
+            st = f.stat()
+            out.append({"name": f.name, "size": st.st_size, "modifiedAt": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat()})
+        return out
+
+    def _prune_backups(self, keep_count: int):
+        backups = self._list_backups()
+        for item in backups[keep_count:]:
+            try:
+                (BACKUP_DIR / item["name"]).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    def _create_backup(self, conn: sqlite3.Connection, settings_row: sqlite3.Row | None = None):
+        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        now = utc_now()
+        name = f"finance-backup-{now.strftime('%Y%m%d-%H%M%S')}.db"
+        dest = BACKUP_DIR / name
+        source = sqlite3.connect(DB_PATH)
+        try:
+            with sqlite3.connect(dest) as target:
+                source.backup(target)
+        finally:
+            source.close()
+        if settings_row is None:
+            settings_row = conn.execute("SELECT * FROM backup_settings WHERE id = 1").fetchone()
+        keep = max(1, int(settings_row["keep_count"])) if settings_row else 7
+        interval = max(1, int(settings_row["interval_hours"])) if settings_row else 24
+        next_run = (now + timedelta(hours=interval)).isoformat()
+        conn.execute("UPDATE backup_settings SET last_run_at = ?, next_run_at = ? WHERE id = 1", (now.isoformat(), next_run))
+        self._prune_backups(keep)
+        return name
+
+    def _maybe_run_scheduled_backup(self, conn: sqlite3.Connection):
+        row = conn.execute("SELECT * FROM backup_settings WHERE id = 1").fetchone()
+        if not row or not int(row["enabled"]):
+            return
+        next_run_at = row["next_run_at"]
+        if not next_run_at:
+            next_run_at = (utc_now() + timedelta(hours=int(row["interval_hours"]))).isoformat()
+            conn.execute("UPDATE backup_settings SET next_run_at = ? WHERE id = 1", (next_run_at,))
+            return
+        try:
+            due = datetime.fromisoformat(next_run_at)
+        except Exception:
+            return
+        if utc_now() >= due:
+            self._create_backup(conn, row)
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -818,6 +945,20 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 self._send_json(400, {"error": str(error)})
                 return
             self._send_json(200, {"ticker": ticker.upper(), "companyName": name, "currentPrice": price, "source": "Stooq"})
+            return
+
+        if parsed.path == "/api/precious-metals/spot":
+            user = self._require_auth()
+            if not user:
+                return
+            out = {}
+            for code, label in (("xauusd", "gold"), ("xagusd", "silver")):
+                try:
+                    price, _name = fetch_quote_details(code)
+                    out[label] = {"price": price, "source": "Stooq"}
+                except Exception as error:
+                    out[label] = {"error": str(error), "source": "Stooq"}
+            self._send_json(200, out)
             return
 
         if parsed.path == "/api/records":
@@ -1287,6 +1428,76 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+
+        if parsed.path == "/api/notifications":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                self._refresh_credit_card_notifications(conn, user)
+                rows = conn.execute("SELECT id, kind, title, message, related_type, related_id, read_at, created_at FROM notifications WHERE user_id = ? ORDER BY datetime(created_at) DESC", (user["id"],)).fetchall()
+                unread = conn.execute("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL", (user["id"],)).fetchone()[0]
+            self._send_json(200, {"items": [dict(r) for r in rows], "unreadCount": unread})
+            return
+
+        if parsed.path == "/api/monthly-payments-report":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                mortgages = [dict(r) for r in conn.execute("SELECT description, monthly_payment, 'monthly' as payment_frequency, 'Mortgage' as category FROM liability_mortgages WHERE user_id = ? AND COALESCE(monthly_payment,0) > 0", (user["id"],)).fetchall()]
+                cards = [dict(r) for r in conn.execute("SELECT description, monthly_payment, 'monthly' as payment_frequency, 'Credit Card' as category FROM liability_credit_cards WHERE user_id = ? AND COALESCE(monthly_payment,0) > 0", (user["id"],)).fetchall()]
+                loans = [dict(r) for r in conn.execute("SELECT description, payment_amount as monthly_payment, payment_frequency, 'Loan' as category FROM liability_loans WHERE user_id = ? AND COALESCE(payment_amount,0) > 0", (user["id"],)).fetchall()]
+            monthly = sorted([x for x in mortgages + cards + loans if (x.get("payment_frequency") or "monthly") == "monthly"], key=lambda x: float(x.get("monthly_payment") or 0))
+            other = sorted([x for x in mortgages + cards + loans if (x.get("payment_frequency") or "monthly") != "monthly"], key=lambda x: ((x.get("payment_frequency") or ""), float(x.get("monthly_payment") or 0)))
+            self._send_json(200, {"monthly": monthly, "nonMonthly": other})
+            return
+
+        if parsed.path.startswith('/api/real-estate/') and parsed.path.endswith('/history'):
+            user = self._require_auth()
+            if not user:
+                return
+            parts = [x for x in parsed.path.split('/') if x]
+            item_id = int(parts[2])
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, value, recorded_at FROM real_estate_value_history WHERE user_id = ? AND real_estate_id = ? ORDER BY datetime(recorded_at)", (user["id"], item_id)).fetchall()
+            self._send_json(200, [dict(r) for r in rows])
+            return
+
+        if parsed.path == "/api/admin/backups":
+            user = self._require_admin()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                self._maybe_run_scheduled_backup(conn)
+                row = conn.execute("SELECT id, enabled, interval_hours, keep_count, next_run_at, last_run_at FROM backup_settings WHERE id = 1").fetchone()
+                settings = dict(row) if row else {"enabled":0,"interval_hours":24,"keep_count":7,"next_run_at":None,"last_run_at":None}
+            self._send_json(200, {"settings": settings, "backups": self._list_backups()})
+            return
+
+        if parsed.path.startswith('/api/admin/backups/') and parsed.path.endswith('/download'):
+            user = self._require_admin()
+            if not user:
+                return
+            name = parsed.path.split('/api/admin/backups/',1)[1].rsplit('/download',1)[0]
+            safe = os.path.basename(name)
+            fp = BACKUP_DIR / safe
+            if not fp.exists() or not fp.is_file():
+                self._send_json(404, {"error": "Backup not found."})
+                return
+            data = fp.read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/octet-stream')
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Content-Disposition', f'attachment; filename="{safe}"')
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
         if parsed.path == "/api/admin/users":
             admin = self._require_admin()
             if not admin:
@@ -1605,18 +1816,23 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
                 if record_id is None:
-                    conn.execute(
+                    cursor = conn.execute(
                         "INSERT INTO real_estate (user_id, address, description, percentage_owned, purchase_price, current_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                         (user["id"], address, description, percentage_owned, purchase_price, current_value, now, now),
                     )
+                    new_id = cursor.lastrowid
+                    conn.execute("INSERT INTO real_estate_value_history (user_id, real_estate_id, value, recorded_at) VALUES (?, ?, ?, ?)", (user["id"], new_id, current_value, now))
                 else:
-                    cursor = conn.execute(
+                    existing = conn.execute("SELECT current_value FROM real_estate WHERE id = ? AND user_id = ?", (record_id, user["id"])).fetchone()
+                    if not existing:
+                        self._send_json(404, {"error": "Real estate record not found."})
+                        return
+                    conn.execute(
                         "UPDATE real_estate SET address = ?, description = ?, percentage_owned = ?, purchase_price = ?, current_value = ?, updated_at = ? WHERE id = ? AND user_id = ?",
                         (address, description, percentage_owned, purchase_price, current_value, now, record_id, user["id"]),
                     )
-                    if cursor.rowcount == 0:
-                        self._send_json(404, {"error": "Real estate record not found."})
-                        return
+                    if float(existing[0]) != float(current_value):
+                        conn.execute("INSERT INTO real_estate_value_history (user_id, real_estate_id, value, recorded_at) VALUES (?, ?, ?, ?)", (user["id"], record_id, current_value, now))
             self._send_json(200, {"success": True})
             return
 
@@ -1990,6 +2206,113 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+
+        if parsed.path == "/api/notifications":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                self._refresh_credit_card_notifications(conn, user)
+                rows = conn.execute("SELECT id, kind, title, message, related_type, related_id, read_at, created_at FROM notifications WHERE user_id = ? ORDER BY datetime(created_at) DESC", (user["id"],)).fetchall()
+                unread = conn.execute("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL", (user["id"],)).fetchone()[0]
+            self._send_json(200, {"items": [dict(r) for r in rows], "unreadCount": unread})
+            return
+
+        if parsed.path == "/api/monthly-payments-report":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                mortgages = [dict(r) for r in conn.execute("SELECT description, monthly_payment, 'monthly' as payment_frequency, 'Mortgage' as category FROM liability_mortgages WHERE user_id = ? AND COALESCE(monthly_payment,0) > 0", (user["id"],)).fetchall()]
+                cards = [dict(r) for r in conn.execute("SELECT description, monthly_payment, 'monthly' as payment_frequency, 'Credit Card' as category FROM liability_credit_cards WHERE user_id = ? AND COALESCE(monthly_payment,0) > 0", (user["id"],)).fetchall()]
+                loans = [dict(r) for r in conn.execute("SELECT description, payment_amount as monthly_payment, payment_frequency, 'Loan' as category FROM liability_loans WHERE user_id = ? AND COALESCE(payment_amount,0) > 0", (user["id"],)).fetchall()]
+            monthly = sorted([x for x in mortgages + cards + loans if (x.get("payment_frequency") or "monthly") == "monthly"], key=lambda x: float(x.get("monthly_payment") or 0))
+            other = sorted([x for x in mortgages + cards + loans if (x.get("payment_frequency") or "monthly") != "monthly"], key=lambda x: ((x.get("payment_frequency") or ""), float(x.get("monthly_payment") or 0)))
+            self._send_json(200, {"monthly": monthly, "nonMonthly": other})
+            return
+
+        if parsed.path.startswith('/api/real-estate/') and parsed.path.endswith('/history'):
+            user = self._require_auth()
+            if not user:
+                return
+            parts = [x for x in parsed.path.split('/') if x]
+            item_id = int(parts[2])
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, value, recorded_at FROM real_estate_value_history WHERE user_id = ? AND real_estate_id = ? ORDER BY datetime(recorded_at)", (user["id"], item_id)).fetchall()
+            self._send_json(200, [dict(r) for r in rows])
+            return
+
+        if parsed.path == "/api/admin/backups":
+            user = self._require_admin()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                self._maybe_run_scheduled_backup(conn)
+                row = conn.execute("SELECT id, enabled, interval_hours, keep_count, next_run_at, last_run_at FROM backup_settings WHERE id = 1").fetchone()
+                settings = dict(row) if row else {"enabled":0,"interval_hours":24,"keep_count":7,"next_run_at":None,"last_run_at":None}
+            self._send_json(200, {"settings": settings, "backups": self._list_backups()})
+            return
+
+        if parsed.path.startswith('/api/admin/backups/') and parsed.path.endswith('/download'):
+            user = self._require_admin()
+            if not user:
+                return
+            name = parsed.path.split('/api/admin/backups/',1)[1].rsplit('/download',1)[0]
+            safe = os.path.basename(name)
+            fp = BACKUP_DIR / safe
+            if not fp.exists() or not fp.is_file():
+                self._send_json(404, {"error": "Backup not found."})
+                return
+            data = fp.read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/octet-stream')
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Content-Disposition', f'attachment; filename="{safe}"')
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
+
+        if parsed.path == "/api/notifications/read":
+            user = self._require_auth()
+            if not user:
+                return
+            data = self._read_json()
+            notif_id = int(data.get("id"))
+            with sqlite3.connect(DB_PATH) as conn:
+                now = utc_now_iso()
+                conn.execute("UPDATE notifications SET read_at = ? WHERE id = ? AND user_id = ?", (now, notif_id, user["id"]))
+            self._send_json(200, {"ok": True})
+            return
+
+        if parsed.path == "/api/admin/backups/settings":
+            user = self._require_admin()
+            if not user:
+                return
+            data = self._read_json()
+            enabled = 1 if data.get("enabled") else 0
+            interval = max(1, int(data.get("intervalHours", 24)))
+            keep = max(1, int(data.get("keepCount", 7)))
+            next_run = (utc_now() + timedelta(hours=interval)).isoformat() if enabled else None
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("UPDATE backup_settings SET enabled = ?, interval_hours = ?, keep_count = ?, next_run_at = ? WHERE id = 1", (enabled, interval, keep, next_run))
+            self._send_json(200, {"ok": True})
+            return
+
+        if parsed.path == "/api/admin/backups/run":
+            user = self._require_admin()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                name = self._create_backup(conn)
+            self._send_json(200, {"ok": True, "name": name})
+            return
+
         if parsed.path == "/api/admin/users":
             admin = self._require_admin()
             if not admin:
@@ -2228,6 +2551,17 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute("DELETE FROM liability_loans WHERE id = ? AND user_id = ?", (item_id, user["id"]))
             self._send_json(200, {"success": True})
+            return
+
+
+        if parsed.path.startswith("/api/notifications/"):
+            user = self._require_auth()
+            if not user:
+                return
+            notif_id = int(parsed.path.rsplit('/',1)[1])
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM notifications WHERE id = ? AND user_id = ?", (notif_id, user["id"]))
+            self._send_json(200, {"ok": True})
             return
 
         if parsed.path == "/api/records":

@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/admin-users.html", "/admin-email.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/notifications.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -8,6 +8,8 @@ const sessionName = document.getElementById("session-name");
 const logoutBtn = document.getElementById("logout-btn");
 const navAdmin = document.getElementById("nav-admin");
 const versionInfo = document.getElementById("version-info");
+const notificationsBtn = document.getElementById("notifications-btn");
+const notificationsBadge = document.getElementById("notifications-badge");
 
 const loginForm = document.getElementById("login-form");
 const signupForm = document.getElementById("signup-form");
@@ -84,10 +86,11 @@ function renderAuthState() {
     sessionName.title = authenticated ? "Open profile" : "";
   }
   navAdmin?.classList.toggle("hidden", !(authenticated && currentUser.role === "admin"));
+  notificationsBtn?.classList.toggle("hidden", !authenticated);
 }
 
 function ensureAdminPageAccess() {
-  if (!["admin-users", "admin-email"].includes(page)) return;
+  if (!["admin-users", "admin-email", "admin-backups"].includes(page)) return;
   if (!currentUser || currentUser.role !== "admin") window.location.href = "/";
 }
 
@@ -113,6 +116,18 @@ async function loadVersion() {
   } catch {
     setText(versionInfo, "Version unknown");
   }
+}
+
+async function loadUnreadNotifications() {
+  if (!currentUser || !notificationsBadge) return;
+  try {
+    const response = await apiFetch("/api/notifications");
+    if (!response.ok) return;
+    const payload = await response.json();
+    const unread = Number(payload.unreadCount || 0);
+    notificationsBadge.textContent = String(unread);
+    notificationsBadge.classList.toggle("hidden", unread <= 0);
+  } catch {}
 }
 
 async function loadCurrentUser() {
@@ -194,6 +209,7 @@ function bindAuthUI() {
   verifyForm?.addEventListener("submit", handleVerify);
   forgotPasswordForm?.addEventListener("submit", handleForgotPassword);
   logoutBtn?.addEventListener("click", handleLogout);
+notificationsBtn?.addEventListener("click", () => { if (currentUser) window.location.href = "/notifications.html"; });
   sessionName?.addEventListener("click", () => { if (currentUser) window.location.href = "/profile.html"; });
   toggleSignupBtn?.addEventListener("click", () => showAuthMode("signup"));
   toggleLoginBtn?.addEventListener("click", () => showAuthMode("login"));
@@ -800,7 +816,7 @@ function initRealEstatePage() {
     for (const item of rows) {
       const myValue = Number(item.current_value) * (Number(item.percentage_owned) / 100);
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${item.description || "—"}</td><td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${myValue >= 0 ? `<span class="gain-positive">${currency(myValue)}</span>` : `<span class="gain-negative">${currency(myValue)}</span>`}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${item.description || "—"}</td><td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${myValue >= 0 ? `<span class="gain-positive">${currency(myValue)}</span>` : `<span class="gain-negative">${currency(myValue)}</span>`}</td><td><button class="history-btn" data-id="${item.id}" type="button">History</button><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
       tableBody.appendChild(tr);
     }
   }
@@ -839,6 +855,15 @@ function initRealEstatePage() {
     const target = event.target;
     if (!(target instanceof HTMLButtonElement)) return;
     const id = Number(target.dataset.id);
+    if (target.classList.contains("history-btn")) {
+      const response = await apiFetch(`/api/real-estate/${id}/history`);
+      if (!response.ok) return;
+      const history = await response.json();
+      if (!history.length) return window.alert("No value history yet.");
+      const lines = history.map((h) => `${new Date(h.recorded_at).toLocaleDateString()}: ${currency(h.value)}`).join("\n");
+      window.alert(`Value history\n\n${lines}`);
+      return;
+    }
     if (target.classList.contains("edit-btn")) {
       const item = rows.find((x) => x.id === id);
       if (item) startEdit(item);
@@ -1293,6 +1318,7 @@ function initProfilePage() {
     const data = await response.json();
     if (!response.ok) return setText(msg, data.error || "Unable to save profile.");
     await loadCurrentUser();
+    await loadUnreadNotifications();
     if (currentPasswordInput) currentPasswordInput.value = "";
     if (newPasswordInput) newPasswordInput.value = "";
     setText(msg, "Profile updated.");
@@ -1709,6 +1735,108 @@ function initAdminEmailPage() {
   return { render };
 }
 
+
+function initNotificationsPage() {
+  const list = document.getElementById("notifications-list");
+  const msg = document.getElementById("notifications-message");
+  async function render() {
+    const response = await apiFetch("/api/notifications");
+    if (!response.ok) return setText(msg, "Unable to load notifications.");
+    const payload = await response.json();
+    const items = payload.items || [];
+    if (!items.length) {
+      list.innerHTML = '<p class="small-note">No notifications.</p>';
+      return;
+    }
+    list.innerHTML = "";
+    items.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = `notification-item ${item.read_at ? "read" : "unread"}`;
+      row.innerHTML = `<div><strong>${item.title}</strong><div>${item.message}</div><div class="small-note">${new Date(item.created_at).toLocaleString()}</div></div><div class="inline-actions"><button class="mark-read-btn" data-id="${item.id}" type="button">Mark read</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></div>`;
+      list.appendChild(row);
+    });
+  }
+  list?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("mark-read-btn")) {
+      await apiFetch("/api/notifications/read", { method: "POST", body: JSON.stringify({ id }) });
+      await render();
+      await loadUnreadNotifications();
+      return;
+    }
+    if (target.classList.contains("delete-btn")) {
+      if (!window.confirm("Delete this notification?")) return;
+      await apiFetch(`/api/notifications/${id}`, { method: "DELETE" });
+      await render();
+      await loadUnreadNotifications();
+    }
+  });
+  return { render };
+}
+
+function initMonthlyPaymentsReportPage() {
+  const monthlyBody = document.getElementById("monthly-payments-monthly-body");
+  const otherBody = document.getElementById("monthly-payments-other-body");
+  document.getElementById("print-monthly-payments-btn")?.addEventListener("click", () => window.print());
+  function rowHtml(item) {
+    return `<tr><td>${item.category}</td><td>${item.description}</td><td>${item.payment_frequency || "monthly"}</td><td class="align-right">${currency(item.monthly_payment || 0)}</td></tr>`;
+  }
+  return {
+    render: async () => {
+      const response = await apiFetch("/api/monthly-payments-report");
+      if (!response.ok) return;
+      const payload = await response.json();
+      const monthly = payload.monthly || [];
+      const other = payload.nonMonthly || [];
+      monthlyBody.innerHTML = monthly.length ? monthly.map(rowHtml).join("") : '<tr><td colspan="4">No monthly payments found.</td></tr>';
+      otherBody.innerHTML = other.length ? other.map(rowHtml).join("") : '<tr><td colspan="4">No quarterly/annual payments found.</td></tr>';
+    },
+  };
+}
+
+function initAdminBackupsPage() {
+  const form = document.getElementById("backup-settings-form");
+  const msg = document.getElementById("backup-message");
+  const filesBody = document.getElementById("backup-files-body");
+  const runNowBtn = document.getElementById("backup-run-now");
+
+  async function render() {
+    const response = await apiFetch("/api/admin/backups");
+    if (!response.ok) return setText(msg, "Unable to load backup settings.");
+    const payload = await response.json();
+    const settings = payload.settings || {};
+    document.getElementById("backup-enabled").checked = Boolean(settings.enabled);
+    document.getElementById("backup-interval-hours").value = settings.interval_hours || 24;
+    document.getElementById("backup-keep-count").value = settings.keep_count || 7;
+    const backups = payload.backups || [];
+    filesBody.innerHTML = backups.length ? backups.map((b) => `<tr><td>${b.name}</td><td>${new Date(b.modifiedAt).toLocaleString()}</td><td>${b.size}</td><td><a href="/api/admin/backups/${encodeURIComponent(b.name)}/download">Download</a></td></tr>`).join("") : '<tr><td colspan="4">No backups yet.</td></tr>';
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      enabled: document.getElementById("backup-enabled").checked,
+      intervalHours: Number(document.getElementById("backup-interval-hours").value),
+      keepCount: Number(document.getElementById("backup-keep-count").value),
+    };
+    const response = await apiFetch("/api/admin/backups/settings", { method: "POST", body: JSON.stringify(payload) });
+    if (!response.ok) return setText(msg, "Unable to save backup settings.");
+    setText(msg, "Backup settings saved.");
+    await render();
+  });
+
+  runNowBtn?.addEventListener("click", async () => {
+    const response = await apiFetch("/api/admin/backups/run", { method: "POST", body: JSON.stringify({}) });
+    if (!response.ok) return setText(msg, "Unable to run backup.");
+    setText(msg, "Backup created.");
+    await render();
+  });
+
+  return { render };
+}
+
 function initResetPasswordPage() {
   const form = document.getElementById("reset-password-page-form");
   const msg = document.getElementById("reset-password-page-message");
@@ -1779,6 +1907,16 @@ async function initPageData() {
     return pageController.render();
   }
 
+  if (page === "monthly-payments-report") {
+    if (!pageController) pageController = initMonthlyPaymentsReportPage();
+    return pageController.render();
+  }
+
+  if (page === "notifications") {
+    if (!pageController) pageController = initNotificationsPage();
+    return pageController.render();
+  }
+
   if (page === "profile") {
     if (!pageController) pageController = initProfilePage();
     return pageController.render();
@@ -1828,6 +1966,11 @@ async function initPageData() {
     if (!pageController) pageController = initAdminEmailPage();
     return pageController.render();
   }
+
+  if (page === "admin-backups") {
+    if (!pageController) pageController = initAdminBackupsPage();
+    return pageController.render();
+  }
 }
 
 async function bootstrap() {
@@ -1837,6 +1980,7 @@ async function bootstrap() {
   await loadVersion();
   if (page !== "reset-password") {
     await loadCurrentUser();
+    await loadUnreadNotifications();
     if (currentUser && page === "home") {
       const next = new URLSearchParams(window.location.search).get("next") || "";
       if (NEXT_ALLOWED_PATHS.has(next)) {

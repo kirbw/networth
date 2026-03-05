@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Notifications</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="notifications">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <div class="main-column">
+      <header class="topbar"><div class="session-controls"><span id="session-name">Not signed in</span><button id="logout-btn" type="button">Logout</button></div></header>
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden"></section>
+        <section id="app-content" class="hidden">
+          <section class="card">
+            <h2>Notifications</h2>
+            <p id="notifications-message" class="small-note"></p>
+            <div id="notifications-list" class="notifications-list"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>
