@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/admin-users.html", "/admin-email.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -87,7 +87,7 @@ function renderAuthState() {
 }
 
 function ensureAdminPageAccess() {
-  if (!["admin-users", "admin-email"].includes(page)) return;
+  if (!["admin-users", "admin-email", "admin-backups"].includes(page)) return;
   if (!currentUser || currentUser.role !== "admin") window.location.href = "/";
 }
 
@@ -1709,6 +1709,94 @@ function initAdminEmailPage() {
   return { render };
 }
 
+function initAdminBackupsPage() {
+  const form = document.getElementById("backup-settings-form");
+  const runBtn = document.getElementById("run-backup-btn");
+  const msg = document.getElementById("backup-settings-message");
+  const listBody = document.getElementById("backup-files-body");
+
+  async function loadBackups() {
+    const response = await apiFetch("/api/admin/backups");
+    if (!response.ok) return;
+    const files = await response.json();
+    if (!listBody) return;
+    listBody.innerHTML = "";
+    files.forEach((file) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${file.name}</td><td>${file.sizeHuman}</td><td>${new Date(file.createdAt).toLocaleString()}</td><td><a href="/api/admin/backups/download?name=${encodeURIComponent(file.name)}">Download</a></td>`;
+      listBody.appendChild(tr);
+    });
+  }
+
+  async function render() {
+    const response = await apiFetch("/api/admin/backup-settings");
+    if (response.ok) {
+      const s = await response.json();
+      document.getElementById("backup-enabled").checked = Boolean(s.enabled);
+      document.getElementById("backup-interval-hours").value = s.intervalHours || 24;
+      document.getElementById("backup-keep-count").value = s.keepCount || 10;
+      document.getElementById("backup-next-run").textContent = s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : "Not scheduled";
+    }
+    await loadBackups();
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      enabled: document.getElementById("backup-enabled").checked,
+      intervalHours: Number(document.getElementById("backup-interval-hours").value),
+      keepCount: Number(document.getElementById("backup-keep-count").value),
+    };
+    const response = await apiFetch("/api/admin/backup-settings", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save backup settings.");
+    setText(msg, "Backup settings saved.");
+    await render();
+  });
+
+  runBtn?.addEventListener("click", async () => {
+    const response = await apiFetch("/api/admin/backups/run", { method: "POST", body: JSON.stringify({}) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Backup failed.");
+    setText(msg, `Backup created: ${data.name}`);
+    await loadBackups();
+  });
+
+  return { render };
+}
+
+function initMonthlyPaymentsReportPage() {
+  const monthInput = document.getElementById("report-month");
+  const runBtn = document.getElementById("run-monthly-report-btn");
+  const monthlyBody = document.getElementById("monthly-payments-body");
+  const periodicBody = document.getElementById("periodic-payments-body");
+
+  async function render() {
+    const current = new Date();
+    if (!monthInput.value) monthInput.value = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}`;
+    const response = await apiFetch(`/api/reports/monthly-payments?month=${encodeURIComponent(monthInput.value)}`);
+    if (!response.ok) return;
+    const data = await response.json();
+
+    monthlyBody.innerHTML = "";
+    data.monthlyPayments.forEach((item) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${item.dueDate}</td><td>${item.category}</td><td>${item.description}</td><td>${currency(item.amount)}</td>`;
+      monthlyBody.appendChild(tr);
+    });
+
+    periodicBody.innerHTML = "";
+    data.periodicPayments.forEach((item) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${item.dueDate}</td><td>${item.frequency}</td><td>${item.description}</td><td>${currency(item.amount)}</td>`;
+      periodicBody.appendChild(tr);
+    });
+  }
+
+  runBtn?.addEventListener("click", render);
+  return { render };
+}
+
 function initResetPasswordPage() {
   const form = document.getElementById("reset-password-page-form");
   const msg = document.getElementById("reset-password-page-message");
@@ -1779,6 +1867,11 @@ async function initPageData() {
     return pageController.render();
   }
 
+  if (page === "monthly-payments-report") {
+    if (!pageController) pageController = initMonthlyPaymentsReportPage();
+    return pageController.render();
+  }
+
   if (page === "profile") {
     if (!pageController) pageController = initProfilePage();
     return pageController.render();
@@ -1826,6 +1919,11 @@ async function initPageData() {
 
   if (page === "admin-email") {
     if (!pageController) pageController = initAdminEmailPage();
+    return pageController.render();
+  }
+
+  if (page === "admin-backups") {
+    if (!pageController) pageController = initAdminBackupsPage();
     return pageController.render();
   }
 }

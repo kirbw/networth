@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Annual Finance Tracker - Admin Users</title>
+  <title>Annual Finance Tracker - Backup Settings</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body data-page="admin-users">
+<body data-page="admin-backups">
   <div class="layout">
     <aside class="sidebar">
       <h2>Finance Tracker</h2>
@@ -64,48 +64,31 @@
         <section id="app-content" class="hidden">
           <section class="card admin-subnav-card">
             <div class="admin-subnav">
-              <a href="/admin-users.html" class="active">User Settings</a>
+              <a href="/admin-users.html">User Settings</a>
               <a href="/admin-email.html">Email Settings</a>
-              <a href="/admin-backups.html">Backup Settings</a>
+              <a href="/admin-backups.html" class="active">Backup Settings</a>
             </div>
           </section>
 
           <section class="card">
-            <h2>User Settings</h2>
-            <div class="admin-grid">
-              <form id="create-user-form">
-                <h3>Create User</h3>
-                <label>Full Name <input id="new-full-name" type="text" required /></label>
-                <label>Email <input id="new-email" type="email" required /></label>
-                <label>Username <input id="new-username" type="text" required /></label>
-                <label>Password <input id="new-password" type="password" required /></label>
-                <label>Role
-                  <select id="new-role">
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </label>
-                <button type="submit">Create User</button>
-              </form>
-
-              <form id="reset-password-form">
-                <h3>Reset Password</h3>
-                <label>User
-                  <select id="reset-user-id" required></select>
-                </label>
-                <label>New Password <input id="reset-password" type="password" required /></label>
-                <button type="submit">Reset Password</button>
-              </form>
-            </div>
-            <p id="admin-message"></p>
+            <h2>Backup Settings</h2>
+            <form id="backup-settings-form">
+              <label class="checkbox-row"><input id="backup-enabled" type="checkbox" /> Enable automatic backups</label>
+              <label>Run every (hours) <input id="backup-interval-hours" type="number" min="1" value="24" /></label>
+              <label>Keep latest backups (count) <input id="backup-keep-count" type="number" min="1" value="10" /></label>
+              <p class="small-note">Next run: <span id="backup-next-run">Not scheduled</span></p>
+              <button type="submit">Save Backup Settings</button>
+              <button id="run-backup-btn" type="button">Run Backup Now</button>
+              <p id="backup-settings-message"></p>
+            </form>
           </section>
 
           <section class="card">
-            <h2>Users</h2>
+            <h2>Available Backups</h2>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Full Name</th><th>Username</th><th>Email</th><th>Role</th><th>Verified</th><th>DB Usage</th><th>Actions</th></tr></thead>
-                <tbody id="users-body"></tbody>
+                <thead><tr><th>File</th><th>Size</th><th>Created</th><th>Action</th></tr></thead>
+                <tbody id="backup-files-body"></tbody>
               </table>
             </div>
           </section>
