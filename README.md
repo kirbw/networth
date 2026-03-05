@@ -8,9 +8,15 @@ A simple web app for tracking yearly:
 
 ## Release
 
-Current release: **v0.0.5**
+Current release: **v0.0.6**
 
 ## Release Notes
+
+### v0.0.6 highlights
+- Condensed Net Worth report cleaned up to one line per category total, with asset rows in light green and liabilities rows in light red.
+- Added a new Home-page Liabilities Overview chart, sorted largest-to-smallest by category, with combined liabilities total.
+- Improved Home dashboard chart sizing/layout with a responsive multi-column grid so charts are less oversized.
+- Added a print attestation statement with signature/date lines to the Net Worth report.
 
 ### v0.0.5 highlights
 - Added edit capability across all Investments subpages (Stocks, Precious Metals, Real Estate, Business Ventures).
@@ -68,6 +74,8 @@ ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
 - Stocks, Precious Metals, Real Estate, and Business Ventures tables support click-to-sort by key columns
 - Investments table totals row for purchase value, current value, and gain/loss
 - Home dashboard includes an investments summary chart (stocks, precious metals, real estate, business ventures, retirement accounts) plus combined total (sorted highest-to-lowest and without "My Value" wording in labels)
+- Home dashboard now also includes a liabilities summary chart (mortgages, credit cards, loans) sorted highest-to-lowest with combined liabilities total
+- Home charts use a responsive multi-column layout with reduced card heights for improved readability
 - User profile page (click your name in the top-right) for updating full name, email, phone/contact info, street/city/state/zip, and password changes
 - Net Worth Report header now includes statement owner and date
 - Condensed (totals-only) checkbox on Net Worth Report for cleaner banker printouts

@@ -26,6 +26,7 @@ let incomeGivingChart;
 let netWorthChart;
 let goalProgressChart;
 let investmentsSummaryChart;
+let liabilitiesSummaryChart;
 
 function apiFetch(url, options = {}) {
   const headers = options.body ? { "Content-Type": "application/json", ...(options.headers || {}) } : (options.headers || {});
@@ -207,6 +208,7 @@ function initHomePage() {
   const donationInput = document.getElementById("donation");
   const netWorthInput = document.getElementById("netWorth");
   const investmentsTotalEl = document.getElementById("investments-combined-total");
+  const liabilitiesTotalEl = document.getElementById("liabilities-combined-total");
 
   const destroy = (c) => { if (c) c.destroy(); };
 
@@ -230,11 +232,34 @@ function initHomePage() {
         labels: entries.map((e) => e.label),
         datasets: [{ label: "Total Value", data: entries.map((e) => e.value), backgroundColor: entries.map((e) => e.color) }],
       },
-      options: { responsive: true, plugins: { legend: { display: false } } },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
     });
     if (investmentsTotalEl) investmentsTotalEl.textContent = `Combined total: ${currency(summary.combinedTotal || 0)}`;
   }
 
+
+  async function renderLiabilitiesSummary() {
+    const chartEl = document.getElementById("liabilities-summary-chart");
+    if (!chartEl) return;
+    const response = await apiFetch("/api/liabilities/summary");
+    if (!response.ok) return;
+    const summary = await response.json();
+    const entries = [
+      { label: "Mortgages", value: summary.mortgages || 0, color: "#c94b4b" },
+      { label: "Credit Cards", value: summary.creditCards || 0, color: "#e07474" },
+      { label: "Loans", value: summary.loans || 0, color: "#a94442" },
+    ].sort((a, b) => b.value - a.value);
+    destroy(liabilitiesSummaryChart);
+    liabilitiesSummaryChart = new Chart(chartEl.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: entries.map((e) => e.label),
+        datasets: [{ label: "Total Liability", data: entries.map((e) => e.value), backgroundColor: entries.map((e) => e.color) }],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+    });
+    if (liabilitiesTotalEl) liabilitiesTotalEl.textContent = `Combined liabilities: ${currency(summary.combinedTotal || 0)}`;
+  }
   function renderCharts() {
     const goalPercent = getGoalPercent();
     const ratio = goalPercent / 100;
@@ -300,6 +325,7 @@ function initHomePage() {
     await loadRecords();
     renderCharts();
     await renderInvestmentsSummary();
+    await renderLiabilitiesSummary();
   });
 
   goalInput?.addEventListener("change", () => {
@@ -309,7 +335,7 @@ function initHomePage() {
     renderCharts();
   });
 
-  return { render: async () => { renderCharts(); await renderInvestmentsSummary(); } };
+  return { render: async () => { renderCharts(); await renderInvestmentsSummary(); await renderLiabilitiesSummary(); } };
 }
 
 function initRecordsPage() {
@@ -1063,12 +1089,14 @@ function initNetWorthReportPage() {
     return value == null ? "N/A" : currency(value);
   }
 
-  function renderCategory(title, items, condensed = false) {
+  function renderCategory(title, items, condensed = false, group = "assets") {
     const section = document.createElement("section");
-    section.className = "report-section";
-    const heading = document.createElement("h3");
-    heading.textContent = title;
-    section.appendChild(heading);
+    section.className = `report-section report-${group}${condensed ? " condensed" : ""}`;
+    if (!condensed) {
+      const heading = document.createElement("h3");
+      heading.textContent = title;
+      section.appendChild(heading);
+    }
 
     const table = document.createElement("table");
     table.className = "report-table";
@@ -1090,7 +1118,7 @@ function initNetWorthReportPage() {
 
     const totalRow = document.createElement("tr");
     totalRow.className = "totals-row";
-    totalRow.innerHTML = `<td class="report-col-label"><strong>${title} Total</strong></td><td class="report-col-value"><strong>${currency(total)}</strong></td>`;
+    totalRow.innerHTML = `<td class="report-col-label"><strong>${condensed ? title : `${title} Total`}</strong></td><td class="report-col-value"><strong>${currency(total)}</strong></td>`;
     tbody.appendChild(totalRow);
     table.appendChild(tbody);
     section.appendChild(table);
@@ -1177,7 +1205,7 @@ function initNetWorthReportPage() {
     content.innerHTML = "";
     let assetTotal = 0;
     for (const category of categories) {
-      const { section, total } = renderCategory(category.title, category.items, condensed);
+      const { section, total } = renderCategory(category.title, category.items, condensed, "assets");
       content.appendChild(section);
       assetTotal += total;
     }
@@ -1190,7 +1218,7 @@ function initNetWorthReportPage() {
 
     let liabilitiesTotal = 0;
     for (const category of liabilityCategories) {
-      const { section, total } = renderCategory(category.title, category.items, condensed);
+      const { section, total } = renderCategory(category.title, category.items, condensed, "liabilities");
       content.appendChild(section);
       liabilitiesTotal += total;
     }

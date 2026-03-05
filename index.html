@@ -79,27 +79,35 @@
             </form>
           </section>
 
-          <section class="card chart-card">
-            <h2>Income & Giving by Year</h2>
-            <canvas id="income-giving-chart"></canvas>
-          </section>
+          <section class="home-charts-grid">
+            <section class="card chart-card chart-card-sm">
+              <h2>Income & Giving by Year</h2>
+              <canvas id="income-giving-chart"></canvas>
+            </section>
 
-          <section class="card chart-card">
-            <h2>Net Worth by Year</h2>
-            <canvas id="net-worth-chart"></canvas>
-          </section>
+            <section class="card chart-card chart-card-sm">
+              <h2>Net Worth by Year</h2>
+              <canvas id="net-worth-chart"></canvas>
+            </section>
 
-          <section class="card chart-card">
-            <h2>Cumulative Giving Progress</h2>
-            <label class="goal-label">Goal Percentage <input id="goal-percent-input" type="number" min="0" max="100" step="0.1" /></label>
-            <div id="goal-indicator" class="goal-indicator"></div>
-            <canvas id="goal-progress-chart"></canvas>
-          </section>
+            <section class="card chart-card chart-card-sm">
+              <h2>Cumulative Giving Progress</h2>
+              <label class="goal-label">Goal Percentage <input id="goal-percent-input" type="number" min="0" max="100" step="0.1" /></label>
+              <div id="goal-indicator" class="goal-indicator"></div>
+              <canvas id="goal-progress-chart"></canvas>
+            </section>
 
-          <section class="card chart-card">
-            <h2>Investments Overview</h2>
-            <canvas id="investments-summary-chart"></canvas>
-            <p id="investments-combined-total" class="small-note"></p>
+            <section class="card chart-card chart-card-sm">
+              <h2>Investments Overview</h2>
+              <canvas id="investments-summary-chart"></canvas>
+              <p id="investments-combined-total" class="small-note"></p>
+            </section>
+
+            <section class="card chart-card chart-card-sm">
+              <h2>Liabilities Overview</h2>
+              <canvas id="liabilities-summary-chart"></canvas>
+              <p id="liabilities-combined-total" class="small-note"></p>
+            </section>
           </section>
         </section>
       </main>

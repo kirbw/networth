@@ -154,6 +154,17 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
   margin-top: 0.75rem;
 }
 
+.home-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 1rem;
+}
+
+.chart-card-sm canvas {
+  width: 100% !important;
+  height: 280px !important;
+}
+
 
 .inline-actions {
   display: flex;
@@ -271,4 +282,20 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
   .report-header .small-note { margin: 0.12rem 0; }
   #networth-report-content { margin-top: 0; }
   body { background: #fff; }
+}
+
+.report-section.condensed table tbody tr td {
+  font-weight: 600;
+}
+
+.report-section.report-assets.condensed .totals-row td {
+  background: #eaf7ec;
+}
+
+.report-section.report-liabilities.condensed .totals-row td {
+  background: #fdecec;
+}
+
+.report-liabilities-heading {
+  margin: 1rem 0 0.5rem;
 }

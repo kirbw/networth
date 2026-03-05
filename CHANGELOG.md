@@ -4,56 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
-### Added
-- Public self-signup with email verification codes.
-- Forgot-password flow with email reset links and a dedicated reset password page.
-- SMTP settings + website host configuration in admin email settings subpage.
-- User delete action in admin user settings with confirmation prompt.
-- Global version footer shown in bottom-left for troubleshooting.
-- New Investments page for tracking ticker, shares, purchase price, and purchase date.
-- Precious Metals subpage under Investments with collection-specific fields and totals.
-- Real Estate subpage under Investments with ownership-based my-value calculation and map links.
-- Business Ventures subpage under Investments with ownership-based my-value calculation.
-- Investments API endpoints (`GET/POST/DELETE /api/investments`) plus quote lookup endpoint (`GET /api/quote`).
-- Investments table now shows Gain/Loss per holding and a totals row.
-- Stocks, Precious Metals, Real Estate, and Business Ventures tables are sortable by clicking key column headers.
-- Server-side protected page redirects now enforce valid sessions before protected pages render.
-- Added gain/loss percentage columns to Stocks and Precious Metals tables.
-- Added Retirement Accounts subpage with sortable CRUD table and per-user API endpoints.
-- Added Home-page investments summary bar chart with category totals and combined total.
-- Added Net Worth Report page with print/save-as-PDF support, category subtotals, and grand total.
-- Added Assets top-level section with Vehicles, Guns, Bank Accounts, and Cash subpages (sortable CRUD tables).
-- Added Profile page for updating user full name, email, and contact phone.
-- Added address fields (street, city, state, zip) and password-change capability on the profile page.
-- Added Liabilities section with subpages/APIs for Mortgages, Credit Cards, and Loans, including rates, payments, balances, and optional links to Real Estate/Vehicles.
-- Added Condensed view option on Net Worth Report for totals-only printing.
-- Added signature attestation statement with signature/date lines on Net Worth Report.
-- Added loan fields for secured flag, interest-only flag, and payment frequency (monthly/quarterly/annual).
+## [v0.0.6] - 2026-03-05
 
-- Security hardening: login rate limiting, hashed password-reset tokens, and stricter minimum password length.
-- Admin SMTP settings reads now redact stored SMTP password values.
-- Added baseline secure response headers (CSP, no-store cache, frame deny, no-sniff).
+### Added
+- Added Home dashboard **Liabilities Overview** chart with category totals sorted largest-to-smallest.
+- Added print attestation statement with signature/date lines on Net Worth reports.
 
 ### Changed
-- Split admin area into subpages: Admin Users and Email Settings.
-- Use a single Admin sidebar entry that reveals admin sub-navigation on admin pages.
-- Moved primary app navigation to a left sidebar and session/logout controls to top-right.
-- Split UI into dedicated pages: Home, Records, Admin Users, Email Settings, and Investments.
-- Moved session + logout controls into the top navigation bar.
-- Prevent login-card flash on page switches by keeping auth UI hidden until session state loads.
-- Added `next` redirect support after login for smoother server-initiated login flow.
-- Stocks totals now exclude holdings without a current price so unsupported tickers do not break totals.
-- Reordered Real Estate page layout to show Description before Address.
-- Increased spacing/padding across all pages for improved readability and consistency.
-- Records edit now scrolls to the edit form; delete/clear actions now require confirmation prompts across record/investment pages.
-- Investments Overview bar chart labels now omit "My Value" wording and are sorted by value (largest to smallest).
-- Net Worth statement header now includes the logged-in user name and date.
-- Server now injects sidebar navigation server-side for all app HTML pages to centralize menu updates.
-- Net Worth report now includes liabilities by category and subtracts total liabilities from assets/investments to compute total net worth.
-- Mortgage liabilities linked to real estate now use ownership percentage when calculating liability totals and include ownership text in descriptions.
-- Net Worth report now shows explicit Assets/Investments subtotal and Liabilities subtotal sections.
-- Print layout tightened so report sections flow without large whitespace gaps between cards/pages.
-- Removed Records from sidebar and added an "Edit Prior Years" button next to "Save Year" on Home.
+- Condensed Net Worth report now renders each category on a single line (`Category | Total`) for cleaner banker-facing output.
+- Added visual highlighting in condensed reports: light green for Assets/Investments and light red for Liabilities.
+- Improved Home dashboard chart layout with responsive side-by-side cards and reduced chart heights to better fit common screen sizes.
+- Updated mortgage liability reporting to scale linked mortgage balances by property ownership percentage and label ownership in report descriptions.
+- Expanded Loans with secured flag, interest-only flag, and payment frequency support, including API/UI/schema updates.
+- Updated project metadata/docs for `v0.0.6`.
 
 ## [v0.0.5] - 2026-03-04
 

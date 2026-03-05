@@ -875,6 +875,27 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        if parsed.path == "/api/liabilities/summary":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                mortgages = conn.execute(
+                    "SELECT COALESCE(SUM(m.current_balance * COALESCE(r.percentage_owned, 100) / 100.0), 0) FROM liability_mortgages m LEFT JOIN real_estate r ON r.id = m.real_estate_id WHERE m.user_id = ?",
+                    (user["id"],),
+                ).fetchone()[0]
+                credit_cards = conn.execute("SELECT COALESCE(SUM(current_balance), 0) FROM liability_credit_cards WHERE user_id = ?", (user["id"],)).fetchone()[0]
+                loans = conn.execute("SELECT COALESCE(SUM(current_balance), 0) FROM liability_loans WHERE user_id = ?", (user["id"],)).fetchone()[0]
+            combined = float(mortgages) + float(credit_cards) + float(loans)
+            self._send_json(200, {
+                "mortgages": float(mortgages),
+                "creditCards": float(credit_cards),
+                "loans": float(loans),
+                "combinedTotal": combined,
+            })
+            return
+
+
         if parsed.path == "/api/assets/vehicles":
             user = self._require_auth()
             if not user:
