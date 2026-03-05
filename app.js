@@ -57,18 +57,10 @@ function setText(el, text) {
   if (el) el.textContent = text;
 }
 
-function goalStorageKey() {
-  return currentUser ? `giving-goal-percent:${currentUser.username}` : "giving-goal-percent:anonymous";
-}
-
 function getGoalPercent() {
-  const parsed = Number(localStorage.getItem(goalStorageKey()));
+  const parsed = Number(currentUser?.givingGoalPercent);
   if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) return DEFAULT_GOAL_PERCENT;
   return parsed;
-}
-
-function setGoalPercent(value) {
-  localStorage.setItem(goalStorageKey(), String(value));
 }
 
 function showAuthMode(mode) {
@@ -237,7 +229,6 @@ async function loadRecords() {
 function initHomePage() {
   const form = document.getElementById("finance-form");
   const formMessage = document.getElementById("form-message");
-  const goalInput = document.getElementById("goal-percent-input");
   const goalIndicator = document.getElementById("goal-indicator");
   const yearInput = document.getElementById("year");
   const incomeInput = document.getElementById("income");
@@ -299,7 +290,6 @@ function initHomePage() {
   function renderCharts() {
     const goalPercent = getGoalPercent();
     const ratio = goalPercent / 100;
-    goalInput.value = goalPercent.toFixed(1);
 
     destroy(incomeGivingChart);
     incomeGivingChart = new Chart(document.getElementById("income-giving-chart").getContext("2d"), {
@@ -364,12 +354,6 @@ function initHomePage() {
     await renderLiabilitiesSummary();
   });
 
-  goalInput?.addEventListener("change", () => {
-    const value = Number(goalInput.value);
-    if (Number.isNaN(value) || value < 0 || value > 100) return;
-    setGoalPercent(value);
-    renderCharts();
-  });
 
   return { render: async () => { renderCharts(); await renderInvestmentsSummary(); await renderLiabilitiesSummary(); } };
 }
@@ -1298,6 +1282,9 @@ function initProfilePage() {
   const zipInput = document.getElementById("profile-zip");
   const currentPasswordInput = document.getElementById("profile-current-password");
   const newPasswordInput = document.getElementById("profile-new-password");
+  const settingsForm = document.getElementById("profile-settings-form");
+  const settingsMsg = document.getElementById("profile-settings-message");
+  const givingGoalInput = document.getElementById("profile-giving-goal-percent");
 
   async function render() {
     if (!currentUser) return;
@@ -1309,6 +1296,7 @@ function initProfilePage() {
     if (cityInput) cityInput.value = currentUser.city || "";
     if (stateInput) stateInput.value = currentUser.state || "";
     if (zipInput) zipInput.value = currentUser.zip || "";
+    if (givingGoalInput) givingGoalInput.value = String(getGoalPercent());
   }
 
   form?.addEventListener("submit", async (event) => {
@@ -1333,7 +1321,17 @@ function initProfilePage() {
     setText(msg, "Profile updated.");
   });
 
-  printBtn?.addEventListener("click", () => window.print());
+  settingsForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const givingGoalPercent = Number(givingGoalInput?.value || DEFAULT_GOAL_PERCENT);
+    const response = await apiFetch("/api/user-settings", { method: "POST", body: JSON.stringify({ givingGoalPercent }) });
+    const data = await response.json();
+    if (!response.ok) return setText(settingsMsg, data.error || "Unable to save settings.");
+    await loadCurrentUser();
+    if (givingGoalInput) givingGoalInput.value = String(getGoalPercent());
+    setText(settingsMsg, "Settings updated.");
+  });
+
   return { render };
 }
 
@@ -1850,7 +1848,6 @@ function initMonthlyPaymentsReportPage() {
   }
 
   runBtn?.addEventListener("click", render);
-  printBtn?.addEventListener("click", () => window.print());
   return { render };
 }
 
@@ -1878,7 +1875,6 @@ function initLiquidCashReportPage() {
       cashBody.appendChild(tr);
     });
   }
-  printBtn?.addEventListener("click", () => window.print());
   return { render };
 }
 

@@ -212,6 +212,18 @@ def set_setting(conn: sqlite3.Connection, key: str, value: str):
     )
 
 
+def get_user_setting(conn: sqlite3.Connection, user_id: int, key: str, default: str = "") -> str:
+    row = conn.execute("SELECT value FROM user_settings WHERE user_id = ? AND key = ?", (user_id, key)).fetchone()
+    return row[0] if row else default
+
+
+def set_user_setting(conn: sqlite3.Connection, user_id: int, key: str, value: str):
+    conn.execute(
+        "INSERT INTO user_settings (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value",
+        (user_id, key, value),
+    )
+
+
 def init_default_settings(conn: sqlite3.Connection):
     defaults = {
         "smtp_host": "",
@@ -233,6 +245,13 @@ def init_default_settings(conn: sqlite3.Connection):
 def safe_int(raw: str, default: int) -> int:
     try:
         return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_float(raw: str, default: float) -> float:
+    try:
+        return float(str(raw).strip())
     except (TypeError, ValueError):
         return default
 
@@ -607,6 +626,17 @@ def init_db():
             CREATE TABLE IF NOT EXISTS app_settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_settings (
+                user_id INTEGER NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY (user_id, key),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             )
             """
         )
@@ -1037,7 +1067,17 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._upsert_credit_card_promo_notifications(user["id"])
             with sqlite3.connect(DB_PATH) as conn:
                 unread_count = conn.execute("SELECT COUNT(1) FROM notifications WHERE user_id = ? AND status = 'unread'", (user["id"],)).fetchone()[0]
-            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "streetAddress": user["street_address"], "city": user["city"], "state": user["state"], "zip": user["zip"], "role": user["role"], "unreadNotifications": int(unread_count)}})
+                giving_goal = safe_float(get_user_setting(conn, user["id"], "giving_goal_percent", "10"), 10.0)
+            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "streetAddress": user["street_address"], "city": user["city"], "state": user["state"], "zip": user["zip"], "role": user["role"], "unreadNotifications": int(unread_count), "givingGoalPercent": giving_goal}})
+            return
+
+        if parsed.path == "/api/user-settings":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                giving_goal = safe_float(get_user_setting(conn, user["id"], "giving_goal_percent", "10"), 10.0)
+            self._send_json(200, {"givingGoalPercent": giving_goal})
             return
 
         if parsed.path == "/api/quote":
@@ -1778,6 +1818,23 @@ class FinanceHandler(SimpleHTTPRequestHandler):
 
         with sqlite3.connect(DB_PATH) as conn:
             run_scheduled_backup_if_due(conn)
+
+        if parsed.path == "/api/user-settings":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                giving_goal = float(data.get("givingGoalPercent", 10))
+                if giving_goal < 0 or giving_goal > 100:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid user settings."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                set_user_setting(conn, user["id"], "giving_goal_percent", str(giving_goal))
+            self._send_json(200, {"success": True, "givingGoalPercent": giving_goal})
+            return
 
         if parsed.path == "/api/signup":
             try:
