@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/admin-users.html", "/admin-email.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/admin-users.html", "/admin-email.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -67,7 +67,11 @@ function renderAuthState() {
   const authenticated = Boolean(currentUser);
   authCard?.classList.toggle("hidden", authenticated);
   appContent?.classList.toggle("hidden", !authenticated);
-  if (sessionName) sessionName.textContent = authenticated ? `${currentUser.fullName || currentUser.username} (${currentUser.role})` : "Not signed in";
+  if (sessionName) {
+    sessionName.textContent = authenticated ? `${currentUser.fullName || currentUser.username} (${currentUser.role})` : "Not signed in";
+    sessionName.style.cursor = authenticated ? "pointer" : "default";
+    sessionName.title = authenticated ? "Open profile" : "";
+  }
   navAdmin?.classList.toggle("hidden", !(authenticated && currentUser.role === "admin"));
 }
 
@@ -179,6 +183,7 @@ function bindAuthUI() {
   verifyForm?.addEventListener("submit", handleVerify);
   forgotPasswordForm?.addEventListener("submit", handleForgotPassword);
   logoutBtn?.addEventListener("click", handleLogout);
+  sessionName?.addEventListener("click", () => { if (currentUser) window.location.href = "/profile.html"; });
   toggleSignupBtn?.addEventListener("click", () => showAuthMode("signup"));
   toggleLoginBtn?.addEventListener("click", () => showAuthMode("login"));
   toggleVerifyBtn?.addEventListener("click", () => showAuthMode("verify"));
@@ -211,14 +216,19 @@ function initHomePage() {
     const response = await apiFetch("/api/investments/summary");
     if (!response.ok) return;
     const summary = await response.json();
-    const labels = ["Stocks", "Precious Metals", "Real Estate (My Value)", "Business Ventures (My Value)", "Retirement Accounts"];
-    const values = [summary.stocks || 0, summary.preciousMetals || 0, summary.realEstateMyValue || 0, summary.businessVenturesMyValue || 0, summary.retirementAccounts || 0];
+    const entries = [
+      { label: "Stocks", value: summary.stocks || 0, color: "#3956f6" },
+      { label: "Precious Metals", value: summary.preciousMetals || 0, color: "#00a76f" },
+      { label: "Real Estate", value: summary.realEstateMyValue || 0, color: "#9747ff" },
+      { label: "Business Ventures", value: summary.businessVenturesMyValue || 0, color: "#f08c00" },
+      { label: "Retirement Accounts", value: summary.retirementAccounts || 0, color: "#0090d8" },
+    ].sort((a, b) => b.value - a.value);
     destroy(investmentsSummaryChart);
     investmentsSummaryChart = new Chart(chartEl.getContext("2d"), {
       type: "bar",
       data: {
-        labels,
-        datasets: [{ label: "Total Value", data: values, backgroundColor: ["#3956f6", "#00a76f", "#9747ff", "#f08c00", "#0090d8"] }],
+        labels: entries.map((e) => e.label),
+        datasets: [{ label: "Total Value", data: entries.map((e) => e.value), backgroundColor: entries.map((e) => e.color) }],
       },
       options: { responsive: true, plugins: { legend: { display: false } } },
     });
@@ -1040,6 +1050,283 @@ function initRetirementAccountsPage() {
   return { render: async () => { await loadRows(); renderTable(); } };
 }
 
+function initNetWorthReportPage() {
+  const content = document.getElementById("networth-report-content");
+  const generated = document.getElementById("networth-report-generated");
+  const titleEl = document.getElementById("networth-report-title");
+  const dateEl = document.getElementById("networth-report-date");
+  const totalEl = document.getElementById("networth-grand-total");
+  const printBtn = document.getElementById("print-networth-btn");
+
+  function fmtValue(value) {
+    return value == null ? "N/A" : currency(value);
+  }
+
+  function renderCategory(title, items) {
+    const section = document.createElement("section");
+    section.className = "report-section";
+    const heading = document.createElement("h3");
+    heading.textContent = title;
+    section.appendChild(heading);
+
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    thead.innerHTML = "<tr><th>Description</th><th>Value</th></tr>";
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+
+    let total = 0;
+    for (const item of items) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${item.description}</td><td>${fmtValue(item.value)}</td>`;
+      tbody.appendChild(tr);
+      if (item.value != null) total += Number(item.value);
+    }
+
+    const totalRow = document.createElement("tr");
+    totalRow.className = "totals-row";
+    totalRow.innerHTML = `<td><strong>${title} Total</strong></td><td><strong>${currency(total)}</strong></td>`;
+    tbody.appendChild(totalRow);
+    table.appendChild(tbody);
+    section.appendChild(table);
+
+    return { section, total };
+  }
+
+  async function renderReport() {
+    const [stocksRes, metalsRes, realEstateRes, businessRes, retirementRes, vehiclesRes, gunsRes, bankRes, cashRes] = await Promise.all([
+      apiFetch("/api/investments"),
+      apiFetch("/api/precious-metals"),
+      apiFetch("/api/real-estate"),
+      apiFetch("/api/business-ventures"),
+      apiFetch("/api/retirement-accounts"),
+      apiFetch("/api/assets/vehicles"),
+      apiFetch("/api/assets/guns"),
+      apiFetch("/api/assets/bank-accounts"),
+      apiFetch("/api/assets/cash"),
+    ]);
+    if (![stocksRes, metalsRes, realEstateRes, businessRes, retirementRes, vehiclesRes, gunsRes, bankRes, cashRes].every((r) => r.ok)) return;
+
+    const stocks = await stocksRes.json();
+    const metals = await metalsRes.json();
+    const realEstate = await realEstateRes.json();
+    const business = await businessRes.json();
+    const retirement = await retirementRes.json();
+    const vehicles = await vehiclesRes.json();
+    const guns = await gunsRes.json();
+    const bankAccounts = await bankRes.json();
+    const cash = await cashRes.json();
+
+    const categories = [
+      {
+        title: "Stocks",
+        items: stocks.map((x) => ({ description: `${x.ticker}${x.company_name ? ` — ${x.company_name}` : ""}`, value: x.current_price == null ? null : Number(x.shares) * Number(x.current_price) })),
+      },
+      { title: "Precious Metals", items: metals.map((x) => ({ description: `${x.metal_type} — ${x.description}`, value: Number(x.current_value) })) },
+      { title: "Real Estate", items: realEstate.map((x) => ({ description: `${x.description || x.address} (${x.address})`, value: Number(x.current_value) * (Number(x.percentage_owned) / 100) })) },
+      { title: "Business Ventures", items: business.map((x) => ({ description: x.business_name, value: Number(x.business_value) * (Number(x.percentage_owned) / 100) })) },
+      { title: "Retirement Accounts", items: retirement.map((x) => ({ description: `${x.description} — ${x.account_type} (${x.broker})`, value: Number(x.value) })) },
+      { title: "Vehicles", items: vehicles.map((x) => ({ description: `${x.description} — ${x.model_year || ""} ${x.make} ${x.model}`.trim(), value: Number(x.value) })) },
+      { title: "Guns", items: guns.map((x) => ({ description: `${x.description} — ${x.gun_type}`, value: Number(x.value) })) },
+      { title: "Bank Accounts", items: bankAccounts.map((x) => ({ description: `${x.description} — ${x.institution} (${x.account_type})`, value: Number(x.balance) })) },
+      { title: "Cash", items: cash.map((x) => ({ description: x.description, value: Number(x.amount) })) },
+    ];
+
+    content.innerHTML = "";
+    let grandTotal = 0;
+    for (const category of categories) {
+      const { section, total } = renderCategory(category.title, category.items);
+      content.appendChild(section);
+      grandTotal += total;
+    }
+
+    if (titleEl) titleEl.textContent = `Net Worth Statement for ${currentUser?.fullName || currentUser?.username || "User"}`;
+    if (dateEl) dateEl.textContent = new Date().toLocaleDateString();
+    totalEl.textContent = `Total Net Worth: ${currency(grandTotal)}`;
+    generated.textContent = `Generated on ${new Date().toLocaleString()}`;
+  }
+
+  printBtn?.addEventListener("click", () => window.print());
+
+  return { render: renderReport };
+}
+
+function initProfilePage() {
+  const form = document.getElementById("profile-form");
+  const msg = document.getElementById("profile-message");
+  const fullNameInput = document.getElementById("profile-full-name");
+  const usernameInput = document.getElementById("profile-username");
+  const emailInput = document.getElementById("profile-email");
+  const phoneInput = document.getElementById("profile-phone");
+
+  async function render() {
+    if (!currentUser) return;
+    fullNameInput.value = currentUser.fullName || "";
+    usernameInput.value = currentUser.username || "";
+    emailInput.value = currentUser.email || "";
+    phoneInput.value = currentUser.phone || "";
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      fullName: fullNameInput.value.trim(),
+      email: emailInput.value.trim(),
+      phone: phoneInput.value.trim(),
+    };
+    const response = await apiFetch("/api/profile", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save profile.");
+    await loadCurrentUser();
+    setText(msg, "Profile updated.");
+  });
+
+  return { render };
+}
+
+function initAssetCrudPage(config) {
+  const form = document.getElementById(config.formId);
+  const msg = document.getElementById(config.messageId);
+  const tableBody = document.getElementById(config.bodyId);
+  const sortHeaders = document.querySelectorAll(config.sortSelector);
+  const submitBtn = document.getElementById(config.submitBtnId);
+  let rows = [];
+  let sortKey = config.defaultSort;
+  let sortDirection = "asc";
+  let editingId = null;
+
+  async function loadRows() {
+    const response = await apiFetch(config.apiBase);
+    if (!response.ok) return;
+    rows = await response.json();
+  }
+
+  function applySort() {
+    const direction = sortDirection === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      const aNum = Number(av);
+      const bNum = Number(bv);
+      if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return (aNum - bNum) * direction;
+      return String(av).localeCompare(String(bv)) * direction;
+    });
+  }
+
+  function resetEdit() { editingId = null; if (submitBtn) submitBtn.textContent = config.addLabel; }
+
+  function renderTable() {
+    applySort();
+    tableBody.innerHTML = "";
+    if (!rows.length) {
+      tableBody.innerHTML = `<tr><td colspan="${config.colspan}">${config.emptyText}</td></tr>`;
+      return;
+    }
+    let total = 0;
+    for (const row of rows) {
+      total += Number(config.valueGetter(row));
+      const tr = document.createElement("tr");
+      tr.innerHTML = config.rowHtml(row);
+      tableBody.appendChild(tr);
+    }
+    const tr = document.createElement("tr");
+    tr.className = "totals-row";
+    tr.innerHTML = `<td colspan="${config.totalLabelColspan}"><strong>Totals</strong></td><td><strong>${currency(total)}</strong></td><td></td>`;
+    tableBody.appendChild(tr);
+  }
+
+  sortHeaders.forEach((header) => header.addEventListener("click", () => {
+    const key = header.dataset[config.sortDataset];
+    if (!key) return;
+    sortDirection = sortKey === key && sortDirection === "asc" ? "desc" : "asc";
+    sortKey = key;
+    renderTable();
+  }));
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = config.collectPayload(editingId);
+    const response = await apiFetch(config.apiBase, { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save record.");
+    form.reset();
+    resetEdit();
+    await loadRows();
+    renderTable();
+    setText(msg, config.savedText);
+  });
+
+  tableBody?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const item = rows.find((x) => x.id === id);
+      if (!item) return;
+      config.startEdit(item);
+      editingId = id;
+      if (submitBtn) submitBtn.textContent = config.updateLabel;
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm(config.deleteConfirm)) return;
+    await apiFetch(`${config.apiBase}/${id}`, { method: "DELETE" });
+    if (editingId === id) { form?.reset(); resetEdit(); }
+    await loadRows();
+    renderTable();
+  });
+
+  return { render: async () => { await loadRows(); renderTable(); } };
+}
+
+function initAssetsVehiclesPage() {
+  return initAssetCrudPage({
+    formId: "vehicles-form", messageId: "vehicles-message", bodyId: "vehicles-body", sortSelector: "[data-sort-vehicles]", submitBtnId: "vehicles-submit-btn",
+    defaultSort: "description", sortDataset: "sortVehicles", apiBase: "/api/assets/vehicles", addLabel: "Add Vehicle", updateLabel: "Update Vehicle",
+    emptyText: "No vehicles yet.", colspan: 7, totalLabelColspan: 5, savedText: "Vehicle saved.", deleteConfirm: "Delete this vehicle entry?",
+    valueGetter: (x) => x.value,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.model_year || "—"}</td><td>${x.make}</td><td>${x.model}</td><td>${currency(x.value)}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("veh-description").value.trim(), year: document.getElementById("veh-year").value.trim(), make: document.getElementById("veh-make").value.trim(), model: document.getElementById("veh-model").value.trim(), value: Number(document.getElementById("veh-value").value) }),
+    startEdit: (x) => { document.getElementById("veh-description").value = x.description; document.getElementById("veh-year").value = x.model_year || ""; document.getElementById("veh-make").value = x.make; document.getElementById("veh-model").value = x.model; document.getElementById("veh-value").value = x.value; },
+  });
+}
+
+function initAssetsGunsPage() {
+  return initAssetCrudPage({
+    formId: "guns-form", messageId: "guns-message", bodyId: "guns-body", sortSelector: "[data-sort-guns]", submitBtnId: "guns-submit-btn",
+    defaultSort: "description", sortDataset: "sortGuns", apiBase: "/api/assets/guns", addLabel: "Add Gun", updateLabel: "Update Gun",
+    emptyText: "No guns yet.", colspan: 5, totalLabelColspan: 3, savedText: "Gun entry saved.", deleteConfirm: "Delete this gun entry?",
+    valueGetter: (x) => x.value,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.gun_type}</td><td>${currency(x.value)}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("gun-description").value.trim(), type: document.getElementById("gun-type").value.trim(), value: Number(document.getElementById("gun-value").value) }),
+    startEdit: (x) => { document.getElementById("gun-description").value = x.description; document.getElementById("gun-type").value = x.gun_type; document.getElementById("gun-value").value = x.value; },
+  });
+}
+
+function initAssetsBankAccountsPage() {
+  return initAssetCrudPage({
+    formId: "bank-form", messageId: "bank-message", bodyId: "bank-body", sortSelector: "[data-sort-bank]", submitBtnId: "bank-submit-btn",
+    defaultSort: "description", sortDataset: "sortBank", apiBase: "/api/assets/bank-accounts", addLabel: "Add Bank Account", updateLabel: "Update Bank Account",
+    emptyText: "No bank accounts yet.", colspan: 6, totalLabelColspan: 4, savedText: "Bank account saved.", deleteConfirm: "Delete this bank account entry?",
+    valueGetter: (x) => x.balance,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.institution}</td><td>${x.account_type}</td><td>${currency(x.balance)}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("bank-description").value.trim(), institution: document.getElementById("bank-institution").value.trim(), type: document.getElementById("bank-type").value.trim(), balance: Number(document.getElementById("bank-balance").value) }),
+    startEdit: (x) => { document.getElementById("bank-description").value = x.description; document.getElementById("bank-institution").value = x.institution; document.getElementById("bank-type").value = x.account_type; document.getElementById("bank-balance").value = x.balance; },
+  });
+}
+
+function initAssetsCashPage() {
+  return initAssetCrudPage({
+    formId: "cash-form", messageId: "cash-message", bodyId: "cash-body", sortSelector: "[data-sort-cash]", submitBtnId: "cash-submit-btn",
+    defaultSort: "description", sortDataset: "sortCash", apiBase: "/api/assets/cash", addLabel: "Add Cash Entry", updateLabel: "Update Cash Entry",
+    emptyText: "No cash entries yet.", colspan: 4, totalLabelColspan: 2, savedText: "Cash entry saved.", deleteConfirm: "Delete this cash entry?",
+    valueGetter: (x) => x.amount,
+    rowHtml: (x) => `<td>${x.description}</td><td>${currency(x.amount)}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("cash-description").value.trim(), amount: Number(document.getElementById("cash-amount").value) }),
+    startEdit: (x) => { document.getElementById("cash-description").value = x.description; document.getElementById("cash-amount").value = x.amount; },
+  });
+}
+
 function initAdminUsersPage() {
   const createForm = document.getElementById("create-user-form");
   const resetForm = document.getElementById("reset-password-form");
@@ -1208,6 +1495,36 @@ async function initPageData() {
 
   if (page === "retirement-accounts") {
     if (!pageController) pageController = initRetirementAccountsPage();
+    return pageController.render();
+  }
+
+  if (page === "net-worth-report") {
+    if (!pageController) pageController = initNetWorthReportPage();
+    return pageController.render();
+  }
+
+  if (page === "profile") {
+    if (!pageController) pageController = initProfilePage();
+    return pageController.render();
+  }
+
+  if (page === "assets-vehicles") {
+    if (!pageController) pageController = initAssetsVehiclesPage();
+    return pageController.render();
+  }
+
+  if (page === "assets-guns") {
+    if (!pageController) pageController = initAssetsGunsPage();
+    return pageController.render();
+  }
+
+  if (page === "assets-bank-accounts") {
+    if (!pageController) pageController = initAssetsBankAccountsPage();
+    return pageController.render();
+  }
+
+  if (page === "assets-cash") {
+    if (!pageController) pageController = initAssetsCashPage();
     return pageController.render();
   }
 

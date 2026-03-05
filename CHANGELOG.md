@@ -21,6 +21,9 @@ All notable changes to this project are documented in this file.
 - Added gain/loss percentage columns to Stocks and Precious Metals tables.
 - Added Retirement Accounts subpage with sortable CRUD table and per-user API endpoints.
 - Added Home-page investments summary bar chart with category totals and combined total.
+- Added Net Worth Report page with print/save-as-PDF support, category subtotals, and grand total.
+- Added Assets top-level section with Vehicles, Guns, Bank Accounts, and Cash subpages (sortable CRUD tables).
+- Added Profile page for updating user full name, email, and contact phone.
 
 - Security hardening: login rate limiting, hashed password-reset tokens, and stricter minimum password length.
 - Admin SMTP settings reads now redact stored SMTP password values.
@@ -38,6 +41,8 @@ All notable changes to this project are documented in this file.
 - Reordered Real Estate page layout to show Description before Address.
 - Increased spacing/padding across all pages for improved readability and consistency.
 - Records edit now scrolls to the edit form; delete/clear actions now require confirmation prompts across record/investment pages.
+- Investments Overview bar chart labels now omit "My Value" wording and are sorted by value (largest to smallest).
+- Net Worth statement header now includes the logged-in user name and date.
 
 ## [v0.0.5] - 2026-03-04
 

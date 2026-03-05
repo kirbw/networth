@@ -20,7 +20,7 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/admin-users.html", "/admin-email.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/profile.html", "/net-worth-report.html", "/admin-users.html", "/admin-email.html"}
 ADMIN_PAGES = {"/admin-users.html", "/admin-email.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
@@ -116,6 +116,8 @@ def ensure_users_columns(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''")
     if "email" not in col_names:
         conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
+    if "phone" not in col_names:
+        conn.execute("ALTER TABLE users ADD COLUMN phone TEXT")
     if "is_verified" not in col_names:
         conn.execute("ALTER TABLE users ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0")
     if "verification_code" not in col_names:
@@ -237,6 +239,7 @@ def init_db():
                 full_name TEXT NOT NULL DEFAULT '',
                 username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE,
+                phone TEXT,
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL CHECK(role IN ('admin', 'user')),
                 is_verified INTEGER NOT NULL DEFAULT 0,
@@ -351,6 +354,64 @@ def init_db():
                 broker TEXT NOT NULL,
                 taxable INTEGER NOT NULL,
                 value REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS asset_vehicles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                make TEXT NOT NULL,
+                model TEXT NOT NULL,
+                model_year INTEGER,
+                value REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS asset_guns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                gun_type TEXT NOT NULL,
+                value REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS asset_bank_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                institution TEXT NOT NULL,
+                account_type TEXT NOT NULL,
+                balance REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS asset_cash (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                amount REAL NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -482,7 +543,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 """
-                SELECT u.id, u.full_name, u.username, u.email, u.role, u.is_verified, s.expires_at
+                SELECT u.id, u.full_name, u.username, u.email, u.phone, u.role, u.is_verified, s.expires_at
                 FROM sessions s JOIN users u ON u.id = s.user_id
                 WHERE s.token = ?
                 """,
@@ -543,7 +604,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             if not user:
                 self._send_json(200, {"authenticated": False})
                 return
-            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "role": user["role"]}})
+            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "role": user["role"]}})
             return
 
         if parsed.path == "/api/quote":
@@ -658,6 +719,188 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 "retirementAccounts": float(retirement),
                 "combinedTotal": combined,
             })
+            return
+
+        if parsed.path == "/api/assets/vehicles":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, description, make, model, model_year, value, created_at, updated_at FROM asset_vehicles WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(row) for row in rows])
+            return
+
+        if parsed.path == "/api/assets/guns":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, description, gun_type, value, created_at, updated_at FROM asset_guns WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(row) for row in rows])
+            return
+
+        if parsed.path == "/api/assets/bank-accounts":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, description, institution, account_type, balance, created_at, updated_at FROM asset_bank_accounts WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(row) for row in rows])
+            return
+
+        if parsed.path == "/api/assets/cash":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, description, amount, created_at, updated_at FROM asset_cash WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(row) for row in rows])
+            return
+
+        if parsed.path == "/api/profile":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                full_name = str(data.get("fullName", "")).strip()
+                email_raw = str(data.get("email", "")).strip()
+                email = email_raw if email_raw else None
+                phone_raw = str(data.get("phone", "")).strip()
+                phone = phone_raw if phone_raw else None
+                if not full_name:
+                    raise ValueError("Full name is required.")
+                if email is not None and "@" not in email:
+                    raise ValueError("Email must be valid.")
+            except (ValueError, TypeError, json.JSONDecodeError) as error:
+                self._send_json(400, {"error": str(error)})
+                return
+            try:
+                with sqlite3.connect(DB_PATH) as conn:
+                    conn.execute("UPDATE users SET full_name = ?, email = ?, phone = ?, updated_at = ? WHERE id = ?", (full_name, email, phone, utc_now_iso(), user["id"]))
+            except sqlite3.IntegrityError:
+                self._send_json(409, {"error": "Email already in use."})
+                return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/assets/vehicles":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                make = str(data.get("make", "")).strip()
+                model = str(data.get("model", "")).strip()
+                model_year_raw = data.get("year")
+                model_year = None if model_year_raw in (None, "") else int(model_year_raw)
+                value = float(data.get("value", 0))
+                if not description or not make or not model or value < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid vehicle data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, model_year, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, model_year, value, now, now))
+                else:
+                    cursor = conn.execute("UPDATE asset_vehicles SET description = ?, make = ?, model = ?, model_year = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, make, model, model_year, value, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Vehicle not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/assets/guns":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                gun_type = str(data.get("type", "")).strip()
+                value = float(data.get("value", 0))
+                if not description or not gun_type or value < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid gun data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO asset_guns (user_id, description, gun_type, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", (user["id"], description, gun_type, value, now, now))
+                else:
+                    cursor = conn.execute("UPDATE asset_guns SET description = ?, gun_type = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, gun_type, value, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Gun entry not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/assets/bank-accounts":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                institution = str(data.get("institution", "")).strip()
+                account_type = str(data.get("type", "")).strip()
+                balance = float(data.get("balance", 0))
+                if not description or not institution or not account_type or balance < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid bank account data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO asset_bank_accounts (user_id, description, institution, account_type, balance, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], description, institution, account_type, balance, now, now))
+                else:
+                    cursor = conn.execute("UPDATE asset_bank_accounts SET description = ?, institution = ?, account_type = ?, balance = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, institution, account_type, balance, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Bank account not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/assets/cash":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                amount = float(data.get("amount", 0))
+                if not description or amount < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid cash data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO asset_cash (user_id, description, amount, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", (user["id"], description, amount, now, now))
+                else:
+                    cursor = conn.execute("UPDATE asset_cash SET description = ?, amount = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, amount, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Cash entry not found."})
+                        return
+            self._send_json(200, {"success": True})
             return
 
         if parsed.path == "/api/admin/users":
@@ -820,7 +1063,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                user = conn.execute("SELECT id, full_name, username, email, role, is_verified, password_hash FROM users WHERE username = ?", (username,)).fetchone()
+                user = conn.execute("SELECT id, full_name, username, email, phone, role, is_verified, password_hash FROM users WHERE username = ?", (username,)).fetchone()
                 if not user or not verify_password(password, user["password_hash"]):
                     register_login_failure(login_key)
                     self._send_json(401, {"error": "Invalid username or password."})
@@ -831,7 +1074,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     return
                 token = secrets.token_urlsafe(32)
                 conn.execute("INSERT INTO sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)", (token, user["id"], (utc_now() + timedelta(days=SESSION_DAYS)).isoformat(), utc_now_iso()))
-            self._send_json(200, {"success": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "role": user["role"]}}, extra_headers={"Set-Cookie": self._session_cookie_header(token)})
+            self._send_json(200, {"success": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "role": user["role"]}}, extra_headers={"Set-Cookie": self._session_cookie_header(token)})
             return
 
         if parsed.path == "/api/logout":
@@ -1073,6 +1316,148 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True, "updated": updated, "failed": failed, "refreshedAt": refreshed_at})
             return
 
+        if parsed.path == "/api/profile":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                full_name = str(data.get("fullName", "")).strip()
+                email_raw = str(data.get("email", "")).strip()
+                email = email_raw if email_raw else None
+                phone_raw = str(data.get("phone", "")).strip()
+                phone = phone_raw if phone_raw else None
+                if not full_name:
+                    raise ValueError("Full name is required.")
+                if email is not None and "@" not in email:
+                    raise ValueError("Email must be valid.")
+            except (ValueError, TypeError, json.JSONDecodeError) as error:
+                self._send_json(400, {"error": str(error)})
+                return
+            try:
+                with sqlite3.connect(DB_PATH) as conn:
+                    conn.execute("UPDATE users SET full_name = ?, email = ?, phone = ?, updated_at = ? WHERE id = ?", (full_name, email, phone, utc_now_iso(), user["id"]))
+            except sqlite3.IntegrityError:
+                self._send_json(409, {"error": "Email already in use."})
+                return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/assets/vehicles":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                make = str(data.get("make", "")).strip()
+                model = str(data.get("model", "")).strip()
+                model_year_raw = data.get("year")
+                model_year = None if model_year_raw in (None, "") else int(model_year_raw)
+                value = float(data.get("value", 0))
+                if not description or not make or not model or value < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid vehicle data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, model_year, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, model_year, value, now, now))
+                else:
+                    cursor = conn.execute("UPDATE asset_vehicles SET description = ?, make = ?, model = ?, model_year = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, make, model, model_year, value, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Vehicle not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/assets/guns":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                gun_type = str(data.get("type", "")).strip()
+                value = float(data.get("value", 0))
+                if not description or not gun_type or value < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid gun data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO asset_guns (user_id, description, gun_type, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", (user["id"], description, gun_type, value, now, now))
+                else:
+                    cursor = conn.execute("UPDATE asset_guns SET description = ?, gun_type = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, gun_type, value, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Gun entry not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/assets/bank-accounts":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                institution = str(data.get("institution", "")).strip()
+                account_type = str(data.get("type", "")).strip()
+                balance = float(data.get("balance", 0))
+                if not description or not institution or not account_type or balance < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid bank account data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO asset_bank_accounts (user_id, description, institution, account_type, balance, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], description, institution, account_type, balance, now, now))
+                else:
+                    cursor = conn.execute("UPDATE asset_bank_accounts SET description = ?, institution = ?, account_type = ?, balance = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, institution, account_type, balance, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Bank account not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/assets/cash":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                amount = float(data.get("amount", 0))
+                if not description or amount < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid cash data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO asset_cash (user_id, description, amount, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", (user["id"], description, amount, now, now))
+                else:
+                    cursor = conn.execute("UPDATE asset_cash SET description = ?, amount = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, amount, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Cash entry not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
         if parsed.path == "/api/admin/users":
             admin = self._require_admin()
             if not admin:
@@ -1233,6 +1618,50 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute("DELETE FROM retirement_accounts WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/assets/vehicles/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid vehicle id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM asset_vehicles WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/assets/guns/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid gun id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM asset_guns WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/assets/bank-accounts/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid bank account id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM asset_bank_accounts WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/assets/cash/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid cash id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM asset_cash WHERE id = ? AND user_id = ?", (item_id, user["id"]))
             self._send_json(200, {"success": True})
             return
 

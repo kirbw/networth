@@ -183,3 +183,15 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 
 .gain-positive { color: #137333; font-weight: 600; }
 .gain-negative { color: #b3261e; font-weight: 600; }
+
+.report-section { margin-bottom: 1rem; }
+.report-section h3 { margin: 0 0 0.5rem; }
+
+@media print {
+  .sidebar, .topbar, .version-footer, #print-networth-btn { display: none !important; }
+  .layout { display: block; }
+  .main-column { display: block; }
+  .container { max-width: 100%; margin: 0; padding: 0; gap: 0.5rem; }
+  .card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+  body { background: #fff; }
+}
