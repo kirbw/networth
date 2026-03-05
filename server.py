@@ -23,8 +23,8 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/profile.html", "/net-worth-report.html", "/admin-users.html", "/admin-email.html"}
-ADMIN_PAGES = {"/admin-users.html", "/admin-email.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/profile.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html"}
+ADMIN_PAGES = {"/admin-users.html", "/admin-email.html", "/admin-backups.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
@@ -32,6 +32,7 @@ LOGIN_ATTEMPTS: dict[str, list[float]] = {}
 FIELD_ENCRYPTION_KEY = os.getenv("FIELD_ENCRYPTION_KEY", "").strip()
 FIELD_ENCRYPTION_PREFIX = "enc:v1:"
 _AES_GCM = None
+BACKUP_DIR = Path(__file__).with_name("backups")
 
 
 def utc_now() -> datetime:
@@ -220,9 +221,72 @@ def init_default_settings(conn: sqlite3.Connection):
         "smtp_from_email": "",
         "smtp_use_ssl": "0",
         "website_host": "http://localhost:3000",
+        "backup_schedule_enabled": "0",
+        "backup_schedule_interval_hours": "24",
+        "backup_keep_count": "10",
+        "backup_next_run_at": "",
     }
     for key, value in defaults.items():
         set_setting(conn, key, get_setting(conn, key, value) or value)
+
+
+def safe_int(raw: str, default: int) -> int:
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def backup_filename_prefix() -> str:
+    return "finance-backup-"
+
+
+def create_backup_snapshot() -> Path:
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    destination = BACKUP_DIR / f"{backup_filename_prefix()}{timestamp}.sqlite3"
+    temp_path = destination.with_suffix(".tmp")
+
+    with sqlite3.connect(DB_PATH) as src, sqlite3.connect(temp_path) as dst:
+        src.backup(dst)
+
+    temp_path.replace(destination)
+    return destination
+
+
+def enforce_backup_retention(keep_count: int):
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    keep = max(1, keep_count)
+    backups = sorted(BACKUP_DIR.glob(f"{backup_filename_prefix()}*.sqlite3"), reverse=True)
+    for extra in backups[keep:]:
+        extra.unlink(missing_ok=True)
+
+
+def compute_next_backup_run(now: datetime, interval_hours: int) -> str:
+    interval = max(1, interval_hours)
+    return (now + timedelta(hours=interval)).isoformat()
+
+
+def run_scheduled_backup_if_due(conn: sqlite3.Connection):
+    enabled = get_setting(conn, "backup_schedule_enabled", "0") == "1"
+    if not enabled:
+        return
+    interval_hours = safe_int(get_setting(conn, "backup_schedule_interval_hours", "24"), 24)
+    keep_count = safe_int(get_setting(conn, "backup_keep_count", "10"), 10)
+    now = utc_now()
+    next_run_at_raw = get_setting(conn, "backup_next_run_at", "")
+    try:
+        next_run_at = datetime.fromisoformat(next_run_at_raw) if next_run_at_raw else now
+    except ValueError:
+        next_run_at = now
+    if next_run_at.tzinfo is None:
+        next_run_at = next_run_at.replace(tzinfo=timezone.utc)
+    if next_run_at > now:
+        return
+
+    create_backup_snapshot()
+    enforce_backup_retention(keep_count)
+    set_setting(conn, "backup_next_run_at", compute_next_backup_run(now, interval_hours))
 
 
 def send_email(conn: sqlite3.Connection, to_email: str, subject: str, body: str):
@@ -834,11 +898,11 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return "assets"
         if path in ("/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html"):
             return "liabilities"
-        if path == "/net-worth-report.html":
-            return "net-worth"
+        if path in ("/net-worth-report.html", "/monthly-payments-report.html"):
+            return "reports"
         if path == "/profile.html":
             return "profile"
-        if path in ("/admin-users.html", "/admin-email.html"):
+        if path in ("/admin-users.html", "/admin-email.html", "/admin-backups.html"):
             return "admin"
         return ""
 
@@ -854,7 +918,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             f'<a href="/investments.html"{active("investments")}>Investments</a>'
             f'<a href="/assets-vehicles.html"{active("assets")}>Assets</a>'
             f'<a href="/liabilities-mortgages.html"{active("liabilities")}>Liabilities</a>'
-            f'<a href="/net-worth-report.html"{active("net-worth")}>Net Worth Report</a>'
+            f'<a href="/net-worth-report.html"{active("reports")}>Reports</a>'
             f'<a href="/profile.html"{active("profile")}>My Profile</a>'
             f'<a id="nav-admin" href="/admin-users.html" class="hidden{(" active" if group == "admin" else "")}">Admin</a>'
             '</nav></aside>'
@@ -882,6 +946,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+
+        with sqlite3.connect(DB_PATH) as conn:
+            run_scheduled_backup_if_due(conn)
 
         if self._protected_page_redirect(parsed.path):
             return
@@ -1122,6 +1189,80 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 item["account_number"] = decrypt_field_value(item.get("account_number"))
                 payload.append(item)
             self._send_json(200, payload)
+            return
+
+        if parsed.path == "/api/reports/monthly-payments":
+            user = self._require_auth()
+            if not user:
+                return
+            params = parse_qs(parsed.query)
+            month_raw = params.get("month", [""])[0].strip()
+            try:
+                month_start = datetime.strptime(month_raw, "%Y-%m") if month_raw else datetime.now()
+                year = month_start.year
+                month = month_start.month
+            except ValueError:
+                self._send_json(400, {"error": "Invalid month format. Use YYYY-MM."})
+                return
+
+            monthly_items = []
+            periodic_items = []
+
+            def parse_day(date_value: str | None) -> int:
+                if not date_value:
+                    return 1
+                try:
+                    return max(1, min(28, datetime.strptime(date_value[:10], "%Y-%m-%d").day))
+                except ValueError:
+                    return 1
+
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                mortgages = conn.execute("SELECT description, monthly_payment, start_date FROM liability_mortgages WHERE user_id = ?", (user["id"],)).fetchall()
+                cards = conn.execute("SELECT description, monthly_payment, start_date FROM liability_credit_cards WHERE user_id = ?", (user["id"],)).fetchall()
+                loans = conn.execute("SELECT description, payment_amount, payment_frequency, start_date, loan_type FROM liability_loans WHERE user_id = ?", (user["id"],)).fetchall()
+
+            for row in mortgages:
+                day = parse_day(row["start_date"])
+                monthly_items.append({"category": "Mortgage", "description": row["description"], "amount": float(row["monthly_payment"] or 0), "dueDate": f"{year:04d}-{month:02d}-{day:02d}"})
+            for row in cards:
+                day = parse_day(row["start_date"])
+                monthly_items.append({"category": "Credit Card", "description": row["description"], "amount": float(row["monthly_payment"] or 0), "dueDate": f"{year:04d}-{month:02d}-{day:02d}"})
+
+            for row in loans:
+                frequency = (row["payment_frequency"] or "monthly").lower()
+                start_date = row["start_date"]
+                day = parse_day(start_date)
+                amount = float(row["payment_amount"] or 0)
+                if frequency == "monthly":
+                    monthly_items.append({"category": "Loan", "description": row["description"], "amount": amount, "dueDate": f"{year:04d}-{month:02d}-{day:02d}"})
+                    continue
+
+                due_in_month = True
+                if start_date:
+                    try:
+                        start_dt = datetime.strptime(start_date[:10], "%Y-%m-%d")
+                        month_index = (year - start_dt.year) * 12 + (month - start_dt.month)
+                        if month_index < 0:
+                            due_in_month = False
+                        elif frequency == "quarterly":
+                            due_in_month = month_index % 3 == 0
+                        elif frequency == "annual":
+                            due_in_month = month_index % 12 == 0
+                    except ValueError:
+                        pass
+
+                if due_in_month:
+                    periodic_items.append({"category": "Loan", "description": row["description"], "loanType": row["loan_type"], "frequency": frequency, "amount": amount, "dueDate": f"{year:04d}-{month:02d}-{day:02d}"})
+
+            monthly_items.sort(key=lambda item: (item["dueDate"], item["category"], item["description"].lower()))
+            periodic_items.sort(key=lambda item: (item["frequency"], item["dueDate"], item["description"].lower()))
+
+            self._send_json(200, {
+                "month": f"{year:04d}-{month:02d}",
+                "monthlyPayments": monthly_items,
+                "periodicPayments": periodic_items,
+            })
             return
 
         if parsed.path == "/api/profile":
@@ -1445,12 +1586,64 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, settings)
             return
 
+        if parsed.path == "/api/admin/backup-settings":
+            admin = self._require_admin()
+            if not admin:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                settings = {
+                    "enabled": get_setting(conn, "backup_schedule_enabled", "0") == "1",
+                    "intervalHours": safe_int(get_setting(conn, "backup_schedule_interval_hours", "24"), 24),
+                    "keepCount": safe_int(get_setting(conn, "backup_keep_count", "10"), 10),
+                    "nextRunAt": get_setting(conn, "backup_next_run_at", ""),
+                }
+            self._send_json(200, settings)
+            return
+
+        if parsed.path == "/api/admin/backups":
+            admin = self._require_admin()
+            if not admin:
+                return
+            BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+            files = sorted(BACKUP_DIR.glob(f"{backup_filename_prefix()}*.sqlite3"), reverse=True)
+            payload = []
+            for f in files:
+                stat = f.stat()
+                payload.append({"name": f.name, "size": stat.st_size, "sizeHuman": _format_bytes(stat.st_size), "createdAt": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()})
+            self._send_json(200, payload)
+            return
+
+        if parsed.path == "/api/admin/backups/download":
+            admin = self._require_admin()
+            if not admin:
+                return
+            params = parse_qs(parsed.query)
+            file_name = params.get("name", [""])[0]
+            if not re.fullmatch(r"finance-backup-\d{8}T\d{6}Z\.sqlite3", file_name):
+                self._send_json(400, {"error": "Invalid backup file name."})
+                return
+            backup_file = BACKUP_DIR / file_name
+            if not backup_file.exists() or not backup_file.is_file():
+                self._send_json(404, {"error": "Backup not found."})
+                return
+            body = backup_file.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Disposition", f'attachment; filename="{file_name}"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         if self._serve_templated_html(parsed.path):
             return
         return super().do_GET()
 
     def do_POST(self):
         parsed = urlparse(self.path)
+
+        with sqlite3.connect(DB_PATH) as conn:
+            run_scheduled_backup_if_due(conn)
 
         if parsed.path == "/api/signup":
             try:
@@ -2185,6 +2378,43 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 set_setting(conn, "smtp_use_ssl", smtp_use_ssl)
                 set_setting(conn, "website_host", website_host)
             self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/admin/backup-settings":
+            admin = self._require_admin()
+            if not admin:
+                return
+            try:
+                data = self._read_json()
+                enabled = bool(data.get("enabled", False))
+                interval_hours = int(data.get("intervalHours", 24))
+                keep_count = int(data.get("keepCount", 10))
+                if interval_hours < 1 or keep_count < 1:
+                    raise ValueError("Interval and keep count must be greater than 0.")
+            except (ValueError, TypeError, json.JSONDecodeError) as error:
+                self._send_json(400, {"error": str(error)})
+                return
+
+            with sqlite3.connect(DB_PATH) as conn:
+                set_setting(conn, "backup_schedule_enabled", "1" if enabled else "0")
+                set_setting(conn, "backup_schedule_interval_hours", str(interval_hours))
+                set_setting(conn, "backup_keep_count", str(keep_count))
+                if enabled:
+                    set_setting(conn, "backup_next_run_at", compute_next_backup_run(utc_now(), interval_hours))
+                else:
+                    set_setting(conn, "backup_next_run_at", "")
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/admin/backups/run":
+            admin = self._require_admin()
+            if not admin:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                keep_count = safe_int(get_setting(conn, "backup_keep_count", "10"), 10)
+                backup_file = create_backup_snapshot()
+                enforce_backup_retention(keep_count)
+            self._send_json(200, {"success": True, "name": backup_file.name})
             return
 
         self._send_json(404, {"error": "Not found"})

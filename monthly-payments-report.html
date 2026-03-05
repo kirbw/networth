@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Monthly Payments Report</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="monthly-payments-report">
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Finance Tracker</h2>
+      <nav class="side-menu"></nav>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <div class="session-controls">
+          <span id="session-name">Not signed in</span>
+          <button id="logout-btn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden">
+          <h2>Sign In</h2>
+          <form id="login-form"><label>Username <input id="login-username" type="text" required /></label><label>Password <input id="login-password" type="password" required /></label><button type="submit">Log In</button></form>
+          <form id="signup-form" class="hidden"><label>Full Name <input id="signup-full-name" type="text" required /></label><label>Email <input id="signup-email" type="email" required /></label><label>Username <input id="signup-username" type="text" required /></label><label>Password <input id="signup-password" type="password" required /></label><button type="submit">Create Account</button></form>
+          <form id="verify-form" class="hidden"><label>Username <input id="verify-username" type="text" required /></label><label>Verification Code <input id="verify-code" type="text" required /></label><button type="submit">Verify Account</button></form>
+          <form id="forgot-password-form" class="hidden"><label>Email or Username <input id="forgot-identifier" type="text" required /></label><button type="submit">Send Reset Link</button></form>
+          <div class="auth-actions"><button id="toggle-signup-btn" type="button">Create account</button><button id="toggle-verify-btn" type="button">Verify account</button><button id="toggle-forgot-btn" type="button">Forgot password</button><button id="toggle-login-btn" type="button">Back to login</button></div>
+          <p id="auth-message"></p>
+        </section>
+
+        <section id="app-content" class="hidden">
+          <section class="card admin-subnav-card">
+            <div class="admin-subnav">
+              <a href="/net-worth-report.html">Net Worth</a>
+              <a href="/monthly-payments-report.html" class="active">Monthly Payments</a>
+            </div>
+          </section>
+
+          <section class="card report-header">
+            <h2>Monthly Payments Report</h2>
+            <div class="report-actions">
+              <label>Month <input id="report-month" type="month" /></label>
+              <button id="run-monthly-report-btn" type="button">Run Report</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <h3>Monthly Payments</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Due Date</th><th>Category</th><th>Description</th><th>Amount</th></tr></thead>
+                <tbody id="monthly-payments-body"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card">
+            <h3>Quarterly & Annual Payments</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Due Date</th><th>Frequency</th><th>Description</th><th>Amount</th></tr></thead>
+                <tbody id="periodic-payments-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>
