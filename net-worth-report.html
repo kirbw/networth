@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Net Worth Report</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="net-worth-report">
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Finance Tracker</h2>
+      <nav class="side-menu">
+        <a href="/">Home</a>
+        <a href="/records.html">Records</a>
+        <a href="/investments.html">Investments</a>
+        <a href="/assets-vehicles.html">Assets</a>
+        <a href="/net-worth-report.html" class="active">Net Worth Report</a>
+        <a id="nav-admin" href="/admin-users.html" class="hidden">Admin</a>
+      </nav>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <div class="session-controls">
+          <span id="session-name">Not signed in</span>
+          <button id="logout-btn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden">
+          <h2>Sign In</h2>
+          <form id="login-form">
+            <label>Username <input id="login-username" type="text" required /></label>
+            <label>Password <input id="login-password" type="password" required /></label>
+            <button type="submit">Log In</button>
+          </form>
+          <form id="signup-form" class="hidden">
+            <label>Full Name <input id="signup-full-name" type="text" required /></label>
+            <label>Email <input id="signup-email" type="email" required /></label>
+            <label>Username <input id="signup-username" type="text" required /></label>
+            <label>Password <input id="signup-password" type="password" required /></label>
+            <button type="submit">Create Account</button>
+          </form>
+          <form id="verify-form" class="hidden">
+            <label>Username <input id="verify-username" type="text" required /></label>
+            <label>Verification Code <input id="verify-code" type="text" required /></label>
+            <button type="submit">Verify Account</button>
+          </form>
+          <form id="forgot-password-form" class="hidden">
+            <label>Email or Username <input id="forgot-identifier" type="text" required /></label>
+            <button type="submit">Send Reset Link</button>
+          </form>
+          <div class="auth-actions">
+            <button id="toggle-signup-btn" type="button">Create account</button>
+            <button id="toggle-verify-btn" type="button">Verify account</button>
+            <button id="toggle-forgot-btn" type="button">Forgot password</button>
+            <button id="toggle-login-btn" type="button">Back to login</button>
+          </div>
+          <p id="auth-message"></p>
+        </section>
+
+        <section id="app-content" class="hidden">
+          <section class="card report-header">
+            <h2 id="networth-report-title">Net Worth Statement</h2>
+            <p class="small-note">Date: <span id="networth-report-date"></span></p>
+            <p class="small-note" id="networth-report-generated"></p>
+            <div class="report-actions">
+              <button id="print-networth-btn" type="button">Print / Save as PDF</button>
+              <label class="checkbox-row report-condensed-toggle"><input id="networth-condensed" type="checkbox" /> Condensed view (totals only)</label>
+            </div>
+          </section>
+
+          <section class="card" id="networth-report-content"></section>
+
+          <section class="card">
+            <h2 id="networth-grand-total">Total Net Worth: $0.00</h2>
+            <p class="statement-attestation">The information in this financial statement is accurate and complete to the best of my knowledge.</p>
+            <div class="signature-row">
+              <div class="signature-field"><span class="signature-line"></span><span class="signature-label">Signature</span></div>
+              <div class="signature-field signature-date"><span class="signature-line"></span><span class="signature-label">Date</span></div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>
