@@ -167,6 +167,9 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 
 .chart-card-wide {
   grid-column: 1 / -1;
+  max-width: 980px;
+  justify-self: center;
+  width: 100%;
 }
 
 .home-charts-grid .chart-card-sm {
@@ -286,19 +289,16 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 .report-col-value { width: 25%; text-align: right; white-space: nowrap; }
 
 @media print {
-  .sidebar, .topbar, .version-footer, #print-networth-btn, .report-condensed-toggle { display: none !important; }
-  .layout { display: block; }
-  .main-column { display: block; }
+  .sidebar, .topbar, .version-footer, #auth-card, .admin-subnav-card, .report-actions, .report-condensed-toggle, #print-networth-btn, #print-monthly-report-btn, #print-liquid-report-btn { display: none !important; }
+  .layout, .main-column { display: block; }
   .container { max-width: 100%; margin: 0; padding: 0; gap: 0.5rem; }
-  .card { box-shadow: none; border: 1px solid #ddd; break-inside: auto; padding: 0.55rem 0.7rem; margin: 0 0 0.35rem; }
-  #app-content > .card { break-inside: auto; }
-  .report-header h2 { margin: 0 0 0.2rem; }
-  .report-header .small-note { margin: 0.12rem 0; }
-  #networth-report-content { margin-top: 0; }
-  .report-section.condensed { margin-bottom: 0.2rem; }
-  .report-section.condensed .totals-row td { padding: 0.18rem 0.35rem; font-size: 0.88rem; border: none; }
-  .report-subtotal-section .totals-row td { font-size: 0.93rem; border-top: 1px solid #bbb; }
   body { background: #fff; }
+  .card { box-shadow: none; border: 1px solid #ddd; break-inside: auto; padding: 0.55rem 0.7rem; margin: 0 0 0.35rem; }
+  .print-only { display: block !important; font-size: 1.4rem; margin: 0 0 0.6rem; }
+
+  body[data-page="monthly-payments-report"] #app-content > .card:not(#monthly-report-monthly-card):not(#monthly-report-periodic-card) { display: none !important; }
+  body[data-page="liquid-cash-report"] #app-content > .card:not(#liquid-report-bank-card):not(#liquid-report-cash-card) { display: none !important; }
+  body[data-page="net-worth-report"] #app-content > .card:not(.report-header):not(#networth-report-content):not(:last-child) { display: none !important; }
 }
 
 .report-liabilities-heading {
@@ -335,3 +335,7 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 #notifications-btn { min-width: 44px; position: relative; }
 #notifications-btn.has-unread { border-color: #f08c00; }
 #notifications-badge { display: inline-block; margin-left: 4px; background: #d92d20; color: #fff; border-radius: 10px; padding: 0 6px; font-size: 0.75rem; line-height: 1.4; }
+
+.full-width { grid-column: 1 / -1; }
+
+.print-only { display: none; }

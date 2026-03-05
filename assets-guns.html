@@ -1,1 +1,58 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Annual Finance Tracker - Assets Guns</title><link rel="stylesheet" href="styles.css" /></head><body data-page="assets-guns"><div class="layout"><aside class="sidebar"><h2>Finance Tracker</h2><nav class="side-menu"><a href="/">Home</a><a href="/records.html">Records</a><a href="/investments.html">Investments</a><a href="/assets-vehicles.html" class="active">Assets</a><a href="/net-worth-report.html">Net Worth Report</a><a id="nav-admin" href="/admin-users.html" class="hidden">Admin</a></nav></aside><div class="main-column"><header class="topbar"><div class="session-controls"><span id="session-name">Not signed in</span><button id="logout-btn" type="button">Logout</button></div></header><main class="container"><section id="auth-card" class="card auth-card hidden"><h2>Sign In</h2><form id="login-form"><label>Username <input id="login-username" type="text" required /></label><label>Password <input id="login-password" type="password" required /></label><button type="submit">Log In</button></form><form id="signup-form" class="hidden"><label>Full Name <input id="signup-full-name" type="text" required /></label><label>Email <input id="signup-email" type="email" required /></label><label>Username <input id="signup-username" type="text" required /></label><label>Password <input id="signup-password" type="password" required /></label><button type="submit">Create Account</button></form><form id="verify-form" class="hidden"><label>Username <input id="verify-username" type="text" required /></label><label>Verification Code <input id="verify-code" type="text" required /></label><button type="submit">Verify Account</button></form><form id="forgot-password-form" class="hidden"><label>Email or Username <input id="forgot-identifier" type="text" required /></label><button type="submit">Send Reset Link</button></form><div class="auth-actions"><button id="toggle-signup-btn" type="button">Create account</button><button id="toggle-verify-btn" type="button">Verify account</button><button id="toggle-forgot-btn" type="button">Forgot password</button><button id="toggle-login-btn" type="button">Back to login</button></div><p id="auth-message"></p></section><section id="app-content" class="hidden"><section class="card admin-subnav-card"><div class="admin-subnav"><a href="/assets-vehicles.html">Vehicles</a><a href="/assets-guns.html" class="active">Guns</a><a href="/assets-bank-accounts.html">Bank Accounts</a><a href="/assets-cash.html">Cash</a></div></section><section class="card"><h2>Add Gun</h2><form id="guns-form"><div class="form-grid"><label>Description <input id="gun-description" type="text" required /></label><label>Type <input id="gun-type" type="text" required /></label><label>Value ($) <input id="gun-value" type="number" min="0" step="0.01" required /></label></div><button type="submit" id="guns-submit-btn">Add Gun</button><p id="guns-message"></p></form></section><section class="card"><h2>Guns</h2><div class="table-wrap"><table><thead><tr><th data-sort-guns="description" class="sortable">Description</th><th data-sort-guns="gun_type" class="sortable">Type</th><th data-sort-guns="value" class="sortable">Value</th><th>Actions</th></tr></thead><tbody id="guns-body"></tbody></table></div></section></section></main></div></div><footer class="version-footer"><span id="version-info">Version ...</span></footer><script src="app.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Assets Guns</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="assets-guns">
+  <div class="layout">
+    <aside class="sidebar"><h2>Finance Tracker</h2><nav class="side-menu"></nav></aside>
+    <div class="main-column">
+      <header class="topbar"><div class="session-controls"><span id="session-name">Not signed in</span><button id="logout-btn" type="button">Logout</button></div></header>
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden"></section>
+        <section id="app-content" class="hidden">
+          <section class="card admin-subnav-card"><div class="admin-subnav"><a href="/assets-bank-accounts.html">Bank Accounts</a><a href="/assets-cash.html">Cash</a><a href="/assets-vehicles.html">Vehicles</a><a href="/assets-guns.html" class="active">Guns</a></div></section>
+          <section class="card">
+            <h2>Add Gun</h2>
+            <form id="guns-form">
+              <div class="form-grid">
+                <label>Description <input id="gun-description" type="text" required /></label>
+                <label>Type
+                  <select id="gun-type" required>
+                    <option value="">Select type</option>
+                    <option>Handgun</option>
+                    <option>Rifle</option>
+                    <option>Shotgun</option>
+                    <option>Air Rifle</option>
+                  </select>
+                </label>
+                <label>Manufacturer <input id="gun-manufacturer" type="text" /></label>
+                <label>Model <input id="gun-model" type="text" /></label>
+                <label>Year Acquired <input id="gun-year-acquired" type="number" min="1800" max="3000" /></label>
+                <label>Value ($) <input id="gun-value" type="number" min="0" step="0.01" required /></label>
+                <label class="full-width">Notes <textarea id="gun-notes" rows="3"></textarea></label>
+              </div>
+              <button type="submit" id="guns-submit-btn">Add Gun</button>
+              <p id="guns-message"></p>
+            </form>
+          </section>
+          <section class="card">
+            <h2>Guns</h2>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th data-sort-guns="description" class="sortable">Description</th><th data-sort-guns="gun_type" class="sortable">Type</th><th data-sort-guns="manufacturer" class="sortable">Manufacturer</th><th data-sort-guns="model" class="sortable">Model</th><th data-sort-guns="year_acquired" class="sortable">Year Acquired</th><th>Notes</th><th data-sort-guns="value" class="sortable">Value</th><th>Actions</th></tr></thead>
+                <tbody id="guns-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>

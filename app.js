@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/notifications.html", "/liquid-cash-report.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -100,7 +100,7 @@ function renderAuthState() {
 }
 
 function ensureAdminPageAccess() {
-  if (!["admin-users", "admin-email", "admin-backups"].includes(page)) return;
+  if (!["admin-users", "admin-email", "admin-backups", "admin-notifications"].includes(page)) return;
   if (!currentUser || currentUser.role !== "admin") window.location.href = "/";
 }
 
@@ -1225,7 +1225,7 @@ function initNetWorthReportPage() {
         items: stocks.map((x) => ({ description: `${x.ticker}${x.company_name ? ` — ${x.company_name}` : ""}`, value: x.current_price == null ? null : Number(x.shares) * Number(x.current_price) })),
       },
       { title: "Precious Metals", items: metals.map((x) => ({ description: `${x.metal_type} — ${x.description}`, value: Number(x.current_value) })) },
-      { title: "Real Estate", items: realEstate.map((x) => ({ description: `${x.description || x.address} (${x.address})`, value: Number(x.current_value) * (Number(x.percentage_owned) / 100) })) },
+      { title: "Real Estate", items: realEstate.map((x) => ({ description: `${x.description || x.address} (${x.address})${Number(x.percentage_owned) < 100 ? ` (${Number(x.percentage_owned).toFixed(0)}% owned)` : ""}`, value: Number(x.current_value) * (Number(x.percentage_owned) / 100) })) },
       { title: "Business Ventures", items: business.map((x) => ({ description: x.business_name, value: Number(x.business_value) * (Number(x.percentage_owned) / 100) })) },
       { title: "Retirement Accounts", items: retirement.map((x) => ({ description: `${x.description} — ${x.account_type} (${x.broker})`, value: Number(x.value) })) },
       { title: "Vehicles", items: vehicles.map((x) => ({ description: `${x.description} — ${x.model_year || ""} ${x.make} ${x.model}`.trim(), value: Number(x.value) })) },
@@ -1333,6 +1333,7 @@ function initProfilePage() {
     setText(msg, "Profile updated.");
   });
 
+  printBtn?.addEventListener("click", () => window.print());
   return { render };
 }
 
@@ -1447,15 +1448,16 @@ function initAssetsGunsPage() {
   return initAssetCrudPage({
     formId: "guns-form", messageId: "guns-message", bodyId: "guns-body", sortSelector: "[data-sort-guns]", submitBtnId: "guns-submit-btn",
     defaultSort: "description", sortDataset: "sortGuns", apiBase: "/api/assets/guns", addLabel: "Add Gun", updateLabel: "Update Gun",
-    emptyText: "No guns yet.", colspan: 5, totalLabelColspan: 3, savedText: "Gun entry saved.", deleteConfirm: "Delete this gun entry?",
+    emptyText: "No guns yet.", colspan: 9, totalLabelColspan: 7, savedText: "Gun entry saved.", deleteConfirm: "Delete this gun entry?",
     valueGetter: (x) => x.value,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.gun_type}</td><td>${currency(x.value)}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
-    collectPayload: (id) => ({ id, description: document.getElementById("gun-description").value.trim(), type: document.getElementById("gun-type").value.trim(), value: Number(document.getElementById("gun-value").value) }),
-    startEdit: (x) => { document.getElementById("gun-description").value = x.description; document.getElementById("gun-type").value = x.gun_type; document.getElementById("gun-value").value = x.value; },
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.gun_type}</td><td>${x.manufacturer || "—"}</td><td>${x.model || "—"}</td><td>${x.year_acquired || "—"}</td><td>${x.notes || "—"}</td><td>${currency(x.value)}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("gun-description").value.trim(), type: document.getElementById("gun-type").value, manufacturer: document.getElementById("gun-manufacturer").value.trim(), model: document.getElementById("gun-model").value.trim(), yearAcquired: document.getElementById("gun-year-acquired").value, notes: document.getElementById("gun-notes").value.trim(), value: Number(document.getElementById("gun-value").value) }),
+    startEdit: (x) => { document.getElementById("gun-description").value = x.description; document.getElementById("gun-type").value = x.gun_type; document.getElementById("gun-manufacturer").value = x.manufacturer || ""; document.getElementById("gun-model").value = x.model || ""; document.getElementById("gun-year-acquired").value = x.year_acquired || ""; document.getElementById("gun-notes").value = x.notes || ""; document.getElementById("gun-value").value = x.value; },
   });
 }
 
 function initAssetsBankAccountsPage() {
+
   return initAssetCrudPage({
     formId: "bank-form", messageId: "bank-message", bodyId: "bank-body", sortSelector: "[data-sort-bank]", submitBtnId: "bank-submit-btn",
     defaultSort: "description", sortDataset: "sortBank", apiBase: "/api/assets/bank-accounts", addLabel: "Add Bank Account", updateLabel: "Update Bank Account",
@@ -1816,6 +1818,7 @@ function initMonthlyPaymentsReportPage() {
   const monthInput = document.getElementById("report-month");
   const runBtn = document.getElementById("run-monthly-report-btn");
   const printBtn = document.getElementById("print-monthly-report-btn");
+  const printTitle = document.getElementById("monthly-print-title");
   const monthlyBody = document.getElementById("monthly-payments-body");
   const periodicBody = document.getElementById("periodic-payments-body");
 
@@ -1825,6 +1828,11 @@ function initMonthlyPaymentsReportPage() {
     const response = await apiFetch(`/api/reports/monthly-payments?month=${encodeURIComponent(monthInput.value)}`);
     if (!response.ok) return;
     const data = await response.json();
+    if (printTitle) {
+      const [yy, mm] = (data.month || monthInput.value || "").split("-");
+      const monthName = yy && mm ? new Date(Number(yy), Number(mm) - 1, 1).toLocaleString(undefined, { month: "long", year: "numeric" }) : monthInput.value;
+      printTitle.textContent = `Monthly Payments Report for ${monthName}`;
+    }
 
     monthlyBody.innerHTML = "";
     data.monthlyPayments.forEach((item) => {
@@ -1850,8 +1858,11 @@ function initMonthlyPaymentsReportPage() {
 function initLiquidCashReportPage() {
   const bankBody = document.getElementById("liquid-bank-body");
   const cashBody = document.getElementById("liquid-cash-body");
+  const printBtn = document.getElementById("print-liquid-report-btn");
+  const printTitle = document.getElementById("liquid-print-title");
   async function render() {
     const response = await apiFetch("/api/reports/liquid-cash");
+    if (printTitle) printTitle.textContent = "Liquid Cash Report";
     if (!response.ok) return;
     const data = await response.json();
     bankBody.innerHTML = "";
@@ -1867,6 +1878,7 @@ function initLiquidCashReportPage() {
       cashBody.appendChild(tr);
     });
   }
+  printBtn?.addEventListener("click", () => window.print());
   return { render };
 }
 
@@ -1907,6 +1919,41 @@ function initNotificationsPage() {
   });
 
   return { render: loadAndRender };
+}
+
+function initAdminNotificationsPage() {
+  const form = document.getElementById("admin-notification-form");
+  const msg = document.getElementById("admin-notification-message");
+  const body = document.getElementById("admin-notification-history-body");
+
+  async function renderHistory() {
+    const response = await apiFetch("/api/admin/notifications-broadcasts");
+    if (!response.ok || !body) return;
+    const rows = await response.json();
+    body.innerHTML = "";
+    rows.forEach((r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${new Date(r.created_at).toLocaleString()}</td><td>${r.title}</td><td>${r.message}</td><td>${r.sender_username}</td>`;
+      body.appendChild(tr);
+    });
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      title: document.getElementById("admin-notification-title").value.trim(),
+      message: document.getElementById("admin-notification-body").value.trim(),
+    };
+    const response = await apiFetch("/api/admin/notifications-broadcasts", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to send notification.");
+    form.reset();
+    setText(msg, "Notification sent to all users.");
+    await loadCurrentUser();
+    await renderHistory();
+  });
+
+  return { render: renderHistory };
 }
 
 function initResetPasswordPage() {
@@ -2041,6 +2088,11 @@ async function initPageData() {
 
   if (page === "admin-backups") {
     if (!pageController) pageController = initAdminBackupsPage();
+    return pageController.render();
+  }
+
+  if (page === "admin-notifications") {
+    if (!pageController) pageController = initAdminNotificationsPage();
     return pageController.render();
   }
 

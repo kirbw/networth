@@ -23,8 +23,8 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/profile.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/notifications.html"}
-ADMIN_PAGES = {"/admin-users.html", "/admin-email.html", "/admin-backups.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/profile.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html", "/notifications.html"}
+ADMIN_PAGES = {"/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
@@ -481,6 +481,10 @@ def init_db():
                 user_id INTEGER NOT NULL,
                 description TEXT NOT NULL,
                 gun_type TEXT NOT NULL,
+                manufacturer TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT '',
+                year_acquired INTEGER,
+                notes TEXT,
                 value REAL NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -623,6 +627,18 @@ def init_db():
             """
         )
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_user_dedupe ON notifications(user_id, dedupe_key) WHERE dedupe_key IS NOT NULL")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notification_broadcasts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_user_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(sender_user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
 
         table_info_real_estate = conn.execute("PRAGMA table_info(real_estate)").fetchall()
         if table_info_real_estate and not any(col[1] == "description" for col in table_info_real_estate):
@@ -669,6 +685,17 @@ def init_db():
             conn.execute("ALTER TABLE investments ADD COLUMN broker TEXT NOT NULL DEFAULT ''")
         if table_info_investments and "manual_quote" not in inv_cols:
             conn.execute("ALTER TABLE investments ADD COLUMN manual_quote INTEGER NOT NULL DEFAULT 0")
+
+        table_info_asset_guns = conn.execute("PRAGMA table_info(asset_guns)").fetchall()
+        gun_cols = {col[1] for col in table_info_asset_guns}
+        if table_info_asset_guns and "manufacturer" not in gun_cols:
+            conn.execute("ALTER TABLE asset_guns ADD COLUMN manufacturer TEXT NOT NULL DEFAULT ''")
+        if table_info_asset_guns and "model" not in gun_cols:
+            conn.execute("ALTER TABLE asset_guns ADD COLUMN model TEXT NOT NULL DEFAULT ''")
+        if table_info_asset_guns and "year_acquired" not in gun_cols:
+            conn.execute("ALTER TABLE asset_guns ADD COLUMN year_acquired INTEGER")
+        if table_info_asset_guns and "notes" not in gun_cols:
+            conn.execute("ALTER TABLE asset_guns ADD COLUMN notes TEXT")
 
         migrate_records_schema(conn)
         init_default_settings(conn)
@@ -882,7 +909,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(business_name,'')) + LENGTH(CAST(percentage_owned AS TEXT)) + LENGTH(CAST(business_value AS TEXT)) + 48), 0) FROM business_ventures WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(account_type,'')) + LENGTH(COALESCE(broker,'')) + LENGTH(CAST(taxable AS TEXT)) + LENGTH(CAST(value AS TEXT)) + 48), 0) FROM retirement_accounts WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(make,'')) + LENGTH(COALESCE(model,'')) + LENGTH(COALESCE(CAST(model_year AS TEXT), '')) + LENGTH(CAST(value AS TEXT)) + 48), 0) FROM asset_vehicles WHERE user_id = ?", (user_id,))
-        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(gun_type,'')) + LENGTH(CAST(value AS TEXT)) + 40), 0) FROM asset_guns WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(gun_type,'')) + LENGTH(COALESCE(manufacturer,'')) + LENGTH(COALESCE(model,'')) + LENGTH(COALESCE(CAST(year_acquired AS TEXT), '')) + LENGTH(COALESCE(notes,'')) + LENGTH(CAST(value AS TEXT)) + 72), 0) FROM asset_guns WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(institution,'')) + LENGTH(COALESCE(account_type,'')) + LENGTH(CAST(balance AS TEXT)) + 48), 0) FROM asset_bank_accounts WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(CAST(amount AS TEXT)) + 32), 0) FROM asset_cash WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(CAST(interest_rate AS TEXT)) + LENGTH(CAST(monthly_payment AS TEXT)) + LENGTH(COALESCE(start_date,'')) + LENGTH(CAST(initial_amount AS TEXT)) + LENGTH(CAST(current_balance AS TEXT)) + LENGTH(COALESCE(end_date,'')) + LENGTH(COALESCE(interest_change_date,'')) + LENGTH(COALESCE(account_number,'')) + 64), 0) FROM liability_mortgages WHERE user_id = ?", (user_id,))
@@ -925,7 +952,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return "profile"
         if path == "/notifications.html":
             return "notifications"
-        if path in ("/admin-users.html", "/admin-email.html", "/admin-backups.html"):
+        if path in ("/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html"):
             return "admin"
         return ""
 
@@ -1164,7 +1191,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                rows = conn.execute("SELECT id, description, gun_type, value, created_at, updated_at FROM asset_guns WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+                rows = conn.execute("SELECT id, description, gun_type, manufacturer, model, year_acquired, notes, value, created_at, updated_at FROM asset_guns WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
             self._send_json(200, [dict(row) for row in rows])
             return
 
@@ -1440,8 +1467,14 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 record_id = None if record_id_raw in (None, "") else int(record_id_raw)
                 description = str(data.get("description", "")).strip()
                 gun_type = str(data.get("type", "")).strip()
+                manufacturer = str(data.get("manufacturer", "")).strip()
+                model = str(data.get("model", "")).strip()
+                year_raw = data.get("yearAcquired")
+                year_acquired = None if year_raw in (None, "") else int(year_raw)
+                notes = str(data.get("notes", "")).strip() or None
                 value = float(data.get("value", 0))
-                if not description or not gun_type or value < 0:
+                allowed = {"Handgun", "Rifle", "Shotgun", "Air Rifle"}
+                if not description or gun_type not in allowed or value < 0:
                     raise ValueError
             except (ValueError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Invalid gun data."})
@@ -1449,9 +1482,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
                 if record_id is None:
-                    conn.execute("INSERT INTO asset_guns (user_id, description, gun_type, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", (user["id"], description, gun_type, value, now, now))
+                    conn.execute("INSERT INTO asset_guns (user_id, description, gun_type, manufacturer, model, year_acquired, notes, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, gun_type, manufacturer, model, year_acquired, notes, value, now, now))
                 else:
-                    cursor = conn.execute("UPDATE asset_guns SET description = ?, gun_type = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, gun_type, value, now, record_id, user["id"]))
+                    cursor = conn.execute("UPDATE asset_guns SET description = ?, gun_type = ?, manufacturer = ?, model = ?, year_acquired = ?, notes = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, gun_type, manufacturer, model, year_acquired, notes, value, now, record_id, user["id"]))
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Gun entry not found."})
                         return
@@ -1689,6 +1722,16 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     "nextRunAt": get_setting(conn, "backup_next_run_at", ""),
                 }
             self._send_json(200, settings)
+            return
+
+        if parsed.path == "/api/admin/notifications-broadcasts":
+            admin = self._require_admin()
+            if not admin:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT b.id, b.title, b.message, b.created_at, u.username AS sender_username FROM notification_broadcasts b JOIN users u ON u.id = b.sender_user_id ORDER BY b.id DESC LIMIT 100").fetchall()
+            self._send_json(200, [dict(r) for r in rows])
             return
 
         if parsed.path == "/api/admin/backups":
@@ -2228,8 +2271,14 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 record_id = None if record_id_raw in (None, "") else int(record_id_raw)
                 description = str(data.get("description", "")).strip()
                 gun_type = str(data.get("type", "")).strip()
+                manufacturer = str(data.get("manufacturer", "")).strip()
+                model = str(data.get("model", "")).strip()
+                year_raw = data.get("yearAcquired")
+                year_acquired = None if year_raw in (None, "") else int(year_raw)
+                notes = str(data.get("notes", "")).strip() or None
                 value = float(data.get("value", 0))
-                if not description or not gun_type or value < 0:
+                allowed = {"Handgun", "Rifle", "Shotgun", "Air Rifle"}
+                if not description or gun_type not in allowed or value < 0:
                     raise ValueError
             except (ValueError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Invalid gun data."})
@@ -2237,9 +2286,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
                 if record_id is None:
-                    conn.execute("INSERT INTO asset_guns (user_id, description, gun_type, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", (user["id"], description, gun_type, value, now, now))
+                    conn.execute("INSERT INTO asset_guns (user_id, description, gun_type, manufacturer, model, year_acquired, notes, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, gun_type, manufacturer, model, year_acquired, notes, value, now, now))
                 else:
-                    cursor = conn.execute("UPDATE asset_guns SET description = ?, gun_type = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, gun_type, value, now, record_id, user["id"]))
+                    cursor = conn.execute("UPDATE asset_guns SET description = ?, gun_type = ?, manufacturer = ?, model = ?, year_acquired = ?, notes = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, gun_type, manufacturer, model, year_acquired, notes, value, now, record_id, user["id"]))
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Gun entry not found."})
                         return
@@ -2521,6 +2570,29 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     set_setting(conn, "backup_next_run_at", compute_next_backup_run(utc_now(), interval_hours))
                 else:
                     set_setting(conn, "backup_next_run_at", "")
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/admin/notifications-broadcasts":
+            admin = self._require_admin()
+            if not admin:
+                return
+            try:
+                data = self._read_json()
+                title = str(data.get("title", "")).strip()
+                message = str(data.get("message", "")).strip()
+                if not title or not message:
+                    raise ValueError("Title and message are required.")
+            except (ValueError, TypeError, json.JSONDecodeError) as error:
+                self._send_json(400, {"error": str(error)})
+                return
+            ts = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                conn.execute("INSERT INTO notification_broadcasts (sender_user_id, title, message, created_at) VALUES (?, ?, ?, ?)", (admin["id"], title, message, ts))
+                users = conn.execute("SELECT id FROM users").fetchall()
+                for row in users:
+                    conn.execute("INSERT INTO notifications (user_id, type, title, message, status, dedupe_key, created_at, updated_at) VALUES (?, 'system', ?, ?, 'unread', NULL, ?, ?)", (row["id"], title, message, ts, ts))
             self._send_json(200, {"success": True})
             return
 
