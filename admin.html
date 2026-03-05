@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Admin</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="admin">
+  <header class="topbar">
+    <div class="topbar-left">
+      <strong>Annual Finance Tracker</strong>
+      <span id="session-name">Not signed in</span>
+      <button id="logout-btn" type="button">Logout</button>
+    </div>
+    <nav class="menu">
+      <a href="/">Home</a>
+      <a href="/records.html">Records</a>
+      <a id="nav-admin" href="/admin.html" class="active">Admin</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section id="auth-card" class="card auth-card">
+      <h2>Sign In</h2>
+      <form id="login-form">
+        <label>Username <input id="login-username" type="text" required /></label>
+        <label>Password <input id="login-password" type="password" required /></label>
+        <button type="submit">Log In</button>
+      </form>
+      <form id="signup-form" class="hidden">
+        <label>Full Name <input id="signup-full-name" type="text" required /></label>
+        <label>Email <input id="signup-email" type="email" required /></label>
+        <label>Username <input id="signup-username" type="text" required /></label>
+        <label>Password <input id="signup-password" type="password" required /></label>
+        <button type="submit">Create Account</button>
+      </form>
+      <div class="auth-actions">
+        <button id="toggle-signup-btn" type="button">Create account</button>
+        <button id="toggle-login-btn" type="button">Back to login</button>
+      </div>
+      <p id="auth-message"></p>
+    </section>
+
+    <section id="app-content" class="hidden">
+      <section class="card">
+        <h2>Admin Settings</h2>
+        <div class="admin-grid">
+          <form id="create-user-form">
+            <h3>Create User</h3>
+            <label>Full Name <input id="new-full-name" type="text" required /></label>
+            <label>Email <input id="new-email" type="email" required /></label>
+            <label>Username <input id="new-username" type="text" required /></label>
+            <label>Password <input id="new-password" type="password" required /></label>
+            <label>Role
+              <select id="new-role">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+            <button type="submit">Create User</button>
+          </form>
+
+          <form id="reset-password-form">
+            <h3>Reset Password</h3>
+            <label>User
+              <select id="reset-user-id" required></select>
+            </label>
+            <label>New Password <input id="reset-password" type="password" required /></label>
+            <button type="submit">Reset Password</button>
+          </form>
+        </div>
+        <p id="admin-message"></p>
+      </section>
+
+      <section class="card">
+        <h2>Users</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Full Name</th><th>Username</th><th>Email</th><th>Role</th></tr></thead>
+            <tbody id="users-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
