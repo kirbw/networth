@@ -1070,22 +1070,20 @@ function initNetWorthReportPage() {
     section.appendChild(heading);
 
     const table = document.createElement("table");
-    const thead = document.createElement("thead");
-    thead.innerHTML = "<tr><th>Description</th><th>Value</th></tr>";
-    table.appendChild(thead);
+    table.className = "report-table";
     const tbody = document.createElement("tbody");
 
     let total = 0;
     for (const item of items) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${item.description}</td><td>${fmtValue(item.value)}</td>`;
+      tr.innerHTML = `<td class="report-col-label">${item.description}</td><td class="report-col-value">${fmtValue(item.value)}</td>`;
       tbody.appendChild(tr);
       if (item.value != null) total += Number(item.value);
     }
 
     const totalRow = document.createElement("tr");
     totalRow.className = "totals-row";
-    totalRow.innerHTML = `<td><strong>${title} Total</strong></td><td><strong>${currency(total)}</strong></td>`;
+    totalRow.innerHTML = `<td class="report-col-label"><strong>${title} Total</strong></td><td class="report-col-value"><strong>${currency(total)}</strong></td>`;
     tbody.appendChild(totalRow);
     table.appendChild(tbody);
     section.appendChild(table);
@@ -1159,12 +1157,23 @@ function initProfilePage() {
   const emailInput = document.getElementById("profile-email");
   const phoneInput = document.getElementById("profile-phone");
 
+  const streetAddressInput = document.getElementById("profile-street-address");
+  const cityInput = document.getElementById("profile-city");
+  const stateInput = document.getElementById("profile-state");
+  const zipInput = document.getElementById("profile-zip");
+  const currentPasswordInput = document.getElementById("profile-current-password");
+  const newPasswordInput = document.getElementById("profile-new-password");
+
   async function render() {
     if (!currentUser) return;
     fullNameInput.value = currentUser.fullName || "";
     usernameInput.value = currentUser.username || "";
     emailInput.value = currentUser.email || "";
     phoneInput.value = currentUser.phone || "";
+    if (streetAddressInput) streetAddressInput.value = currentUser.streetAddress || "";
+    if (cityInput) cityInput.value = currentUser.city || "";
+    if (stateInput) stateInput.value = currentUser.state || "";
+    if (zipInput) zipInput.value = currentUser.zip || "";
   }
 
   form?.addEventListener("submit", async (event) => {
@@ -1173,11 +1182,19 @@ function initProfilePage() {
       fullName: fullNameInput.value.trim(),
       email: emailInput.value.trim(),
       phone: phoneInput.value.trim(),
+      streetAddress: streetAddressInput?.value.trim() || "",
+      city: cityInput?.value.trim() || "",
+      state: stateInput?.value.trim() || "",
+      zip: zipInput?.value.trim() || "",
+      currentPassword: currentPasswordInput?.value || "",
+      newPassword: newPasswordInput?.value || "",
     };
     const response = await apiFetch("/api/profile", { method: "POST", body: JSON.stringify(payload) });
     const data = await response.json();
     if (!response.ok) return setText(msg, data.error || "Unable to save profile.");
     await loadCurrentUser();
+    if (currentPasswordInput) currentPasswordInput.value = "";
+    if (newPasswordInput) newPasswordInput.value = "";
     setText(msg, "Profile updated.");
   });
 

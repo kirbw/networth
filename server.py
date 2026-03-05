@@ -118,6 +118,14 @@ def ensure_users_columns(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
     if "phone" not in col_names:
         conn.execute("ALTER TABLE users ADD COLUMN phone TEXT")
+    if "street_address" not in col_names:
+        conn.execute("ALTER TABLE users ADD COLUMN street_address TEXT")
+    if "city" not in col_names:
+        conn.execute("ALTER TABLE users ADD COLUMN city TEXT")
+    if "state" not in col_names:
+        conn.execute("ALTER TABLE users ADD COLUMN state TEXT")
+    if "zip" not in col_names:
+        conn.execute("ALTER TABLE users ADD COLUMN zip TEXT")
     if "is_verified" not in col_names:
         conn.execute("ALTER TABLE users ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0")
     if "verification_code" not in col_names:
@@ -240,6 +248,10 @@ def init_db():
                 username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE,
                 phone TEXT,
+                street_address TEXT,
+                city TEXT,
+                state TEXT,
+                zip TEXT,
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL CHECK(role IN ('admin', 'user')),
                 is_verified INTEGER NOT NULL DEFAULT 0,
@@ -543,7 +555,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 """
-                SELECT u.id, u.full_name, u.username, u.email, u.phone, u.role, u.is_verified, s.expires_at
+                SELECT u.id, u.full_name, u.username, u.email, u.phone, u.street_address, u.city, u.state, u.zip, u.role, u.is_verified, s.expires_at
                 FROM sessions s JOIN users u ON u.id = s.user_id
                 WHERE s.token = ?
                 """,
@@ -604,7 +616,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             if not user:
                 self._send_json(200, {"authenticated": False})
                 return
-            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "role": user["role"]}})
+            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "streetAddress": user["street_address"], "city": user["city"], "state": user["state"], "zip": user["zip"], "role": user["role"]}})
             return
 
         if parsed.path == "/api/quote":
@@ -772,16 +784,32 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 email = email_raw if email_raw else None
                 phone_raw = str(data.get("phone", "")).strip()
                 phone = phone_raw if phone_raw else None
+                street_address = str(data.get("streetAddress", "")).strip() or None
+                city = str(data.get("city", "")).strip() or None
+                state = str(data.get("state", "")).strip() or None
+                zip_code = str(data.get("zip", "")).strip() or None
+                current_password = str(data.get("currentPassword", ""))
+                new_password = str(data.get("newPassword", ""))
                 if not full_name:
                     raise ValueError("Full name is required.")
                 if email is not None and "@" not in email:
                     raise ValueError("Email must be valid.")
+                if new_password and len(new_password) < 10:
+                    raise ValueError("New password must be at least 10 characters.")
             except (ValueError, TypeError, json.JSONDecodeError) as error:
                 self._send_json(400, {"error": str(error)})
                 return
             try:
                 with sqlite3.connect(DB_PATH) as conn:
-                    conn.execute("UPDATE users SET full_name = ?, email = ?, phone = ?, updated_at = ? WHERE id = ?", (full_name, email, phone, utc_now_iso(), user["id"]))
+                    conn.row_factory = sqlite3.Row
+                    if new_password:
+                        row = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],)).fetchone()
+                        if not row or not verify_password(current_password, row["password_hash"]):
+                            self._send_json(400, {"error": "Current password is incorrect."})
+                            return
+                        conn.execute("UPDATE users SET full_name = ?, email = ?, phone = ?, street_address = ?, city = ?, state = ?, zip = ?, password_hash = ?, updated_at = ? WHERE id = ?", (full_name, email, phone, street_address, city, state, zip_code, hash_password(new_password), utc_now_iso(), user["id"]))
+                    else:
+                        conn.execute("UPDATE users SET full_name = ?, email = ?, phone = ?, street_address = ?, city = ?, state = ?, zip = ?, updated_at = ? WHERE id = ?", (full_name, email, phone, street_address, city, state, zip_code, utc_now_iso(), user["id"]))
             except sqlite3.IntegrityError:
                 self._send_json(409, {"error": "Email already in use."})
                 return
@@ -1063,7 +1091,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                user = conn.execute("SELECT id, full_name, username, email, phone, role, is_verified, password_hash FROM users WHERE username = ?", (username,)).fetchone()
+                user = conn.execute("SELECT id, full_name, username, email, phone, street_address, city, state, zip, role, is_verified, password_hash FROM users WHERE username = ?", (username,)).fetchone()
                 if not user or not verify_password(password, user["password_hash"]):
                     register_login_failure(login_key)
                     self._send_json(401, {"error": "Invalid username or password."})
@@ -1074,7 +1102,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     return
                 token = secrets.token_urlsafe(32)
                 conn.execute("INSERT INTO sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)", (token, user["id"], (utc_now() + timedelta(days=SESSION_DAYS)).isoformat(), utc_now_iso()))
-            self._send_json(200, {"success": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "role": user["role"]}}, extra_headers={"Set-Cookie": self._session_cookie_header(token)})
+            self._send_json(200, {"success": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "streetAddress": user["street_address"], "city": user["city"], "state": user["state"], "zip": user["zip"], "role": user["role"]}}, extra_headers={"Set-Cookie": self._session_cookie_header(token)})
             return
 
         if parsed.path == "/api/logout":
@@ -1327,16 +1355,32 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 email = email_raw if email_raw else None
                 phone_raw = str(data.get("phone", "")).strip()
                 phone = phone_raw if phone_raw else None
+                street_address = str(data.get("streetAddress", "")).strip() or None
+                city = str(data.get("city", "")).strip() or None
+                state = str(data.get("state", "")).strip() or None
+                zip_code = str(data.get("zip", "")).strip() or None
+                current_password = str(data.get("currentPassword", ""))
+                new_password = str(data.get("newPassword", ""))
                 if not full_name:
                     raise ValueError("Full name is required.")
                 if email is not None and "@" not in email:
                     raise ValueError("Email must be valid.")
+                if new_password and len(new_password) < 10:
+                    raise ValueError("New password must be at least 10 characters.")
             except (ValueError, TypeError, json.JSONDecodeError) as error:
                 self._send_json(400, {"error": str(error)})
                 return
             try:
                 with sqlite3.connect(DB_PATH) as conn:
-                    conn.execute("UPDATE users SET full_name = ?, email = ?, phone = ?, updated_at = ? WHERE id = ?", (full_name, email, phone, utc_now_iso(), user["id"]))
+                    conn.row_factory = sqlite3.Row
+                    if new_password:
+                        row = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],)).fetchone()
+                        if not row or not verify_password(current_password, row["password_hash"]):
+                            self._send_json(400, {"error": "Current password is incorrect."})
+                            return
+                        conn.execute("UPDATE users SET full_name = ?, email = ?, phone = ?, street_address = ?, city = ?, state = ?, zip = ?, password_hash = ?, updated_at = ? WHERE id = ?", (full_name, email, phone, street_address, city, state, zip_code, hash_password(new_password), utc_now_iso(), user["id"]))
+                    else:
+                        conn.execute("UPDATE users SET full_name = ?, email = ?, phone = ?, street_address = ?, city = ?, state = ?, zip = ?, updated_at = ? WHERE id = ?", (full_name, email, phone, street_address, city, state, zip_code, utc_now_iso(), user["id"]))
             except sqlite3.IntegrityError:
                 self._send_json(409, {"error": "Email already in use."})
                 return

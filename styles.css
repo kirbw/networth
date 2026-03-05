@@ -187,6 +187,10 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 .report-section { margin-bottom: 1rem; }
 .report-section h3 { margin: 0 0 0.5rem; }
 
+.report-table { width: 100%; table-layout: fixed; }
+.report-col-label { width: 75%; }
+.report-col-value { width: 25%; text-align: right; white-space: nowrap; }
+
 @media print {
   .sidebar, .topbar, .version-footer, #print-networth-btn { display: none !important; }
   .layout { display: block; }
