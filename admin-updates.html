@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Admin Updates</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="admin-updates">
+  <div class="layout">
+    <aside class="sidebar"><h2>Finance Tracker</h2><nav class="side-menu"></nav></aside>
+    <div class="main-column">
+      <header class="topbar"><div class="session-controls"><span id="session-name">Not signed in</span><button id="logout-btn" type="button">Logout</button></div></header>
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden"></section>
+        <section id="app-content" class="hidden">
+          <section class="card admin-subnav-card">
+            <div class="admin-subnav">
+              <a href="/admin-users.html">User Settings</a>
+              <a href="/admin-email.html">Email Settings</a>
+              <a href="/admin-backups.html">Backup Settings</a>
+              <a href="/admin-updates.html" class="active">Updates</a>
+              <a href="/admin-notifications.html">Notifications</a>
+            </div>
+          </section>
+          <section class="card">
+            <h2>Application Updates</h2>
+            <div class="form-grid">
+              <label>GitHub Repo (owner/repo) <input id="update-repo" type="text" value="kirbw/networth" /></label>
+              <label>GitHub Token (optional/private repo) <input id="update-token" type="password" placeholder="ghp_..." /></label>
+              <label class="checkbox-row"><input id="update-clear-token" type="checkbox" /> Clear saved token</label>
+            </div>
+            <p class="small-note">Current Version: <span id="update-current-version">unknown</span></p>
+            <p class="small-note">Latest Version: <span id="update-latest-version">unknown</span></p>
+            <p class="small-note">Saved token: <span id="update-has-token">unknown</span></p>
+            <div class="inline-actions">
+              <button id="save-update-settings-btn" type="button">Save Update Settings</button>
+              <button id="check-updates-btn" type="button">Check for Updates</button>
+              <button id="apply-update-btn" type="button">Apply Latest Update</button>
+              <button id="restart-service-btn" type="button">Restart Service</button>
+            </div>
+            <p class="small-note">Applying updates creates a backup first and updates application files. Use Restart Service to apply fully.</p>
+            <p id="updates-message"></p>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>
