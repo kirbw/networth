@@ -1809,6 +1809,12 @@ function initAdminBackupsPage() {
   const runBtn = document.getElementById("run-backup-btn");
   const msg = document.getElementById("backup-settings-message");
   const listBody = document.getElementById("backup-files-body");
+  const updateRepoInput = document.getElementById("update-repo");
+  const checkUpdatesBtn = document.getElementById("check-updates-btn");
+  const applyUpdateBtn = document.getElementById("apply-update-btn");
+  const updatesMsg = document.getElementById("updates-message");
+  const updateCurrent = document.getElementById("update-current-version");
+  const updateLatest = document.getElementById("update-latest-version");
 
   async function loadBackups() {
     const response = await apiFetch("/api/admin/backups");
@@ -1833,6 +1839,12 @@ function initAdminBackupsPage() {
       document.getElementById("backup-next-run").textContent = s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : "Not scheduled";
     }
     await loadBackups();
+    const updateSettings = await apiFetch("/api/admin/update-settings");
+    if (updateSettings.ok) {
+      const settings = await updateSettings.json();
+      if (updateRepoInput) updateRepoInput.value = settings.repo || "";
+      if (updateCurrent) updateCurrent.textContent = settings.currentVersion || "unknown";
+    }
   }
 
   form?.addEventListener("submit", async (event) => {
@@ -1858,6 +1870,33 @@ function initAdminBackupsPage() {
     if (!window.confirm(`Delete backup ${name}?`)) return;
     const response = await apiFetch(`/api/admin/backups/${encodeURIComponent(name)}`, { method: "DELETE" });
     if (!response.ok) return;
+    await loadBackups();
+  });
+
+
+  checkUpdatesBtn?.addEventListener("click", async () => {
+    if (!checkUpdatesBtn) return;
+    if (updateRepoInput) {
+      await apiFetch("/api/admin/update-settings", { method: "POST", body: JSON.stringify({ repo: updateRepoInput.value.trim() }) });
+    }
+    const response = await apiFetch("/api/admin/updates/check");
+    const data = await response.json();
+    if (!response.ok) return setText(updatesMsg, data.error || "Unable to check updates.");
+    if (updateCurrent) updateCurrent.textContent = data.currentVersion || "unknown";
+    if (updateLatest) updateLatest.textContent = data.latestVersion || data.currentVersion || "unknown";
+    setText(updatesMsg, data.updateAvailable ? `Update available: ${data.latestVersion}` : "You are up to date.");
+  });
+
+  applyUpdateBtn?.addEventListener("click", async () => {
+    if (!window.confirm("Apply latest update? A database backup will be created first and app restart may be required.")) return;
+    if (updateRepoInput) {
+      await apiFetch("/api/admin/update-settings", { method: "POST", body: JSON.stringify({ repo: updateRepoInput.value.trim() }) });
+    }
+    const response = await apiFetch("/api/admin/updates/apply", { method: "POST", body: JSON.stringify({ confirm: true }) });
+    const data = await response.json();
+    if (!response.ok) return setText(updatesMsg, data.error || "Update failed.");
+    setText(updatesMsg, `Update applied (${data.appliedVersion}). Backup: ${data.backup}. Restart required.`);
+    if (updateLatest) updateLatest.textContent = data.appliedVersion || "unknown";
     await loadBackups();
   });
 
