@@ -83,9 +83,19 @@
           </section>
           <section class="card">
             <h2>Settings</h2>
-            <form id="profile-settings-form">
-              <div class="form-grid">
-                <label>Giving Goal Percentage <input id="profile-giving-goal-percent" type="number" min="0" max="100" step="0.1" value="10" /></label><label class="checkbox-row"><input id="profile-dark-mode" type="checkbox" /> Enable dark mode</label>
+            <form id="profile-settings-form" class="settings-form">
+              <div class="settings-grid">
+                <div class="setting-item">
+                  <label for="profile-giving-goal-percent">Giving Goal Percentage</label>
+                  <div class="setting-inline">
+                    <input id="profile-giving-goal-percent" class="compact-input" type="number" min="0" max="100" step="0.1" value="10" />
+                    <span class="setting-suffix">%</span>
+                  </div>
+                </div>
+                <label class="setting-toggle" for="profile-dark-mode">
+                  <input id="profile-dark-mode" type="checkbox" />
+                  <span>Enable dark mode</span>
+                </label>
               </div>
               <button type="submit">Save Settings</button>
               <p id="profile-settings-message"></p>

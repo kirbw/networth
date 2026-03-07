@@ -1085,7 +1085,6 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             f'<a href="/taxes.html"{active("taxes")}>Taxes</a>'
             f'<a href="/net-worth-report.html"{active("reports")}>Reports</a>'
             f'<a href="/profile.html"{active("profile")}>My Profile</a>'
-            f'<a href="/notifications.html"{active("notifications")}>Notifications</a>'
             f'<a id="nav-admin" href="/admin-users.html" class="hidden{(" active" if group == "admin" else "")}">Admin</a>'
             '</nav></aside>'
         )
@@ -1463,14 +1462,25 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute("SELECT id, name, goal_type, target_amount, target_category, target_subtype, goal_date, created_at, updated_at FROM goals WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
-                retire_total = conn.execute("SELECT COALESCE(SUM(value), 0) FROM retirement_accounts WHERE user_id = ?", (user["id"],)).fetchone()[0]
+                progress_by_subtype = {
+                    "bank-accounts": float(conn.execute("SELECT COALESCE(SUM(balance), 0) FROM asset_bank_accounts WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                    "cash": float(conn.execute("SELECT COALESCE(SUM(amount), 0) FROM asset_cash WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                    "vehicles": float(conn.execute("SELECT COALESCE(SUM(value), 0) FROM asset_vehicles WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                    "guns": float(conn.execute("SELECT COALESCE(SUM(value), 0) FROM asset_guns WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                    "stocks": float(conn.execute("SELECT COALESCE(SUM(shares * current_price), 0) FROM investments WHERE user_id = ? AND current_price IS NOT NULL", (user["id"],)).fetchone()[0]),
+                    "precious-metals": float(conn.execute("SELECT COALESCE(SUM(current_value), 0) FROM precious_metals WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                    "real-estate": float(conn.execute("SELECT COALESCE(SUM(current_value * (percentage_owned / 100.0)), 0) FROM real_estate WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                    "business-ventures": float(conn.execute("SELECT COALESCE(SUM(business_value * (percentage_owned / 100.0)), 0) FROM business_ventures WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                    "retirement-accounts": float(conn.execute("SELECT COALESCE(SUM(value), 0) FROM retirement_accounts WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                    "mortgages": float(conn.execute("SELECT COALESCE(SUM(current_balance), 0) FROM liability_mortgages WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                    "credit-cards": float(conn.execute("SELECT COALESCE(SUM(current_balance), 0) FROM liability_credit_cards WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                    "loans": float(conn.execute("SELECT COALESCE(SUM(current_balance), 0) FROM liability_loans WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                    "recurring-expenses": float(conn.execute("SELECT COALESCE(SUM(amount), 0) FROM liability_recurring_expenses WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                }
             payload = []
             for r in rows:
                 item = dict(r)
-                progress = 0.0
-                if item["target_subtype"] == "retirement-accounts":
-                    progress = float(retire_total)
-                item["progress_amount"] = progress
+                item["progress_amount"] = float(progress_by_subtype.get(item.get("target_subtype"), 0.0))
                 payload.append(item)
             self._send_json(200, payload)
             return
@@ -2952,36 +2962,33 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             try:
                 data = self._read_json()
                 year = int(data.get("taxYear"))
-                file_name = str(data.get("fileName", "taxes.pdf")).strip() or "taxes.pdf"
+                federal = float(data.get("federalTax", 0))
+                state = float(data.get("stateTax", 0))
+                local = float(data.get("localTax", 0))
+                file_name = str(data.get("fileName", "")).strip() or None
                 content_type = str(data.get("contentType", "application/pdf")).strip() or "application/pdf"
-                file_base64 = str(data.get("fileBase64", "")).strip()
+                file_base64 = str(data.get("fileBase64", "")).strip() or None
                 notes = str(data.get("notes", "")).strip() or None
-                if year < 1900 or year > 3000 or not file_base64:
+                if year < 1900 or year > 3000 or federal < 0 or state < 0 or local < 0:
+                    raise ValueError
+                if (file_base64 and not file_name) or (file_name and not file_base64):
                     raise ValueError
             except (ValueError, TypeError, json.JSONDecodeError):
-                self._send_json(400, {"error": "Invalid tax upload payload."})
+                self._send_json(400, {"error": "Invalid tax payload."})
                 return
-            federal = state = local = 0.0
-            try:
-                raw = base64.b64decode(file_base64.encode("ascii"), validate=True)
-                text = raw.decode("latin-1", errors="ignore")
-                def extract(label):
-                    m = re.search(rf"{label}[^0-9$]*\$?([0-9][0-9,]*(?:\.[0-9]{{2}})?)", text, flags=re.I)
-                    return float((m.group(1).replace(',', '')) if m else 0)
-                federal = extract("federal")
-                state = extract("state")
-                local = extract("local")
-            except Exception:
-                pass
-            stored = encrypt_field_value(file_base64)
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                conn.execute("INSERT INTO tax_years (user_id, tax_year, federal_tax, state_tax, local_tax, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, tax_year) DO UPDATE SET federal_tax=excluded.federal_tax, state_tax=excluded.state_tax, local_tax=excluded.local_tax, notes=excluded.notes, updated_at=excluded.updated_at", (user["id"], year, federal, state, local, notes, now, now))
+                conn.execute(
+                    "INSERT INTO tax_years (user_id, tax_year, federal_tax, state_tax, local_tax, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, tax_year) DO UPDATE SET federal_tax=excluded.federal_tax, state_tax=excluded.state_tax, local_tax=excluded.local_tax, notes=excluded.notes, updated_at=excluded.updated_at",
+                    (user["id"], year, federal, state, local, notes, now, now),
+                )
                 y = conn.execute("SELECT id FROM tax_years WHERE user_id = ? AND tax_year = ?", (user["id"], year)).fetchone()
                 tax_year_id = y["id"]
-                conn.execute("DELETE FROM tax_documents WHERE user_id = ? AND tax_year_id = ?", (user["id"], tax_year_id))
-                conn.execute("INSERT INTO tax_documents (user_id, tax_year_id, file_name, content_type, file_data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], tax_year_id, file_name, content_type, stored, now, now))
+                if file_base64:
+                    stored = encrypt_field_value(file_base64)
+                    conn.execute("DELETE FROM tax_documents WHERE user_id = ? AND tax_year_id = ?", (user["id"], tax_year_id))
+                    conn.execute("INSERT INTO tax_documents (user_id, tax_year_id, file_name, content_type, file_data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], tax_year_id, file_name, content_type, stored, now, now))
             self._send_json(200, {"success": True, "federalTax": federal, "stateTax": state, "localTax": local})
             return
 

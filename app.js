@@ -2110,14 +2110,19 @@ function initGoalsPage() {
   });
 
   renderSubtypeOptions();
+  setInterval(() => { render(); }, 10000);
   return { render };
 }
 
 function initTaxesPage() {
   const form = document.getElementById("taxes-form");
   const fileInput = document.getElementById("tax-file");
+  const federalInput = document.getElementById("tax-federal");
+  const stateInput = document.getElementById("tax-state");
+  const localInput = document.getElementById("tax-local");
   const body = document.getElementById("taxes-body");
   const msg = document.getElementById("taxes-message");
+  let rowsById = new Map();
 
   async function render() {
     const response = await apiFetch("/api/taxes");
@@ -2126,46 +2131,48 @@ function initTaxesPage() {
       return;
     }
     const rows = await response.json();
+    rowsById = new Map(rows.map((x) => [Number(x.id), x]));
     body.innerHTML = "";
     if (!rows.length) { body.innerHTML = '<tr><td colspan="6">No tax years yet.</td></tr>'; return; }
     rows.forEach((x) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${x.tax_year}</td><td>${currency(x.federal_tax || 0)}</td><td>${currency(x.state_tax || 0)}</td><td>${currency(x.local_tax || 0)}</td><td>${x.document_id ? `<a href="/api/taxes/documents/${x.document_id}/download">${x.file_name || "Download"}</a>` : "—"}</td><td><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${x.tax_year}</td><td>${currency(x.federal_tax || 0)} <button class="edit-btn tax-amount-edit-btn" data-id="${x.id}" data-field="federal" type="button">Edit</button></td><td>${currency(x.state_tax || 0)} <button class="edit-btn tax-amount-edit-btn" data-id="${x.id}" data-field="state" type="button">Edit</button></td><td>${currency(x.local_tax || 0)} <button class="edit-btn tax-amount-edit-btn" data-id="${x.id}" data-field="local" type="button">Edit</button></td><td>${x.document_id ? `<a href="/api/taxes/documents/${x.document_id}/download">${x.file_name || "Download"}</a>` : "—"}</td><td><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
       body.appendChild(tr);
     });
   }
 
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const file = fileInput?.files?.[0];
-    if (!file) {
-      setText(msg, "Please choose a PDF file.");
-      return;
-    }
+    const year = Number(document.getElementById("tax-year").value);
+    const federalTax = Number(federalInput?.value || 0);
+    const stateTax = Number(stateInput?.value || 0);
+    const localTax = Number(localInput?.value || 0);
+    const file = fileInput?.files?.[0] || null;
 
     try {
-      const b64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      let fileBase64 = "";
+      if (file) {
+        fileBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
       const payload = {
-        taxYear: Number(document.getElementById("tax-year").value),
-        fileName: file.name,
-        contentType: file.type || "application/pdf",
-        fileBase64: b64,
+        taxYear: year,
+        federalTax,
+        stateTax,
+        localTax,
+        fileName: file ? file.name : "",
+        contentType: file?.type || "application/pdf",
+        fileBase64,
         notes: document.getElementById("tax-notes").value.trim(),
       };
       const response = await apiFetch("/api/taxes", { method: "POST", body: JSON.stringify(payload) });
-      let data = {};
-      try {
-        data = await response.json();
-      } catch {
-        data = {};
-      }
+      const data = await response.json();
       if (!response.ok) {
-        setText(msg, data.error || "Unable to upload tax file.");
+        setText(msg, data.error || "Unable to save tax year.");
         return;
       }
       form.reset();
@@ -2178,9 +2185,40 @@ function initTaxesPage() {
 
   body?.addEventListener("click", async (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLButtonElement) || !target.classList.contains("delete-btn")) return;
-    await apiFetch(`/api/taxes/${target.dataset.id}`, { method: "DELETE" });
-    await render();
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    const row = rowsById.get(id);
+    if (!row) return;
+
+    if (target.classList.contains("tax-amount-edit-btn")) {
+      const field = String(target.dataset.field || "");
+      const currentValue = field === "federal" ? Number(row.federal_tax || 0) : field === "state" ? Number(row.state_tax || 0) : Number(row.local_tax || 0);
+      const input = window.prompt(`Enter ${field} tax amount`, String(currentValue));
+      if (input === null) return;
+      const nextValue = Number(input);
+      if (!Number.isFinite(nextValue) || nextValue < 0) {
+        setText(msg, "Please enter a valid non-negative amount.");
+        return;
+      }
+      const payload = {
+        taxYear: Number(row.tax_year),
+        federalTax: field === "federal" ? nextValue : Number(row.federal_tax || 0),
+        stateTax: field === "state" ? nextValue : Number(row.state_tax || 0),
+        localTax: field === "local" ? nextValue : Number(row.local_tax || 0),
+        notes: row.notes || "",
+      };
+      const response = await apiFetch("/api/taxes", { method: "POST", body: JSON.stringify(payload) });
+      const data = await response.json();
+      if (!response.ok) return setText(msg, data.error || "Unable to update tax amount.");
+      await render();
+      setText(msg, "Tax amount updated.");
+      return;
+    }
+
+    if (target.classList.contains("delete-btn")) {
+      await apiFetch(`/api/taxes/${target.dataset.id}`, { method: "DELETE" });
+      await render();
+    }
   });
 
   return { render };

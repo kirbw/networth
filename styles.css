@@ -388,3 +388,48 @@ body.dark-mode .totals-row td { background: #1a2538; }
   gap: 0.5rem;
 }
 progress { width: 220px; height: 0.9rem; }
+
+.settings-form {
+  max-width: 560px;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.setting-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.setting-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.compact-input {
+  width: 120px;
+}
+
+.setting-suffix {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.setting-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  max-width: fit-content;
+}
+
+.setting-toggle input {
+  width: auto;
+  margin: 0;
+}
