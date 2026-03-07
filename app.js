@@ -1809,6 +1809,12 @@ function initAdminBackupsPage() {
   const runBtn = document.getElementById("run-backup-btn");
   const msg = document.getElementById("backup-settings-message");
   const listBody = document.getElementById("backup-files-body");
+  const updateRepoInput = document.getElementById("update-repo");
+  const checkUpdatesBtn = document.getElementById("check-updates-btn");
+  const applyUpdateBtn = document.getElementById("apply-update-btn");
+  const updatesMsg = document.getElementById("updates-message");
+  const updateCurrent = document.getElementById("update-current-version");
+  const updateLatest = document.getElementById("update-latest-version");
 
   async function loadBackups() {
     const response = await apiFetch("/api/admin/backups");
@@ -1833,6 +1839,12 @@ function initAdminBackupsPage() {
       document.getElementById("backup-next-run").textContent = s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : "Not scheduled";
     }
     await loadBackups();
+    const updateSettings = await apiFetch("/api/admin/update-settings");
+    if (updateSettings.ok) {
+      const settings = await updateSettings.json();
+      if (updateRepoInput) updateRepoInput.value = settings.repo || "";
+      if (updateCurrent) updateCurrent.textContent = settings.currentVersion || "unknown";
+    }
   }
 
   form?.addEventListener("submit", async (event) => {
@@ -1858,6 +1870,33 @@ function initAdminBackupsPage() {
     if (!window.confirm(`Delete backup ${name}?`)) return;
     const response = await apiFetch(`/api/admin/backups/${encodeURIComponent(name)}`, { method: "DELETE" });
     if (!response.ok) return;
+    await loadBackups();
+  });
+
+
+  checkUpdatesBtn?.addEventListener("click", async () => {
+    if (!checkUpdatesBtn) return;
+    if (updateRepoInput) {
+      await apiFetch("/api/admin/update-settings", { method: "POST", body: JSON.stringify({ repo: updateRepoInput.value.trim() }) });
+    }
+    const response = await apiFetch("/api/admin/updates/check");
+    const data = await response.json();
+    if (!response.ok) return setText(updatesMsg, data.error || "Unable to check updates.");
+    if (updateCurrent) updateCurrent.textContent = data.currentVersion || "unknown";
+    if (updateLatest) updateLatest.textContent = data.latestVersion || data.currentVersion || "unknown";
+    setText(updatesMsg, data.updateAvailable ? `Update available: ${data.latestVersion}` : "You are up to date.");
+  });
+
+  applyUpdateBtn?.addEventListener("click", async () => {
+    if (!window.confirm("Apply latest update? A database backup will be created first and app restart may be required.")) return;
+    if (updateRepoInput) {
+      await apiFetch("/api/admin/update-settings", { method: "POST", body: JSON.stringify({ repo: updateRepoInput.value.trim() }) });
+    }
+    const response = await apiFetch("/api/admin/updates/apply", { method: "POST", body: JSON.stringify({ confirm: true }) });
+    const data = await response.json();
+    if (!response.ok) return setText(updatesMsg, data.error || "Update failed.");
+    setText(updatesMsg, `Update applied (${data.appliedVersion}). Backup: ${data.backup}. Restart required.`);
+    if (updateLatest) updateLatest.textContent = data.appliedVersion || "unknown";
     await loadBackups();
   });
 
@@ -2014,15 +2053,141 @@ function initAdminNotificationsPage() {
 
 
 function initRecurringExpensesPage() {
-  return initLiabilityCrudPage({
-    formId: "recurring-expenses-form", messageId: "recurring-expenses-message", bodyId: "recurring-expenses-body", sortSelector: "[data-sort-recurring]", submitBtnId: "recurring-expenses-submit-btn",
-    defaultSort: "description", sortDataset: "sortRecurring", apiBase: "/api/liabilities/recurring-expenses", addLabel: "Add Recurring Expense", updateLabel: "Update Recurring Expense",
-    emptyText: "No recurring expenses yet.", colspan: 6, totalLabelColspan: 3, savedText: "Recurring expense saved.", deleteConfirm: "Delete this recurring expense?",
-    balanceGetter: (x) => x.amount,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.category || "—"}</td><td>${currency(x.amount)}</td><td>${x.frequency}</td><td>${x.start_date || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
-    collectPayload: (id) => ({ id, description: document.getElementById("rec-description").value.trim(), category: document.getElementById("rec-category").value.trim(), amount: Number(document.getElementById("rec-amount").value), frequency: document.getElementById("rec-frequency").value, startDate: document.getElementById("rec-start-date").value }),
-    startEdit: (x) => { document.getElementById("rec-description").value = x.description; document.getElementById("rec-category").value = x.category || ""; document.getElementById("rec-amount").value = x.amount; document.getElementById("rec-frequency").value = x.frequency || "monthly"; document.getElementById("rec-start-date").value = x.start_date || ""; },
+  const form = document.getElementById("recurring-expenses-form");
+  const msg = document.getElementById("recurring-expenses-message");
+  const body = document.getElementById("recurring-expenses-body");
+  const submitBtn = document.getElementById("recurring-expenses-submit-btn");
+  const categorySelect = document.getElementById("rec-category");
+  const newCategoryWrap = document.getElementById("rec-new-category-wrap");
+  const newCategoryInput = document.getElementById("rec-new-category");
+  const addCategoryBtn = document.getElementById("rec-add-category-btn");
+  let rows = [];
+  let editingId = null;
+
+  function resetEdit() {
+    editingId = null;
+    if (submitBtn) submitBtn.textContent = "Add Recurring Expense";
+  }
+
+  async function loadCategories() {
+    if (!categorySelect) return;
+    const response = await apiFetch("/api/liabilities/recurring-expense-categories");
+    if (!response.ok) return;
+    const categories = await response.json();
+    const current = categorySelect.value;
+    categorySelect.innerHTML = '<option value="">Select category</option>';
+    categories.forEach((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      categorySelect.appendChild(option);
+    });
+    const newOpt = document.createElement("option");
+    newOpt.value = "__new__";
+    newOpt.textContent = "+ Add New Category";
+    categorySelect.appendChild(newOpt);
+    if (current) categorySelect.value = current;
+  }
+
+  async function loadRows() {
+    const response = await apiFetch("/api/liabilities/recurring-expenses");
+    if (!response.ok) return;
+    rows = await response.json();
+  }
+
+  function renderTable() {
+    body.innerHTML = "";
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="7">No recurring expenses yet.</td></tr>';
+      return;
+    }
+    let total = 0;
+    rows.forEach((x) => {
+      total += Number(x.amount || 0);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${x.description}</td><td>${x.category || "—"}</td><td>${currency(x.amount)}</td><td>${x.frequency}</td><td>${x.start_date || "—"}</td><td>${x.end_date || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+      body.appendChild(tr);
+    });
+    const tr = document.createElement("tr");
+    tr.className = "totals-row";
+    tr.innerHTML = `<td colspan="2"><strong>Totals</strong></td><td><strong>${currency(total)}</strong></td><td colspan="4"></td>`;
+    body.appendChild(tr);
+  }
+
+  categorySelect?.addEventListener("change", () => {
+    if (!newCategoryWrap) return;
+    newCategoryWrap.classList.toggle("hidden", categorySelect.value !== "__new__");
   });
+
+  addCategoryBtn?.addEventListener("click", async () => {
+    const name = newCategoryInput?.value.trim() || "";
+    if (!name) return setText(msg, "Enter a category name.");
+    const response = await apiFetch("/api/liabilities/recurring-expense-categories", { method: "POST", body: JSON.stringify({ name }) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to add category.");
+    await loadCategories();
+    if (categorySelect) categorySelect.value = name;
+    if (newCategoryInput) newCategoryInput.value = "";
+    if (newCategoryWrap) newCategoryWrap.classList.add("hidden");
+    setText(msg, "Category added.");
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const category = categorySelect?.value || "";
+    if (!category || category === "__new__") return setText(msg, "Select a category.");
+    const payload = {
+      id: editingId,
+      description: document.getElementById("rec-description").value.trim(),
+      category,
+      amount: Number(document.getElementById("rec-amount").value),
+      frequency: document.getElementById("rec-frequency").value,
+      startDate: document.getElementById("rec-start-date").value,
+      endDate: document.getElementById("rec-end-date").value,
+    };
+    const response = await apiFetch("/api/liabilities/recurring-expenses", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save recurring expense.");
+    form.reset();
+    resetEdit();
+    await loadRows();
+    renderTable();
+    setText(msg, "Recurring expense saved.");
+  });
+
+  body?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const row = rows.find((x) => x.id === id);
+      if (!row) return;
+      document.getElementById("rec-description").value = row.description || "";
+      document.getElementById("rec-amount").value = row.amount || "";
+      document.getElementById("rec-frequency").value = row.frequency || "monthly";
+      document.getElementById("rec-start-date").value = row.start_date || "";
+      document.getElementById("rec-end-date").value = row.end_date || "";
+      if (categorySelect) categorySelect.value = row.category || "";
+      editingId = id;
+      if (submitBtn) submitBtn.textContent = "Update Recurring Expense";
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm("Delete this recurring expense?")) return;
+    await apiFetch(`/api/liabilities/recurring-expenses/${id}`, { method: "DELETE" });
+    if (editingId === id) { form?.reset(); resetEdit(); }
+    await loadRows();
+    renderTable();
+  });
+
+  return {
+    render: async () => {
+      await loadCategories();
+      await loadRows();
+      renderTable();
+      if (newCategoryWrap) newCategoryWrap.classList.add("hidden");
+    },
+  };
 }
 
 function initGoalsPage() {
@@ -2116,13 +2281,21 @@ function initGoalsPage() {
 
 function initTaxesPage() {
   const form = document.getElementById("taxes-form");
+  const submitBtn = document.getElementById("taxes-submit-btn");
   const fileInput = document.getElementById("tax-file");
   const federalInput = document.getElementById("tax-federal");
   const stateInput = document.getElementById("tax-state");
   const localInput = document.getElementById("tax-local");
   const body = document.getElementById("taxes-body");
   const msg = document.getElementById("taxes-message");
+  const totalEl = document.getElementById("tax-total-paid");
   let rowsById = new Map();
+  let editingId = null;
+
+  function resetEdit() {
+    editingId = null;
+    if (submitBtn) submitBtn.textContent = "Save Tax Year";
+  }
 
   async function render() {
     const response = await apiFetch("/api/taxes");
@@ -2133,12 +2306,22 @@ function initTaxesPage() {
     const rows = await response.json();
     rowsById = new Map(rows.map((x) => [Number(x.id), x]));
     body.innerHTML = "";
-    if (!rows.length) { body.innerHTML = '<tr><td colspan="6">No tax years yet.</td></tr>'; return; }
+    let totalTax = 0;
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="6">No tax years yet.</td></tr>';
+      if (totalEl) totalEl.textContent = currency(0);
+      return;
+    }
     rows.forEach((x) => {
+      const federal = Number(x.federal_tax || 0);
+      const state = Number(x.state_tax || 0);
+      const local = Number(x.local_tax || 0);
+      totalTax += federal + state + local;
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${x.tax_year}</td><td>${currency(x.federal_tax || 0)} <button class="edit-btn tax-amount-edit-btn" data-id="${x.id}" data-field="federal" type="button">Edit</button></td><td>${currency(x.state_tax || 0)} <button class="edit-btn tax-amount-edit-btn" data-id="${x.id}" data-field="state" type="button">Edit</button></td><td>${currency(x.local_tax || 0)} <button class="edit-btn tax-amount-edit-btn" data-id="${x.id}" data-field="local" type="button">Edit</button></td><td>${x.document_id ? `<a href="/api/taxes/documents/${x.document_id}/download">${x.file_name || "Download"}</a>` : "—"}</td><td><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${x.tax_year}</td><td>${currency(federal)}</td><td>${currency(state)}</td><td>${currency(local)}</td><td>${x.document_id ? `<a href="/api/taxes/documents/${x.document_id}/download">${x.file_name || "Download"}</a>` : "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
       body.appendChild(tr);
     });
+    if (totalEl) totalEl.textContent = currency(totalTax);
   }
 
   form?.addEventListener("submit", async (event) => {
@@ -2171,11 +2354,9 @@ function initTaxesPage() {
       };
       const response = await apiFetch("/api/taxes", { method: "POST", body: JSON.stringify(payload) });
       const data = await response.json();
-      if (!response.ok) {
-        setText(msg, data.error || "Unable to save tax year.");
-        return;
-      }
+      if (!response.ok) return setText(msg, data.error || "Unable to save tax year.");
       form.reset();
+      resetEdit();
       await render();
       setText(msg, "Tax year saved.");
     } catch {
@@ -2190,33 +2371,21 @@ function initTaxesPage() {
     const row = rowsById.get(id);
     if (!row) return;
 
-    if (target.classList.contains("tax-amount-edit-btn")) {
-      const field = String(target.dataset.field || "");
-      const currentValue = field === "federal" ? Number(row.federal_tax || 0) : field === "state" ? Number(row.state_tax || 0) : Number(row.local_tax || 0);
-      const input = window.prompt(`Enter ${field} tax amount`, String(currentValue));
-      if (input === null) return;
-      const nextValue = Number(input);
-      if (!Number.isFinite(nextValue) || nextValue < 0) {
-        setText(msg, "Please enter a valid non-negative amount.");
-        return;
-      }
-      const payload = {
-        taxYear: Number(row.tax_year),
-        federalTax: field === "federal" ? nextValue : Number(row.federal_tax || 0),
-        stateTax: field === "state" ? nextValue : Number(row.state_tax || 0),
-        localTax: field === "local" ? nextValue : Number(row.local_tax || 0),
-        notes: row.notes || "",
-      };
-      const response = await apiFetch("/api/taxes", { method: "POST", body: JSON.stringify(payload) });
-      const data = await response.json();
-      if (!response.ok) return setText(msg, data.error || "Unable to update tax amount.");
-      await render();
-      setText(msg, "Tax amount updated.");
+    if (target.classList.contains("edit-btn")) {
+      document.getElementById("tax-year").value = row.tax_year || "";
+      if (federalInput) federalInput.value = row.federal_tax ?? "";
+      if (stateInput) stateInput.value = row.state_tax ?? "";
+      if (localInput) localInput.value = row.local_tax ?? "";
+      document.getElementById("tax-notes").value = row.notes || "";
+      if (fileInput) fileInput.value = "";
+      editingId = id;
+      if (submitBtn) submitBtn.textContent = "Update Tax Year";
       return;
     }
 
     if (target.classList.contains("delete-btn")) {
       await apiFetch(`/api/taxes/${target.dataset.id}`, { method: "DELETE" });
+      if (editingId === id) { form?.reset(); resetEdit(); }
       await render();
     }
   });

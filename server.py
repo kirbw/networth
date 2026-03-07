@@ -8,6 +8,8 @@ import json
 import os
 import re
 import secrets
+import shutil
+import tempfile
 import smtplib
 import sqlite3
 import urllib.request
@@ -33,6 +35,7 @@ FIELD_ENCRYPTION_KEY = os.getenv("FIELD_ENCRYPTION_KEY", "").strip()
 FIELD_ENCRYPTION_PREFIX = "enc:v1:"
 _AES_GCM = None
 BACKUP_DIR = Path(__file__).with_name("backups")
+UPDATES_DIR = Path(__file__).with_name("updates")
 
 
 def utc_now() -> datetime:
@@ -243,6 +246,7 @@ def init_default_settings(conn: sqlite3.Connection):
         "backup_schedule_interval_hours": "24",
         "backup_keep_count": "10",
         "backup_next_run_at": "",
+        "update_repo": "kirbw/networth",
     }
     for key, value in defaults.items():
         set_setting(conn, key, get_setting(conn, key, value) or value)
@@ -653,6 +657,19 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS recurring_expense_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, name),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS goals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -787,6 +804,11 @@ def init_db():
             conn.execute("ALTER TABLE investments ADD COLUMN broker TEXT NOT NULL DEFAULT ''")
         if table_info_investments and "manual_quote" not in inv_cols:
             conn.execute("ALTER TABLE investments ADD COLUMN manual_quote INTEGER NOT NULL DEFAULT 0")
+
+        table_info_recurring = conn.execute("PRAGMA table_info(liability_recurring_expenses)").fetchall()
+        recurring_expense_cols = {col[1] for col in table_info_recurring}
+        if table_info_recurring and "end_date" not in recurring_expense_cols:
+            conn.execute("ALTER TABLE liability_recurring_expenses ADD COLUMN end_date TEXT")
 
         table_info_asset_vehicles = conn.execute("PRAGMA table_info(asset_vehicles)").fetchall()
         vehicle_cols = {col[1] for col in table_info_asset_vehicles}
@@ -1451,8 +1473,24 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                rows = conn.execute("SELECT id, description, category, amount, frequency, start_date, created_at, updated_at FROM liability_recurring_expenses WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+                rows = conn.execute("SELECT id, description, category, amount, frequency, start_date, end_date, created_at, updated_at FROM liability_recurring_expenses WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
             self._send_json(200, [dict(r) for r in rows])
+            return
+
+        if parsed.path == "/api/liabilities/recurring-expense-categories":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT name FROM recurring_expense_categories WHERE user_id = ? ORDER BY name ASC", (user["id"],)).fetchall()
+                existing = [r["name"] for r in rows]
+                historical = conn.execute("SELECT DISTINCT category FROM liability_recurring_expenses WHERE user_id = ? AND category IS NOT NULL AND TRIM(category) <> '' ORDER BY category ASC", (user["id"],)).fetchall()
+                for row in historical:
+                    cat = row[0]
+                    if cat not in existing:
+                        existing.append(cat)
+            self._send_json(200, existing)
             return
 
         if parsed.path == "/api/goals":
@@ -1551,7 +1589,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 mortgages = conn.execute("SELECT description, monthly_payment, start_date FROM liability_mortgages WHERE user_id = ?", (user["id"],)).fetchall()
                 cards = conn.execute("SELECT description, monthly_payment, start_date FROM liability_credit_cards WHERE user_id = ?", (user["id"],)).fetchall()
                 loans = conn.execute("SELECT description, payment_amount, payment_frequency, start_date, loan_type FROM liability_loans WHERE user_id = ?", (user["id"],)).fetchall()
-                recurring = conn.execute("SELECT description, category, amount, frequency, start_date FROM liability_recurring_expenses WHERE user_id = ?", (user["id"],)).fetchall()
+                recurring = conn.execute("SELECT description, category, amount, frequency, start_date, end_date FROM liability_recurring_expenses WHERE user_id = ?", (user["id"],)).fetchall()
 
             for row in mortgages:
                 day = parse_day(row["start_date"])
@@ -1570,6 +1608,14 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     continue
 
                 due_in_month = True
+                end_date_raw = row["end_date"]
+                if end_date_raw:
+                    try:
+                        end_dt = datetime.strptime(end_date_raw[:10], "%Y-%m-%d")
+                        if datetime(year, month, 28) < end_dt.replace(day=1):
+                            pass
+                    except ValueError:
+                        pass
                 if start_date:
                     try:
                         start_dt = datetime.strptime(start_date[:10], "%Y-%m-%d")
@@ -1594,6 +1640,14 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 day = parse_day(start_date)
                 amount = float(row["amount"] or 0)
                 due_in_month = True
+                end_date_raw = row["end_date"]
+                if end_date_raw:
+                    try:
+                        end_dt = datetime.strptime(end_date_raw[:10], "%Y-%m-%d")
+                        if datetime(year, month, 28) < end_dt.replace(day=1):
+                            pass
+                    except ValueError:
+                        pass
                 if start_date:
                     try:
                         start_dt = datetime.strptime(start_date[:10], "%Y-%m-%d")
@@ -1604,6 +1658,14 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                             due_in_month = month_index % 3 == 0
                         elif frequency == "yearly":
                             due_in_month = month_index % 12 == 0
+                    except ValueError:
+                        pass
+                if end_date_raw:
+                    try:
+                        end_dt = datetime.strptime(end_date_raw[:10], "%Y-%m-%d")
+                        month_end = datetime(year, month, 28)
+                        if end_dt < month_end.replace(day=1):
+                            due_in_month = False
                     except ValueError:
                         pass
                 if not due_in_month:
@@ -1732,6 +1794,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, model_year, date_purchased, inspection_expires_on, value, now, now))
                 else:
@@ -1766,6 +1829,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_guns (user_id, description, gun_type, manufacturer, model, year_acquired, notes, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, gun_type, manufacturer, model, year_acquired, notes, value, now, now))
                 else:
@@ -1795,6 +1859,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_bank_accounts (user_id, description, institution, account_type, balance, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], description, institution, account_type, balance, now, now))
                 else:
@@ -1822,6 +1887,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_cash (user_id, description, amount, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", (user["id"], description, amount, now, now))
                 else:
@@ -1859,6 +1925,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO liability_mortgages (user_id, description, real_estate_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, interest_change_date, account_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, real_estate_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, interest_change_date, account_number_stored, now, now))
                 else:
@@ -1897,6 +1964,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO liability_credit_cards (user_id, description, interest_rate, special_interest_rate, special_rate_end_date, monthly_payment, start_date, initial_amount, current_balance, end_date, credit_limit, account_number_last4, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, interest_rate, special_interest_rate, special_rate_end_date, monthly_payment, start_date, initial_amount, current_balance, end_date, credit_limit, account_number_last4_stored, now, now))
                 else:
@@ -1943,6 +2011,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO liability_loans (user_id, description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, monthly_payment, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number_stored, now, now))
                 else:
@@ -1966,6 +2035,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 amount = float(data.get("amount", 0))
                 frequency = str(data.get("frequency", "monthly")).strip().lower()
                 start_date = str(data.get("startDate", "")).strip() or None
+                end_date = str(data.get("endDate", "")).strip() or None
                 if frequency not in ("weekly", "monthly", "quarterly", "yearly"):
                     raise ValueError
                 if not description or amount < 0:
@@ -1975,14 +2045,33 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
-                    conn.execute("INSERT INTO liability_recurring_expenses (user_id, description, category, amount, frequency, start_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, category, amount, frequency, start_date, now, now))
+                    conn.execute("INSERT INTO liability_recurring_expenses (user_id, description, category, amount, frequency, start_date, end_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, category, amount, frequency, start_date, end_date, now, now))
                 else:
-                    cur = conn.execute("UPDATE liability_recurring_expenses SET description = ?, category = ?, amount = ?, frequency = ?, start_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, category, amount, frequency, start_date, now, record_id, user["id"]))
+                    cur = conn.execute("UPDATE liability_recurring_expenses SET description = ?, category = ?, amount = ?, frequency = ?, start_date = ?, end_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, category, amount, frequency, start_date, end_date, now, record_id, user["id"]))
                     if cur.rowcount == 0:
                         self._send_json(404, {"error": "Recurring expense not found."})
                         return
             self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/liabilities/recurring-expense-categories":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                name = str(data.get("name", "")).strip()
+                if not name:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid category name."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], name, now, now))
+            self._send_json(200, {"success": True, "name": name})
             return
 
         if parsed.path == "/api/goals":
@@ -2010,6 +2099,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO goals (user_id, name, goal_type, target_amount, target_category, target_subtype, goal_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], name, goal_type, target_amount, target_category, target_subtype, goal_date, now, now))
                 else:
@@ -2125,6 +2215,36 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute("SELECT b.id, b.title, b.message, b.created_at, u.username AS sender_username FROM notification_broadcasts b JOIN users u ON u.id = b.sender_user_id ORDER BY b.id DESC LIMIT 100").fetchall()
             self._send_json(200, [dict(r) for r in rows])
+            return
+
+        if parsed.path == "/api/admin/update-settings":
+            admin = self._require_admin()
+            if not admin:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                repo = get_setting(conn, "update_repo", "kirbw/networth")
+            self._send_json(200, {"repo": repo, "currentVersion": read_version()})
+            return
+
+        if parsed.path == "/api/admin/updates/check":
+            admin = self._require_admin()
+            if not admin:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                repo = get_setting(conn, "update_repo", "kirbw/networth")
+            try:
+                url = f"https://api.github.com/repos/{repo}/releases/latest"
+                req = urllib.request.Request(url, headers={"User-Agent": "finance-tracker-updater"})
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                latest = str(data.get("tag_name", "")).strip()
+                html_url = str(data.get("html_url", "")).strip()
+                tarball_url = str(data.get("tarball_url", "")).strip()
+                current = read_version()
+                update_available = bool(latest) and latest != current
+                self._send_json(200, {"repo": repo, "currentVersion": current, "latestVersion": latest or current, "updateAvailable": update_available, "releaseUrl": html_url, "tarballUrl": tarball_url})
+            except Exception as error:
+                self._send_json(500, {"error": f"Unable to check updates: {error}"})
             return
 
         if parsed.path == "/api/admin/backups":
@@ -2395,6 +2515,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute(
                         "INSERT INTO investments (user_id, ticker, broker, company_name, shares, purchase_price, current_price, manual_quote, purchase_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -2434,6 +2555,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute(
                         "INSERT INTO precious_metals (user_id, metal_type, description, quantity, weight, purchase_date, where_purchased, purchase_price, current_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -2470,6 +2592,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute(
                         "INSERT INTO real_estate (user_id, address, description, percentage_owned, purchase_price, current_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -2504,6 +2627,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute(
                         "INSERT INTO business_ventures (user_id, business_name, percentage_owned, business_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -2543,6 +2667,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute(
                         "INSERT INTO retirement_accounts (user_id, description, account_type, broker, taxable, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -2667,6 +2792,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, model_year, date_purchased, inspection_expires_on, value, now, now))
                 else:
@@ -2701,6 +2827,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_guns (user_id, description, gun_type, manufacturer, model, year_acquired, notes, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, gun_type, manufacturer, model, year_acquired, notes, value, now, now))
                 else:
@@ -2730,6 +2857,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_bank_accounts (user_id, description, institution, account_type, balance, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], description, institution, account_type, balance, now, now))
                 else:
@@ -2757,6 +2885,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_cash (user_id, description, amount, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", (user["id"], description, amount, now, now))
                 else:
@@ -2794,6 +2923,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO liability_mortgages (user_id, description, real_estate_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, interest_change_date, account_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, real_estate_id, interest_rate, monthly_payment, start_date, initial_amount, current_balance, end_date, interest_change_date, account_number_stored, now, now))
                 else:
@@ -2832,6 +2962,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO liability_credit_cards (user_id, description, interest_rate, special_interest_rate, special_rate_end_date, monthly_payment, start_date, initial_amount, current_balance, end_date, credit_limit, account_number_last4, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, interest_rate, special_interest_rate, special_rate_end_date, monthly_payment, start_date, initial_amount, current_balance, end_date, credit_limit, account_number_last4_stored, now, now))
                 else:
@@ -2878,6 +3009,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO liability_loans (user_id, description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, monthly_payment, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number_stored, now, now))
                 else:
@@ -2901,6 +3033,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 amount = float(data.get("amount", 0))
                 frequency = str(data.get("frequency", "monthly")).strip().lower()
                 start_date = str(data.get("startDate", "")).strip() or None
+                end_date = str(data.get("endDate", "")).strip() or None
                 if frequency not in ("weekly", "monthly", "quarterly", "yearly"):
                     raise ValueError
                 if not description or amount < 0:
@@ -2910,14 +3043,33 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
-                    conn.execute("INSERT INTO liability_recurring_expenses (user_id, description, category, amount, frequency, start_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, category, amount, frequency, start_date, now, now))
+                    conn.execute("INSERT INTO liability_recurring_expenses (user_id, description, category, amount, frequency, start_date, end_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, category, amount, frequency, start_date, end_date, now, now))
                 else:
-                    cur = conn.execute("UPDATE liability_recurring_expenses SET description = ?, category = ?, amount = ?, frequency = ?, start_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, category, amount, frequency, start_date, now, record_id, user["id"]))
+                    cur = conn.execute("UPDATE liability_recurring_expenses SET description = ?, category = ?, amount = ?, frequency = ?, start_date = ?, end_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, category, amount, frequency, start_date, end_date, now, record_id, user["id"]))
                     if cur.rowcount == 0:
                         self._send_json(404, {"error": "Recurring expense not found."})
                         return
             self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/liabilities/recurring-expense-categories":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                name = str(data.get("name", "")).strip()
+                if not name:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid category name."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], name, now, now))
+            self._send_json(200, {"success": True, "name": name})
             return
 
         if parsed.path == "/api/goals":
@@ -2945,6 +3097,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO goals (user_id, name, goal_type, target_amount, target_category, target_subtype, goal_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], name, goal_type, target_amount, target_category, target_subtype, goal_date, now, now))
                 else:
@@ -3067,6 +3220,23 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+        if parsed.path == "/api/admin/update-settings":
+            admin = self._require_admin()
+            if not admin:
+                return
+            try:
+                data = self._read_json()
+                repo = str(data.get("repo", "")).strip()
+                if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+                    raise ValueError("Invalid GitHub repo format. Use owner/repo.")
+            except (ValueError, TypeError, json.JSONDecodeError) as error:
+                self._send_json(400, {"error": str(error)})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                set_setting(conn, "update_repo", repo)
+            self._send_json(200, {"success": True, "repo": repo})
+            return
+
         if parsed.path == "/api/admin/backup-settings":
             admin = self._require_admin()
             if not admin:
@@ -3114,6 +3284,66 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 for row in users:
                     conn.execute("INSERT INTO notifications (user_id, type, title, message, status, dedupe_key, created_at, updated_at) VALUES (?, 'system', ?, ?, 'unread', NULL, ?, ?)", (row["id"], title, message, ts, ts))
             self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/admin/updates/apply":
+            admin = self._require_admin()
+            if not admin:
+                return
+            try:
+                data = self._read_json()
+                confirm = bool(data.get("confirm", False))
+            except (TypeError, json.JSONDecodeError):
+                confirm = False
+            if not confirm:
+                self._send_json(400, {"error": "Confirmation required to apply update."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                repo = get_setting(conn, "update_repo", "kirbw/networth")
+                keep_count = safe_int(get_setting(conn, "backup_keep_count", "10"), 10)
+                backup_file = create_backup_snapshot()
+                enforce_backup_retention(keep_count)
+            try:
+                req = urllib.request.Request(f"https://api.github.com/repos/{repo}/releases/latest", headers={"User-Agent": "finance-tracker-updater"})
+                with urllib.request.urlopen(req, timeout=20) as response:
+                    release = json.loads(response.read().decode("utf-8"))
+                tarball_url = str(release.get("tarball_url", "")).strip()
+                latest = str(release.get("tag_name", "")).strip() or "unknown"
+                if not tarball_url.startswith("https://"):
+                    raise RuntimeError("Invalid release download URL.")
+                UPDATES_DIR.mkdir(parents=True, exist_ok=True)
+                with tempfile.TemporaryDirectory(prefix="networth-update-") as tmpdir:
+                    archive_path = Path(tmpdir) / "release.tar.gz"
+                    with urllib.request.urlopen(urllib.request.Request(tarball_url, headers={"User-Agent": "finance-tracker-updater"}), timeout=60) as response:
+                        archive_path.write_bytes(response.read())
+                    extract_dir = Path(tmpdir) / "extract"
+                    extract_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.unpack_archive(str(archive_path), str(extract_dir))
+                    roots = [p for p in extract_dir.iterdir() if p.is_dir()]
+                    if not roots:
+                        raise RuntimeError("Downloaded release archive is empty.")
+                    source_root = roots[0]
+                    allowed_ext = {".html", ".css", ".js", ".py", ".md"}
+                    changed = 0
+                    for src in source_root.rglob("*"):
+                        if not src.is_file():
+                            continue
+                        rel = src.relative_to(source_root)
+                        if any(part.startswith('.') for part in rel.parts):
+                            continue
+                        if rel.parts and rel.parts[0] in ("backups", "updates", "__pycache__"):
+                            continue
+                        if rel.name in ("finance.db", "AGENTS.md"):
+                            continue
+                        if rel.name != "VERSION" and src.suffix.lower() not in allowed_ext:
+                            continue
+                        dest = Path(__file__).parent / rel
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(src, dest)
+                        changed += 1
+                self._send_json(200, {"success": True, "appliedVersion": latest, "backup": backup_file.name, "filesUpdated": changed, "restartRequired": True})
+            except Exception as error:
+                self._send_json(500, {"error": f"Update failed after backup {backup_file.name}: {error}"})
             return
 
         if parsed.path == "/api/admin/backups/run":
