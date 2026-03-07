@@ -1913,6 +1913,7 @@ function initAdminBackupsPage() {
 
 function initAdminUpdatesPage() {
   const updateRepoInput = document.getElementById("update-repo");
+  const updateChannelInput = document.getElementById("update-channel");
   const updateTokenInput = document.getElementById("update-token");
   const clearTokenInput = document.getElementById("update-clear-token");
   const saveBtn = document.getElementById("save-update-settings-btn");
@@ -1920,15 +1921,34 @@ function initAdminUpdatesPage() {
   const applyUpdateBtn = document.getElementById("apply-update-btn");
   const restartServiceBtn = document.getElementById("restart-service-btn");
   const updatesMsg = document.getElementById("updates-message");
+  const updatesProgress = document.getElementById("updates-progress");
   const updateCurrent = document.getElementById("update-current-version");
   const updateLatest = document.getElementById("update-latest-version");
   const updateHasToken = document.getElementById("update-has-token");
+
+  function renderProgress(data) {
+    if (!updatesProgress) return;
+    const entries = [];
+    if (Array.isArray(data?.progress)) entries.push(...data.progress.map(String));
+    if (Array.isArray(data?.updatedFiles) && data.updatedFiles.length) {
+      entries.push("Files updated:");
+      entries.push(...data.updatedFiles.map((file) => ` - ${file}`));
+    }
+    if (!entries.length) {
+      updatesProgress.textContent = "";
+      updatesProgress.classList.add("hidden");
+      return;
+    }
+    updatesProgress.textContent = entries.join("\n");
+    updatesProgress.classList.remove("hidden");
+  }
 
   async function loadSettings() {
     const response = await apiFetch("/api/admin/update-settings");
     if (!response.ok) return;
     const settings = await response.json();
     if (updateRepoInput) updateRepoInput.value = settings.repo || "";
+    if (updateChannelInput) updateChannelInput.value = settings.channel || "stable";
     if (updateCurrent) updateCurrent.textContent = settings.currentVersion || "unknown";
     if (updateHasToken) updateHasToken.textContent = settings.hasToken ? "Saved" : "Not saved";
   }
@@ -1936,6 +1956,7 @@ function initAdminUpdatesPage() {
   saveBtn?.addEventListener("click", async () => {
     const payload = {
       repo: updateRepoInput?.value.trim() || "",
+      channel: updateChannelInput?.value || "stable",
       token: updateTokenInput?.value.trim() || "",
       clearToken: Boolean(clearTokenInput?.checked),
     };
@@ -1949,21 +1970,29 @@ function initAdminUpdatesPage() {
   });
 
   checkUpdatesBtn?.addEventListener("click", async () => {
+    renderProgress(null);
     const response = await apiFetch("/api/admin/updates/check");
     const data = await response.json();
-    if (!response.ok) return setText(updatesMsg, data.error || "Unable to check updates.");
+    if (!response.ok) {
+      renderProgress(data);
+      return setText(updatesMsg, data.error || "Unable to check updates.");
+    }
     if (updateCurrent) updateCurrent.textContent = data.currentVersion || "unknown";
     if (updateLatest) updateLatest.textContent = data.latestVersion || data.currentVersion || "unknown";
-    setText(updatesMsg, data.updateAvailable ? `Update available: ${data.latestVersion}` : "You are up to date.");
+    const channelLabel = data.channel === "prerelease" ? "Prerelease" : "Stable";
+    setText(updatesMsg, data.updateAvailable ? `Update available (${channelLabel}): ${data.latestVersion}` : `You are up to date on ${channelLabel}.`);
   });
 
   applyUpdateBtn?.addEventListener("click", async () => {
     if (!window.confirm("Apply latest update? A database backup will be created first and restart may be required.")) return;
+    setText(updatesMsg, "Running update...");
+    renderProgress({ progress: ["Starting update..."] });
     const response = await apiFetch("/api/admin/updates/apply", { method: "POST", body: JSON.stringify({ confirm: true }) });
     const data = await response.json();
+    renderProgress(data);
     if (!response.ok) return setText(updatesMsg, data.error || "Update failed.");
     if (updateLatest) updateLatest.textContent = data.appliedVersion || "unknown";
-    setText(updatesMsg, `Update applied (${data.appliedVersion}). Backup: ${data.backup}. Click Restart Service to apply.`);
+    setText(updatesMsg, `Update successful (${data.appliedVersion}). Backup: ${data.backup}. Click Restart Service to apply.`);
   });
 
   restartServiceBtn?.addEventListener("click", async () => {
