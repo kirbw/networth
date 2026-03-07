@@ -258,6 +258,20 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
   .side-menu { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 }
 
+
+.update-progress {
+  margin-top: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8faff;
+  padding: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.83rem;
+  white-space: pre-wrap;
+  max-height: 260px;
+  overflow: auto;
+}
+
 .small-note {
   color: var(--muted);
   font-size: 0.85rem;
