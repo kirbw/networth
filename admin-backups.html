@@ -85,6 +85,21 @@
           </section>
 
           <section class="card">
+            <h2>Application Updates</h2>
+            <div class="form-grid">
+              <label>GitHub Repo (owner/repo) <input id="update-repo" type="text" value="kirbw/networth" /></label>
+            </div>
+            <p class="small-note">Current Version: <span id="update-current-version">unknown</span></p>
+            <p class="small-note">Latest Version: <span id="update-latest-version">unknown</span></p>
+            <div class="inline-actions">
+              <button id="check-updates-btn" type="button">Check for Updates</button>
+              <button id="apply-update-btn" type="button">Apply Latest Update</button>
+            </div>
+            <p class="small-note">Applying updates creates a backup first and may require restarting the web app.</p>
+            <p id="updates-message"></p>
+          </section>
+
+          <section class="card">
             <h2>Available Backups</h2>
             <div class="table-wrap">
               <table>
