@@ -250,6 +250,7 @@ def init_default_settings(conn: sqlite3.Connection):
         "backup_keep_count": "10",
         "backup_next_run_at": "",
         "update_repo": "kirbw/networth",
+        "update_channel": "stable",
         "update_github_token": "",
     }
     for key, value in defaults.items():
@@ -284,6 +285,30 @@ def _github_open(url: str, token: str | None = None, timeout: int = 20):
         raise last_error
     raise RuntimeError("Unable to open GitHub URL.")
 
+
+
+
+def _normalize_update_channel(raw: str | None) -> str:
+    value = str(raw or "stable").strip().lower()
+    return "prerelease" if value == "prerelease" else "stable"
+
+
+def _github_release_for_channel(repo: str, token: str | None, channel: str) -> dict:
+    selected = _normalize_update_channel(channel)
+    if selected == "stable":
+        with _github_open(f"https://api.github.com/repos/{repo}/releases/latest", token=token, timeout=20) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    with _github_open(f"https://api.github.com/repos/{repo}/releases?per_page=30", token=token, timeout=20) as response:
+        releases = json.loads(response.read().decode("utf-8"))
+    if not isinstance(releases, list) or not releases:
+        raise RuntimeError("No releases found for repository.")
+    for rel in releases:
+        if not isinstance(rel, dict):
+            continue
+        if str(rel.get("tag_name", "")).strip():
+            return rel
+    raise RuntimeError("No valid releases found for repository.")
 
 def _restart_process_soon(delay_seconds: float = 0.5):
     def _restart():
@@ -2266,9 +2291,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 repo = get_setting(conn, "update_repo", "kirbw/networth")
+                channel = _normalize_update_channel(get_setting(conn, "update_channel", "stable"))
                 token_stored = get_setting(conn, "update_github_token", "")
                 token = decrypt_field_value(token_stored)
-            self._send_json(200, {"repo": repo, "currentVersion": read_version(), "hasToken": bool(token)})
+            self._send_json(200, {"repo": repo, "channel": channel, "currentVersion": read_version(), "hasToken": bool(token)})
             return
 
         if parsed.path == "/api/admin/updates/check":
@@ -2277,17 +2303,16 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 repo = get_setting(conn, "update_repo", "kirbw/networth")
+                channel = _normalize_update_channel(get_setting(conn, "update_channel", "stable"))
                 token = decrypt_field_value(get_setting(conn, "update_github_token", ""))
             try:
-                url = f"https://api.github.com/repos/{repo}/releases/latest"
-                with _github_open(url, token=token, timeout=15) as response:
-                    data = json.loads(response.read().decode("utf-8"))
+                data = _github_release_for_channel(repo, token, channel)
                 latest = str(data.get("tag_name", "")).strip()
                 html_url = str(data.get("html_url", "")).strip()
                 tarball_url = str(data.get("tarball_url", "")).strip()
                 current = read_version()
                 update_available = bool(latest) and latest != current
-                self._send_json(200, {"repo": repo, "currentVersion": current, "latestVersion": latest or current, "updateAvailable": update_available, "releaseUrl": html_url, "tarballUrl": tarball_url})
+                self._send_json(200, {"repo": repo, "channel": channel, "currentVersion": current, "latestVersion": latest or current, "updateAvailable": update_available, "releaseUrl": html_url, "tarballUrl": tarball_url})
             except urllib.error.HTTPError as error:
                 details = ""
                 try:
@@ -3284,6 +3309,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             try:
                 data = self._read_json()
                 repo = str(data.get("repo", "")).strip()
+                channel = _normalize_update_channel(data.get("channel", "stable"))
                 token = str(data.get("token", "")).strip()
                 clear_token = bool(data.get("clearToken", False))
                 if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
@@ -3293,12 +3319,13 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 set_setting(conn, "update_repo", repo)
+                set_setting(conn, "update_channel", channel)
                 if clear_token:
                     set_setting(conn, "update_github_token", "")
                 elif token:
                     set_setting(conn, "update_github_token", encrypt_field_value(token))
                 has_token = bool(decrypt_field_value(get_setting(conn, "update_github_token", "")))
-            self._send_json(200, {"success": True, "repo": repo, "hasToken": has_token})
+            self._send_json(200, {"success": True, "repo": repo, "channel": channel, "hasToken": has_token})
             return
 
         if parsed.path == "/api/admin/backup-settings":
@@ -3364,22 +3391,31 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 repo = get_setting(conn, "update_repo", "kirbw/networth")
+                channel = _normalize_update_channel(get_setting(conn, "update_channel", "stable"))
                 token = decrypt_field_value(get_setting(conn, "update_github_token", ""))
                 keep_count = safe_int(get_setting(conn, "backup_keep_count", "10"), 10)
                 backup_file = create_backup_snapshot()
                 enforce_backup_retention(keep_count)
+            progress = [
+                f"Created backup: {backup_file.name}",
+                f"Selected channel: {channel}",
+                f"Fetching release metadata from {repo}",
+            ]
+            updated_files: list[str] = []
             try:
-                with _github_open(f"https://api.github.com/repos/{repo}/releases/latest", token=token, timeout=20) as response:
-                    release = json.loads(response.read().decode("utf-8"))
+                release = _github_release_for_channel(repo, token, channel)
                 tarball_url = str(release.get("tarball_url", "")).strip()
                 latest = str(release.get("tag_name", "")).strip() or "unknown"
+                progress.append(f"Resolved release tag: {latest}")
                 if not tarball_url.startswith("https://"):
                     raise RuntimeError("Invalid release download URL.")
                 UPDATES_DIR.mkdir(parents=True, exist_ok=True)
                 with tempfile.TemporaryDirectory(prefix="networth-update-") as tmpdir:
                     archive_path = Path(tmpdir) / "release.tar.gz"
+                    progress.append("Downloading release archive")
                     with _github_open(tarball_url, token=token, timeout=60) as response:
                         archive_path.write_bytes(response.read())
+                    progress.append("Extracting archive")
                     extract_dir = Path(tmpdir) / "extract"
                     extract_dir.mkdir(parents=True, exist_ok=True)
                     shutil.unpack_archive(str(archive_path), str(extract_dir))
@@ -3388,7 +3424,6 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                         raise RuntimeError("Downloaded release archive is empty.")
                     source_root = roots[0]
                     allowed_ext = {".html", ".css", ".js", ".py", ".md"}
-                    changed = 0
                     for src in source_root.rglob("*"):
                         if not src.is_file():
                             continue
@@ -3404,8 +3439,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                         dest = Path(__file__).parent / rel
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(src, dest)
-                        changed += 1
-                self._send_json(200, {"success": True, "appliedVersion": latest, "backup": backup_file.name, "filesUpdated": changed, "restartRequired": True})
+                        updated_files.append(rel.as_posix())
+                progress.append(f"Updated {len(updated_files)} files")
+                progress.append("Update finished successfully")
+                self._send_json(200, {"success": True, "channel": channel, "appliedVersion": latest, "backup": backup_file.name, "filesUpdated": len(updated_files), "updatedFiles": updated_files, "progress": progress, "restartRequired": True})
             except urllib.error.HTTPError as error:
                 details = ""
                 try:
@@ -3417,9 +3454,12 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     message += ". Verify repo path and token access for private releases and archives."
                 if details:
                     message += f" | {details[:500]}"
-                self._send_json(502, {"error": message})
+                progress.append(f"Update failed: {message}")
+                self._send_json(502, {"error": message, "backup": backup_file.name, "progress": progress, "updatedFiles": updated_files})
             except Exception as error:
-                self._send_json(500, {"error": f"Update failed after backup {backup_file.name}: {error}"})
+                message = f"Update failed after backup {backup_file.name}: {error}"
+                progress.append(f"Update failed: {error}")
+                self._send_json(500, {"error": message, "backup": backup_file.name, "progress": progress, "updatedFiles": updated_files})
             return
 
         if parsed.path == "/api/admin/restart-service":
