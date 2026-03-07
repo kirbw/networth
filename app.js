@@ -2029,6 +2029,44 @@ function initGoalsPage() {
   const form = document.getElementById("goals-form");
   const body = document.getElementById("goals-body");
   const msg = document.getElementById("goals-message");
+  const categorySelect = document.getElementById("goal-target-category");
+  const subtypeSelect = document.getElementById("goal-target-subtype");
+
+  const subtypeOptions = {
+    asset: [
+      { value: "bank-accounts", label: "Bank Accounts" },
+      { value: "cash", label: "Cash" },
+      { value: "vehicles", label: "Vehicles" },
+      { value: "guns", label: "Guns" },
+    ],
+    investment: [
+      { value: "stocks", label: "Stocks" },
+      { value: "precious-metals", label: "Precious Metals" },
+      { value: "real-estate", label: "Real Estate" },
+      { value: "business-ventures", label: "Business Ventures" },
+      { value: "retirement-accounts", label: "Retirement Accounts" },
+    ],
+    liability: [
+      { value: "mortgages", label: "Mortgages" },
+      { value: "credit-cards", label: "Credit Cards" },
+      { value: "loans", label: "Loans" },
+      { value: "recurring-expenses", label: "Recurring Expenses" },
+    ],
+  };
+
+  function renderSubtypeOptions() {
+    if (!categorySelect || !subtypeSelect) return;
+    const category = categorySelect.value;
+    const options = subtypeOptions[category] || [];
+    subtypeSelect.innerHTML = "";
+    options.forEach((optionData) => {
+      const option = document.createElement("option");
+      option.value = optionData.value;
+      option.textContent = optionData.label;
+      subtypeSelect.appendChild(option);
+    });
+  }
+
   async function render() {
     const response = await apiFetch("/api/goals");
     if (!response.ok) return;
@@ -2042,20 +2080,36 @@ function initGoalsPage() {
       body.appendChild(tr);
     });
   }
+
+  categorySelect?.addEventListener("change", renderSubtypeOptions);
+
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const payload = { name: document.getElementById("goal-name").value.trim(), goalType: document.getElementById("goal-type").value, targetAmount: Number(document.getElementById("goal-target-amount").value), targetCategory: document.getElementById("goal-target-category").value, targetSubtype: document.getElementById("goal-target-subtype").value, goalDate: document.getElementById("goal-date").value };
+    const payload = {
+      name: document.getElementById("goal-name").value.trim(),
+      goalType: document.getElementById("goal-type").value,
+      targetAmount: Number(document.getElementById("goal-target-amount").value),
+      targetCategory: categorySelect?.value || "investment",
+      targetSubtype: subtypeSelect?.value || "retirement-accounts",
+      goalDate: document.getElementById("goal-date").value,
+    };
     const response = await apiFetch("/api/goals", { method: "POST", body: JSON.stringify(payload) });
     const data = await response.json();
     if (!response.ok) return setText(msg, data.error || "Unable to save goal.");
-    form.reset(); await render(); setText(msg, "Goal saved.");
+    form.reset();
+    renderSubtypeOptions();
+    await render();
+    setText(msg, "Goal saved.");
   });
+
   body?.addEventListener("click", async (event) => {
     const target = event.target;
     if (!(target instanceof HTMLButtonElement) || !target.classList.contains("delete-btn")) return;
     await apiFetch(`/api/goals/${target.dataset.id}`, { method: "DELETE" });
     await render();
   });
+
+  renderSubtypeOptions();
   return { render };
 }
 
@@ -2064,9 +2118,13 @@ function initTaxesPage() {
   const fileInput = document.getElementById("tax-file");
   const body = document.getElementById("taxes-body");
   const msg = document.getElementById("taxes-message");
+
   async function render() {
     const response = await apiFetch("/api/taxes");
-    if (!response.ok) return;
+    if (!response.ok) {
+      setText(msg, "Unable to load taxes.");
+      return;
+    }
     const rows = await response.json();
     body.innerHTML = "";
     if (!rows.length) { body.innerHTML = '<tr><td colspan="6">No tax years yet.</td></tr>'; return; }
@@ -2076,28 +2134,55 @@ function initTaxesPage() {
       body.appendChild(tr);
     });
   }
+
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const file = fileInput?.files?.[0];
-    if (!file) return setText(msg, "Please choose a PDF file.");
-    const b64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-    const payload = { taxYear: Number(document.getElementById("tax-year").value), fileName: file.name, contentType: file.type || "application/pdf", fileBase64: b64, notes: document.getElementById("tax-notes").value.trim() };
-    const response = await apiFetch("/api/taxes", { method: "POST", body: JSON.stringify(payload) });
-    const data = await response.json();
-    if (!response.ok) return setText(msg, data.error || "Unable to upload tax file.");
-    form.reset(); await render(); setText(msg, "Tax year saved.");
+    if (!file) {
+      setText(msg, "Please choose a PDF file.");
+      return;
+    }
+
+    try {
+      const b64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const payload = {
+        taxYear: Number(document.getElementById("tax-year").value),
+        fileName: file.name,
+        contentType: file.type || "application/pdf",
+        fileBase64: b64,
+        notes: document.getElementById("tax-notes").value.trim(),
+      };
+      const response = await apiFetch("/api/taxes", { method: "POST", body: JSON.stringify(payload) });
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+      if (!response.ok) {
+        setText(msg, data.error || "Unable to upload tax file.");
+        return;
+      }
+      form.reset();
+      await render();
+      setText(msg, "Tax year saved.");
+    } catch {
+      setText(msg, "Unable to read or upload file.");
+    }
   });
+
   body?.addEventListener("click", async (event) => {
     const target = event.target;
     if (!(target instanceof HTMLButtonElement) || !target.classList.contains("delete-btn")) return;
     await apiFetch(`/api/taxes/${target.dataset.id}`, { method: "DELETE" });
     await render();
   });
+
   return { render };
 }
 

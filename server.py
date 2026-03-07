@@ -2878,6 +2878,113 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+        if parsed.path == "/api/liabilities/recurring-expenses":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                category = str(data.get("category", "")).strip() or "Recurring Expense"
+                amount = float(data.get("amount", 0))
+                frequency = str(data.get("frequency", "monthly")).strip().lower()
+                start_date = str(data.get("startDate", "")).strip() or None
+                if frequency not in ("weekly", "monthly", "quarterly", "yearly"):
+                    raise ValueError
+                if not description or amount < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid recurring expense data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO liability_recurring_expenses (user_id, description, category, amount, frequency, start_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, category, amount, frequency, start_date, now, now))
+                else:
+                    cur = conn.execute("UPDATE liability_recurring_expenses SET description = ?, category = ?, amount = ?, frequency = ?, start_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, category, amount, frequency, start_date, now, record_id, user["id"]))
+                    if cur.rowcount == 0:
+                        self._send_json(404, {"error": "Recurring expense not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/goals":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                name = str(data.get("name", "")).strip()
+                goal_type = str(data.get("goalType", "save-up")).strip().lower()
+                target_amount = float(data.get("targetAmount", 0))
+                target_category = str(data.get("targetCategory", "asset")).strip().lower()
+                target_subtype = str(data.get("targetSubtype", "retirement-accounts")).strip()
+                goal_date = str(data.get("goalDate", "")).strip() or None
+                if goal_type not in ("save-up", "pay-down"):
+                    raise ValueError
+                if target_category not in ("asset", "investment", "liability"):
+                    raise ValueError
+                if not name or target_amount <= 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid goal data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO goals (user_id, name, goal_type, target_amount, target_category, target_subtype, goal_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], name, goal_type, target_amount, target_category, target_subtype, goal_date, now, now))
+                else:
+                    cur = conn.execute("UPDATE goals SET name = ?, goal_type = ?, target_amount = ?, target_category = ?, target_subtype = ?, goal_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (name, goal_type, target_amount, target_category, target_subtype, goal_date, now, record_id, user["id"]))
+                    if cur.rowcount == 0:
+                        self._send_json(404, {"error": "Goal not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/taxes":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                year = int(data.get("taxYear"))
+                file_name = str(data.get("fileName", "taxes.pdf")).strip() or "taxes.pdf"
+                content_type = str(data.get("contentType", "application/pdf")).strip() or "application/pdf"
+                file_base64 = str(data.get("fileBase64", "")).strip()
+                notes = str(data.get("notes", "")).strip() or None
+                if year < 1900 or year > 3000 or not file_base64:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid tax upload payload."})
+                return
+            federal = state = local = 0.0
+            try:
+                raw = base64.b64decode(file_base64.encode("ascii"), validate=True)
+                text = raw.decode("latin-1", errors="ignore")
+                def extract(label):
+                    m = re.search(rf"{label}[^0-9$]*\$?([0-9][0-9,]*(?:\.[0-9]{{2}})?)", text, flags=re.I)
+                    return float((m.group(1).replace(',', '')) if m else 0)
+                federal = extract("federal")
+                state = extract("state")
+                local = extract("local")
+            except Exception:
+                pass
+            stored = encrypt_field_value(file_base64)
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                conn.execute("INSERT INTO tax_years (user_id, tax_year, federal_tax, state_tax, local_tax, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, tax_year) DO UPDATE SET federal_tax=excluded.federal_tax, state_tax=excluded.state_tax, local_tax=excluded.local_tax, notes=excluded.notes, updated_at=excluded.updated_at", (user["id"], year, federal, state, local, notes, now, now))
+                y = conn.execute("SELECT id FROM tax_years WHERE user_id = ? AND tax_year = ?", (user["id"], year)).fetchone()
+                tax_year_id = y["id"]
+                conn.execute("DELETE FROM tax_documents WHERE user_id = ? AND tax_year_id = ?", (user["id"], tax_year_id))
+                conn.execute("INSERT INTO tax_documents (user_id, tax_year_id, file_name, content_type, file_data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], tax_year_id, file_name, content_type, stored, now, now))
+            self._send_json(200, {"success": True, "federalTax": federal, "stateTax": state, "localTax": local})
+            return
+
         if parsed.path == "/api/admin/users":
             admin = self._require_admin()
             if not admin:
