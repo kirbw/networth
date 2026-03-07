@@ -1,113 +1,74 @@
-# Annual Finance Tracker
+# NetWorth (Annual Finance Tracker)
 
-A simple web app for tracking yearly:
+NetWorth is a self-hosted personal finance web application for tracking income, giving, assets, liabilities, and net worth over time. It is built for individuals and families who want one place to maintain financial records, monitor trends, and generate lender-ready net worth summaries.
 
-- Total annual income
-- Charitable giving
-- Net worth (optional per year)
+## Release status
 
-## Release
+**Current release: `v0.0.75`**  
+This is the first release intended to be **deployment-ready**.
 
-Current release: **v0.0.6**
+## What it does
 
-## Release Notes
+NetWorth helps you:
 
-### v0.0.6 highlights
-- Condensed Net Worth report cleaned up to one line per category total, with asset rows in light green and liabilities rows in light red.
-- Added a new Home-page Liabilities Overview chart, sorted largest-to-smallest by category, with combined liabilities total.
-- Improved Home dashboard chart sizing/layout with a responsive multi-column grid so charts are less oversized.
-- Added a print attestation statement with signature/date lines to the Net Worth report.
+- Record annual income, charitable giving, and net worth history
+- Track a broad range of assets and liabilities
+- Maintain investment details and monitor gain/loss performance
+- Generate printable net worth reports (including condensed banker-friendly format)
+- Visualize financial trends using dashboard charts
+- Manage data securely in a multi-user environment
 
-### v0.0.5 highlights
-- Added edit capability across all Investments subpages (Stocks, Precious Metals, Real Estate, Business Ventures).
-- Stocks now persist company name and current price in the database, and only refresh these when **Refresh Current Values** is clicked.
-- Added Real Estate description field and fixed ownership-based My Value calculation (`current value × owned %`), plus gain/loss color coding and wider responsive investment layouts.
-- Added gain/loss percentage columns to Stocks and Precious Metals.
+## Core capabilities
 
-## Security and multi-user update
+### 1) Financial record management
+- Save one record per tax year and update existing years
+- View historical records in tabular form
+- Edit prior years and remove records when needed
 
-This version adds:
+### 2) Asset and investment tracking
+- Investments: Stocks, Precious Metals, Real Estate, Business Ventures, Retirement Accounts
+- Assets: Vehicles, Bank Accounts, Cash, and additional personal asset categories
+- Investment-level calculations for current value and gain/loss where applicable
+- Sorting and summary totals to quickly compare holdings
 
-- Username/password login
-- Public self-signup (create account) flow with email verification code
-- Per-user data isolation (each user sees only their own records)
-- Admin role with user management:
-  - Create users
-  - Reset passwords
-  - Delete users (with confirmation in UI)
-- Multi-page UI with left sidebar navigation:
-  - Home (data entry + charts)
-  - Records (saved records list + edit)
-  - Admin (single menu entry) with sub-pages:
-    - User Settings
-    - Email Settings
+### 3) Liability tracking
+- Liabilities by category, including mortgages, credit cards, and loans
+- Enhanced loan details (secured, interest-only, payment frequency)
+- Ownership-aware mortgage handling for properties with partial ownership
 
-### Default admin bootstrap
+### 4) Net worth reporting
+- Full and condensed report formats
+- Category totals for assets/investments and liabilities
+- Signature/date attestation section for printed reports
+- Print-optimized layout for sharing with banks, lenders, or advisors
 
-On first startup, the server creates an admin account if none exists:
+### 5) Dashboards and analytics
+- Year-over-year charts for income and giving
+- Net worth trend chart (when net worth values are available)
+- Investments overview chart with category rollups
+- Liabilities overview chart with largest-to-smallest category display
+- Cumulative giving progress with goal tracking and on-track indicator
 
-- Username: `admin`
-- Password: `change-me-now`
+### 6) Multi-user and administration
+- Username/password authentication
+- Signup with email verification
+- Password reset via emailed reset links
+- Role-based admin controls for user lifecycle management
+- Per-user data isolation
 
-Change this immediately after first login, or set environment variables before starting:
+### 7) Security and operational foundations
+- Server-side session validation with HTTP-only cookies
+- Hashed reset tokens (no plaintext reset-token storage)
+- Baseline security headers and guarded protected routes
+- SMTP/email configuration for verification and recovery flows
+- SQLite-backed persistence for straightforward self-hosting
 
-```bash
-ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
-```
+## Typical use cases
 
-## Features
-
-- SMTP + host name settings for outbound email links and verification/reset emails
-- Forgot password flow that emails reset links
-- Version display in bottom-left footer for troubleshooting
-- Investments section now has subpages for Stocks, Precious Metals, Real Estate, Business Ventures, and Retirement Accounts
-- Dedicated Stocks page to track ticker, shares, purchase price, and purchase date
-- Dedicated Precious Metals page for type, description, quantity, weight, where/date purchased, purchase price, and current value
-- Dedicated Real Estate page for address, % owned, purchase/current value, and computed my-value (current × ownership %)
-- Dedicated Business Ventures page for business name, % owned, business value, and computed my-value
-- Dedicated Retirement Accounts page for description, type, broker, taxable flag, and account value
-- Assets section with subpages for Vehicles, Guns, Bank Accounts, and Cash
-- Liabilities section with subpages for Mortgages, Credit Cards, and Loans
-- Live quote lookup endpoint and gain/loss calculation for each investment (quotes via Stooq)
-- Stocks page stores company name + current price and shows a last refreshed timestamp
-- Stocks totals now automatically exclude positions that do not have a current price (for unsupported tickers such as some OTC symbols)
-- Stocks, Precious Metals, Real Estate, and Business Ventures tables support click-to-sort by key columns
-- Investments table totals row for purchase value, current value, and gain/loss
-- Home dashboard includes an investments summary chart (stocks, precious metals, real estate, business ventures, retirement accounts) plus combined total (sorted highest-to-lowest and without "My Value" wording in labels)
-- Home dashboard now also includes a liabilities summary chart (mortgages, credit cards, loans) sorted highest-to-lowest with combined liabilities total
-- Home charts use a responsive multi-column layout with reduced card heights for improved readability
-- User profile page (click your name in the top-right) for updating full name, email, phone/contact info, street/city/state/zip, and password changes
-- Net Worth Report header now includes statement owner and date
-- Condensed (totals-only) checkbox on Net Worth Report for cleaner banker printouts
-- Net Worth Report now includes Assets/Investments subtotal and Liabilities subtotal before total net worth
-- Print styles tightened so report cards print back-to-back with reduced whitespace
-- Liabilities section in Net Worth Report with category totals and subtraction from assets/investments for total net worth
-- Mortgage liabilities linked to real estate are scaled by ownership percentage (and labeled with ownership %)
-- Net Worth Report includes a signature attestation statement with signature/date lines for printing
-- Loans now support secured yes/no, interest-only yes/no, and payment frequency (monthly/quarterly/annual)
-- Edit on Records now scrolls directly to the edit form; deletes/clear actions now prompt for confirmation
-- Smoother cross-page navigation by hiding login card until session check completes
-- Server-side protection for app pages (`records`, `investments`, `assets`, `liabilities`, `admin`) with one-way redirects to login when session is invalid
-- Sidebar navigation rendered server-side to avoid duplicating menu edits across every page
-- Records link removed from sidebar; use "Edit Prior Years" button on Home next to "Save Year"
-- Session cookie is HTTP-only and validated against server-side session storage on every protected page request
-- Login protection includes basic server-side rate limiting to reduce brute-force attempts
-- Password reset tokens are stored as hashes in the database (not plaintext)
-- Admin SMTP settings endpoint no longer returns stored SMTP passwords
-- Added baseline security headers (CSP, frame deny, no-sniff, no-store cache)
-- Save one record per tax year
-- Update an existing year by re-submitting the same year
-- Income and giving chart by year
-- Separate net worth chart (only plots years where net worth is provided)
-- Cumulative giving progress section with:
-  - Editable goal percentage (defaults to 10% and is saved per user)
-  - Cumulative income vs cumulative donations chart
-  - Goal target line based on your selected percentage
-  - On-track/off-track indicator based on lifetime giving rate
-  - Amount still needed to reach your current giving goal
-- Table view for all saved data
-- Delete individual years or clear all records
-- Persistent storage in SQLite (`finance.db`)
+- Preparing annual personal financial summaries
+- Organizing documents for a loan or credit review
+- Monitoring long-term giving goals against income
+- Centralizing household financial visibility across years
 
 ## Run locally
 
@@ -115,12 +76,18 @@ ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
 python3 server.py
 ```
 
-Then open `http://localhost:3000`.
+Then open: `http://localhost:3000`
 
-## Important production notes
+## Deployment notes
 
-- Run behind HTTPS (reverse proxy) so credentials and session cookies are encrypted in transit.
-- Restrict network exposure (firewall/VPN) if this app is self-hosted.
-- Use strong unique passwords for all users.
-- Optional encryption-at-rest for selected fields: set `FIELD_ENCRYPTION_KEY` to a 32-byte key (raw 32 chars or base64url-encoded). When set, liability account number fields are encrypted with AES-GCM before writing to SQLite.
-- Prefer adding CSRF protection and login rate limiting before internet exposure.
+- Run behind HTTPS (reverse proxy) in production
+- Use strong unique passwords for all accounts
+- Restrict network exposure (firewall/VPN)
+- Set `ADMIN_USER` and `ADMIN_PASSWORD` before first startup
+- Optional: set `FIELD_ENCRYPTION_KEY` for encryption-at-rest of selected fields
+
+Example:
+
+```bash
+ADMIN_USER=myadmin ADMIN_PASSWORD='strong-password' python3 server.py
+```
