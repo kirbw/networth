@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -90,6 +90,7 @@ function renderAuthState() {
     notificationsBadge.classList.toggle("hidden", unread <= 0);
   }
   navAdmin?.classList.toggle("hidden", !(authenticated && currentUser.role === "admin"));
+  document.body.classList.toggle("dark-mode", Boolean(currentUser?.darkMode));
 }
 
 function ensureAdminPageAccess() {
@@ -1326,6 +1327,10 @@ function initProfilePage() {
   const settingsForm = document.getElementById("profile-settings-form");
   const settingsMsg = document.getElementById("profile-settings-message");
   const givingGoalInput = document.getElementById("profile-giving-goal-percent");
+  const darkModeInput = document.getElementById("profile-dark-mode");
+  const notifCreditCardPromoInput = document.getElementById("notif-credit-card-promo");
+  const notifVehicleInspectionInput = document.getElementById("notif-vehicle-inspection");
+  const notifSystemInput = document.getElementById("notif-system");
 
   async function render() {
     if (!currentUser) return;
@@ -1338,6 +1343,10 @@ function initProfilePage() {
     if (stateInput) stateInput.value = currentUser.state || "";
     if (zipInput) zipInput.value = currentUser.zip || "";
     if (givingGoalInput) givingGoalInput.value = String(getGoalPercent());
+    if (darkModeInput) darkModeInput.checked = Boolean(currentUser.darkMode);
+    if (notifCreditCardPromoInput) notifCreditCardPromoInput.checked = currentUser?.notificationSettings?.creditCardPromo ?? true;
+    if (notifVehicleInspectionInput) notifVehicleInspectionInput.checked = currentUser?.notificationSettings?.vehicleInspection ?? true;
+    if (notifSystemInput) notifSystemInput.checked = currentUser?.notificationSettings?.system ?? true;
   }
 
   form?.addEventListener("submit", async (event) => {
@@ -1365,11 +1374,21 @@ function initProfilePage() {
   settingsForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const givingGoalPercent = Number(givingGoalInput?.value || DEFAULT_GOAL_PERCENT);
-    const response = await apiFetch("/api/user-settings", { method: "POST", body: JSON.stringify({ givingGoalPercent }) });
+    const darkMode = Boolean(darkModeInput?.checked);
+    const notifications = {
+      creditCardPromo: Boolean(notifCreditCardPromoInput?.checked),
+      vehicleInspection: Boolean(notifVehicleInspectionInput?.checked),
+      system: Boolean(notifSystemInput?.checked),
+    };
+    const response = await apiFetch("/api/user-settings", { method: "POST", body: JSON.stringify({ givingGoalPercent, darkMode, notifications }) });
     const data = await response.json();
     if (!response.ok) return setText(settingsMsg, data.error || "Unable to save settings.");
     await loadCurrentUser();
     if (givingGoalInput) givingGoalInput.value = String(getGoalPercent());
+    if (darkModeInput) darkModeInput.checked = Boolean(currentUser.darkMode);
+    if (notifCreditCardPromoInput) notifCreditCardPromoInput.checked = currentUser?.notificationSettings?.creditCardPromo ?? true;
+    if (notifVehicleInspectionInput) notifVehicleInspectionInput.checked = currentUser?.notificationSettings?.vehicleInspection ?? true;
+    if (notifSystemInput) notifSystemInput.checked = currentUser?.notificationSettings?.system ?? true;
     setText(settingsMsg, "Settings updated.");
   });
 
@@ -1475,11 +1494,11 @@ function initAssetsVehiclesPage() {
   return initAssetCrudPage({
     formId: "vehicles-form", messageId: "vehicles-message", bodyId: "vehicles-body", sortSelector: "[data-sort-vehicles]", submitBtnId: "vehicles-submit-btn",
     defaultSort: "description", sortDataset: "sortVehicles", apiBase: "/api/assets/vehicles", addLabel: "Add Vehicle", updateLabel: "Update Vehicle",
-    emptyText: "No vehicles yet.", colspan: 7, totalLabelColspan: 5, savedText: "Vehicle saved.", deleteConfirm: "Delete this vehicle entry?",
+    emptyText: "No vehicles yet.", colspan: 9, totalLabelColspan: 5, savedText: "Vehicle saved.", deleteConfirm: "Delete this vehicle entry?",
     valueGetter: (x) => x.value,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.model_year || "—"}</td><td>${x.make}</td><td>${x.model}</td><td>${currency(x.value)}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
-    collectPayload: (id) => ({ id, description: document.getElementById("veh-description").value.trim(), year: document.getElementById("veh-year").value.trim(), make: document.getElementById("veh-make").value.trim(), model: document.getElementById("veh-model").value.trim(), value: Number(document.getElementById("veh-value").value) }),
-    startEdit: (x) => { document.getElementById("veh-description").value = x.description; document.getElementById("veh-year").value = x.model_year || ""; document.getElementById("veh-make").value = x.make; document.getElementById("veh-model").value = x.model; document.getElementById("veh-value").value = x.value; },
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.model_year || "—"}</td><td>${x.make}</td><td>${x.model}</td><td>${currency(x.value)}</td><td>${x.date_purchased || "—"}</td><td>${x.inspection_expires_on || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("veh-description").value.trim(), year: document.getElementById("veh-year").value.trim(), make: document.getElementById("veh-make").value.trim(), model: document.getElementById("veh-model").value.trim(), datePurchased: document.getElementById("veh-date-purchased").value, inspectionExpiresOn: document.getElementById("veh-inspection-expires-on").value, value: Number(document.getElementById("veh-value").value) }),
+    startEdit: (x) => { document.getElementById("veh-description").value = x.description; document.getElementById("veh-year").value = x.model_year || ""; document.getElementById("veh-make").value = x.make; document.getElementById("veh-model").value = x.model; document.getElementById("veh-date-purchased").value = x.date_purchased || ""; document.getElementById("veh-inspection-expires-on").value = x.inspection_expires_on || ""; document.getElementById("veh-value").value = x.value; },
   });
 }
 
@@ -1934,7 +1953,7 @@ function initNotificationsPage() {
     }
     items.forEach((n) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${new Date(n.created_at).toLocaleString()}</td><td>${n.title}</td><td>${n.message}</td><td>${n.status}</td><td><button class="mark-read-btn" data-id="${n.id}" type="button">Mark Read</button><button class="mark-unread-btn" data-id="${n.id}" type="button">Mark Unread</button><button class="delete-btn" data-id="${n.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${new Date(n.created_at).toLocaleString()}</td><td>${n.title}</td><td>${n.message}</td><td>${n.status}</td><td><div class="notifications-actions"><button class="mark-read-btn" data-id="${n.id}" type="button">Mark Read</button><button class="mark-unread-btn" data-id="${n.id}" type="button">Mark Unread</button><button class="delete-btn" data-id="${n.id}" type="button">Delete</button></div></td>`;
       body.appendChild(tr);
     });
   }
@@ -1991,6 +2010,180 @@ function initAdminNotificationsPage() {
   });
 
   return { render: renderHistory };
+}
+
+
+function initRecurringExpensesPage() {
+  return initLiabilityCrudPage({
+    formId: "recurring-expenses-form", messageId: "recurring-expenses-message", bodyId: "recurring-expenses-body", sortSelector: "[data-sort-recurring]", submitBtnId: "recurring-expenses-submit-btn",
+    defaultSort: "description", sortDataset: "sortRecurring", apiBase: "/api/liabilities/recurring-expenses", addLabel: "Add Recurring Expense", updateLabel: "Update Recurring Expense",
+    emptyText: "No recurring expenses yet.", colspan: 6, totalLabelColspan: 3, savedText: "Recurring expense saved.", deleteConfirm: "Delete this recurring expense?",
+    balanceGetter: (x) => x.amount,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.category || "—"}</td><td>${currency(x.amount)}</td><td>${x.frequency}</td><td>${x.start_date || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("rec-description").value.trim(), category: document.getElementById("rec-category").value.trim(), amount: Number(document.getElementById("rec-amount").value), frequency: document.getElementById("rec-frequency").value, startDate: document.getElementById("rec-start-date").value }),
+    startEdit: (x) => { document.getElementById("rec-description").value = x.description; document.getElementById("rec-category").value = x.category || ""; document.getElementById("rec-amount").value = x.amount; document.getElementById("rec-frequency").value = x.frequency || "monthly"; document.getElementById("rec-start-date").value = x.start_date || ""; },
+  });
+}
+
+function initGoalsPage() {
+  const form = document.getElementById("goals-form");
+  const body = document.getElementById("goals-body");
+  const msg = document.getElementById("goals-message");
+  const categorySelect = document.getElementById("goal-target-category");
+  const subtypeSelect = document.getElementById("goal-target-subtype");
+
+  const subtypeOptions = {
+    asset: [
+      { value: "bank-accounts", label: "Bank Accounts" },
+      { value: "cash", label: "Cash" },
+      { value: "vehicles", label: "Vehicles" },
+      { value: "guns", label: "Guns" },
+    ],
+    investment: [
+      { value: "stocks", label: "Stocks" },
+      { value: "precious-metals", label: "Precious Metals" },
+      { value: "real-estate", label: "Real Estate" },
+      { value: "business-ventures", label: "Business Ventures" },
+      { value: "retirement-accounts", label: "Retirement Accounts" },
+    ],
+    liability: [
+      { value: "mortgages", label: "Mortgages" },
+      { value: "credit-cards", label: "Credit Cards" },
+      { value: "loans", label: "Loans" },
+      { value: "recurring-expenses", label: "Recurring Expenses" },
+    ],
+  };
+
+  function renderSubtypeOptions() {
+    if (!categorySelect || !subtypeSelect) return;
+    const category = categorySelect.value;
+    const options = subtypeOptions[category] || [];
+    subtypeSelect.innerHTML = "";
+    options.forEach((optionData) => {
+      const option = document.createElement("option");
+      option.value = optionData.value;
+      option.textContent = optionData.label;
+      subtypeSelect.appendChild(option);
+    });
+  }
+
+  async function render() {
+    const response = await apiFetch("/api/goals");
+    if (!response.ok) return;
+    const rows = await response.json();
+    body.innerHTML = "";
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="6">No goals yet.</td></tr>'; return; }
+    rows.forEach((x) => {
+      const pct = x.target_amount > 0 ? Math.min(100, (Number(x.progress_amount || 0) / Number(x.target_amount)) * 100) : 0;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${x.name}</td><td>${x.goal_type}</td><td>${currency(x.target_amount)}</td><td><div class="goal-progress-wrap"><progress max="100" value="${pct}"></progress><span>${pct.toFixed(1)}%</span></div></td><td>${x.goal_date || "—"}</td><td><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+      body.appendChild(tr);
+    });
+  }
+
+  categorySelect?.addEventListener("change", renderSubtypeOptions);
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      name: document.getElementById("goal-name").value.trim(),
+      goalType: document.getElementById("goal-type").value,
+      targetAmount: Number(document.getElementById("goal-target-amount").value),
+      targetCategory: categorySelect?.value || "investment",
+      targetSubtype: subtypeSelect?.value || "retirement-accounts",
+      goalDate: document.getElementById("goal-date").value,
+    };
+    const response = await apiFetch("/api/goals", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save goal.");
+    form.reset();
+    renderSubtypeOptions();
+    await render();
+    setText(msg, "Goal saved.");
+  });
+
+  body?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement) || !target.classList.contains("delete-btn")) return;
+    await apiFetch(`/api/goals/${target.dataset.id}`, { method: "DELETE" });
+    await render();
+  });
+
+  renderSubtypeOptions();
+  return { render };
+}
+
+function initTaxesPage() {
+  const form = document.getElementById("taxes-form");
+  const fileInput = document.getElementById("tax-file");
+  const body = document.getElementById("taxes-body");
+  const msg = document.getElementById("taxes-message");
+
+  async function render() {
+    const response = await apiFetch("/api/taxes");
+    if (!response.ok) {
+      setText(msg, "Unable to load taxes.");
+      return;
+    }
+    const rows = await response.json();
+    body.innerHTML = "";
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="6">No tax years yet.</td></tr>'; return; }
+    rows.forEach((x) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${x.tax_year}</td><td>${currency(x.federal_tax || 0)}</td><td>${currency(x.state_tax || 0)}</td><td>${currency(x.local_tax || 0)}</td><td>${x.document_id ? `<a href="/api/taxes/documents/${x.document_id}/download">${x.file_name || "Download"}</a>` : "—"}</td><td><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+      body.appendChild(tr);
+    });
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      setText(msg, "Please choose a PDF file.");
+      return;
+    }
+
+    try {
+      const b64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const payload = {
+        taxYear: Number(document.getElementById("tax-year").value),
+        fileName: file.name,
+        contentType: file.type || "application/pdf",
+        fileBase64: b64,
+        notes: document.getElementById("tax-notes").value.trim(),
+      };
+      const response = await apiFetch("/api/taxes", { method: "POST", body: JSON.stringify(payload) });
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+      if (!response.ok) {
+        setText(msg, data.error || "Unable to upload tax file.");
+        return;
+      }
+      form.reset();
+      await render();
+      setText(msg, "Tax year saved.");
+    } catch {
+      setText(msg, "Unable to read or upload file.");
+    }
+  });
+
+  body?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement) || !target.classList.contains("delete-btn")) return;
+    await apiFetch(`/api/taxes/${target.dataset.id}`, { method: "DELETE" });
+    await render();
+  });
+
+  return { render };
 }
 
 function initResetPasswordPage() {
@@ -2110,6 +2303,21 @@ async function initPageData() {
 
   if (page === "liabilities-loans") {
     if (!pageController) pageController = initLiabilitiesLoansPage();
+    return pageController.render();
+  }
+
+  if (page === "liabilities-recurring-expenses") {
+    if (!pageController) pageController = initRecurringExpensesPage();
+    return pageController.render();
+  }
+
+  if (page === "goals") {
+    if (!pageController) pageController = initGoalsPage();
+    return pageController.render();
+  }
+
+  if (page === "taxes") {
+    if (!pageController) pageController = initTaxesPage();
     return pageController.render();
   }
 
