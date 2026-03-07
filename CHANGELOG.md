@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [v0.0.75] - 2026-03-07
+
+### Added
+- Marked `v0.0.75` as the first release considered ready to deploy.
+
+### Changed
+- Rewrote the README with a high-level product overview focused on features, capabilities, security posture, and deployment guidance.
+- Updated release documentation for the `v0.0.75` milestone.
+
 ## [v0.0.6] - 2026-03-05
 
 ### Added
