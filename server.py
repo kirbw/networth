@@ -10,6 +10,8 @@ import re
 import secrets
 import shutil
 import tempfile
+import sys
+import threading
 import smtplib
 import sqlite3
 import urllib.request
@@ -25,8 +27,8 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/liabilities-recurring-expenses.html", "/profile.html", "/goals.html", "/taxes.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html", "/notifications.html"}
-ADMIN_PAGES = {"/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/liabilities-recurring-expenses.html", "/profile.html", "/goals.html", "/taxes.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html"}
+ADMIN_PAGES = {"/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
@@ -247,10 +249,30 @@ def init_default_settings(conn: sqlite3.Connection):
         "backup_keep_count": "10",
         "backup_next_run_at": "",
         "update_repo": "kirbw/networth",
+        "update_github_token": "",
     }
     for key, value in defaults.items():
         set_setting(conn, key, get_setting(conn, key, value) or value)
 
+
+
+
+def _github_api_headers(token: str | None = None) -> dict[str, str]:
+    headers = {"User-Agent": "finance-tracker-updater", "Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _restart_process_soon(delay_seconds: float = 0.5):
+    def _restart():
+        try:
+            threading.Event().wait(delay_seconds)
+            os.execv(sys.executable, [sys.executable, *sys.argv])
+        except Exception:
+            pass
+    t = threading.Thread(target=_restart, daemon=True)
+    t.start()
 
 def safe_int(raw: str, default: int) -> int:
     try:
@@ -1087,7 +1109,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return "taxes"
         if path == "/notifications.html":
             return "notifications"
-        if path in ("/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html"):
+        if path in ("/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html"):
             return "admin"
         return ""
 
@@ -2223,7 +2245,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 repo = get_setting(conn, "update_repo", "kirbw/networth")
-            self._send_json(200, {"repo": repo, "currentVersion": read_version()})
+                token_stored = get_setting(conn, "update_github_token", "")
+                token = decrypt_field_value(token_stored)
+            self._send_json(200, {"repo": repo, "currentVersion": read_version(), "hasToken": bool(token)})
             return
 
         if parsed.path == "/api/admin/updates/check":
@@ -2232,9 +2256,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 repo = get_setting(conn, "update_repo", "kirbw/networth")
+                token = decrypt_field_value(get_setting(conn, "update_github_token", ""))
             try:
                 url = f"https://api.github.com/repos/{repo}/releases/latest"
-                req = urllib.request.Request(url, headers={"User-Agent": "finance-tracker-updater"})
+                req = urllib.request.Request(url, headers=_github_api_headers(token))
                 with urllib.request.urlopen(req, timeout=15) as response:
                     data = json.loads(response.read().decode("utf-8"))
                 latest = str(data.get("tag_name", "")).strip()
@@ -3227,6 +3252,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             try:
                 data = self._read_json()
                 repo = str(data.get("repo", "")).strip()
+                token = str(data.get("token", "")).strip()
+                clear_token = bool(data.get("clearToken", False))
                 if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
                     raise ValueError("Invalid GitHub repo format. Use owner/repo.")
             except (ValueError, TypeError, json.JSONDecodeError) as error:
@@ -3234,7 +3261,12 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 set_setting(conn, "update_repo", repo)
-            self._send_json(200, {"success": True, "repo": repo})
+                if clear_token:
+                    set_setting(conn, "update_github_token", "")
+                elif token:
+                    set_setting(conn, "update_github_token", encrypt_field_value(token))
+                has_token = bool(decrypt_field_value(get_setting(conn, "update_github_token", "")))
+            self._send_json(200, {"success": True, "repo": repo, "hasToken": has_token})
             return
 
         if parsed.path == "/api/admin/backup-settings":
@@ -3300,11 +3332,12 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 repo = get_setting(conn, "update_repo", "kirbw/networth")
+                token = decrypt_field_value(get_setting(conn, "update_github_token", ""))
                 keep_count = safe_int(get_setting(conn, "backup_keep_count", "10"), 10)
                 backup_file = create_backup_snapshot()
                 enforce_backup_retention(keep_count)
             try:
-                req = urllib.request.Request(f"https://api.github.com/repos/{repo}/releases/latest", headers={"User-Agent": "finance-tracker-updater"})
+                req = urllib.request.Request(f"https://api.github.com/repos/{repo}/releases/latest", headers=_github_api_headers(token))
                 with urllib.request.urlopen(req, timeout=20) as response:
                     release = json.loads(response.read().decode("utf-8"))
                 tarball_url = str(release.get("tarball_url", "")).strip()
@@ -3314,7 +3347,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 UPDATES_DIR.mkdir(parents=True, exist_ok=True)
                 with tempfile.TemporaryDirectory(prefix="networth-update-") as tmpdir:
                     archive_path = Path(tmpdir) / "release.tar.gz"
-                    with urllib.request.urlopen(urllib.request.Request(tarball_url, headers={"User-Agent": "finance-tracker-updater"}), timeout=60) as response:
+                    with urllib.request.urlopen(urllib.request.Request(tarball_url, headers=_github_api_headers(token)), timeout=60) as response:
                         archive_path.write_bytes(response.read())
                     extract_dir = Path(tmpdir) / "extract"
                     extract_dir.mkdir(parents=True, exist_ok=True)
@@ -3344,6 +3377,14 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 self._send_json(200, {"success": True, "appliedVersion": latest, "backup": backup_file.name, "filesUpdated": changed, "restartRequired": True})
             except Exception as error:
                 self._send_json(500, {"error": f"Update failed after backup {backup_file.name}: {error}"})
+            return
+
+        if parsed.path == "/api/admin/restart-service":
+            admin = self._require_admin()
+            if not admin:
+                return
+            _restart_process_soon(0.5)
+            self._send_json(200, {"success": True, "message": "Service restart initiated."})
             return
 
         if parsed.path == "/api/admin/backups/run":

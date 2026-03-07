@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -94,7 +94,7 @@ function renderAuthState() {
 }
 
 function ensureAdminPageAccess() {
-  if (!["admin-users", "admin-email", "admin-backups", "admin-notifications"].includes(page)) return;
+  if (!["admin-users", "admin-email", "admin-backups", "admin-updates", "admin-notifications"].includes(page)) return;
   if (!currentUser || currentUser.role !== "admin") window.location.href = "/";
 }
 
@@ -1911,6 +1911,72 @@ function initAdminBackupsPage() {
   return { render };
 }
 
+function initAdminUpdatesPage() {
+  const updateRepoInput = document.getElementById("update-repo");
+  const updateTokenInput = document.getElementById("update-token");
+  const clearTokenInput = document.getElementById("update-clear-token");
+  const saveBtn = document.getElementById("save-update-settings-btn");
+  const checkUpdatesBtn = document.getElementById("check-updates-btn");
+  const applyUpdateBtn = document.getElementById("apply-update-btn");
+  const restartServiceBtn = document.getElementById("restart-service-btn");
+  const updatesMsg = document.getElementById("updates-message");
+  const updateCurrent = document.getElementById("update-current-version");
+  const updateLatest = document.getElementById("update-latest-version");
+  const updateHasToken = document.getElementById("update-has-token");
+
+  async function loadSettings() {
+    const response = await apiFetch("/api/admin/update-settings");
+    if (!response.ok) return;
+    const settings = await response.json();
+    if (updateRepoInput) updateRepoInput.value = settings.repo || "";
+    if (updateCurrent) updateCurrent.textContent = settings.currentVersion || "unknown";
+    if (updateHasToken) updateHasToken.textContent = settings.hasToken ? "Saved" : "Not saved";
+  }
+
+  saveBtn?.addEventListener("click", async () => {
+    const payload = {
+      repo: updateRepoInput?.value.trim() || "",
+      token: updateTokenInput?.value.trim() || "",
+      clearToken: Boolean(clearTokenInput?.checked),
+    };
+    const response = await apiFetch("/api/admin/update-settings", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(updatesMsg, data.error || "Unable to save update settings.");
+    if (updateTokenInput) updateTokenInput.value = "";
+    if (clearTokenInput) clearTokenInput.checked = false;
+    if (updateHasToken) updateHasToken.textContent = data.hasToken ? "Saved" : "Not saved";
+    setText(updatesMsg, "Update settings saved.");
+  });
+
+  checkUpdatesBtn?.addEventListener("click", async () => {
+    const response = await apiFetch("/api/admin/updates/check");
+    const data = await response.json();
+    if (!response.ok) return setText(updatesMsg, data.error || "Unable to check updates.");
+    if (updateCurrent) updateCurrent.textContent = data.currentVersion || "unknown";
+    if (updateLatest) updateLatest.textContent = data.latestVersion || data.currentVersion || "unknown";
+    setText(updatesMsg, data.updateAvailable ? `Update available: ${data.latestVersion}` : "You are up to date.");
+  });
+
+  applyUpdateBtn?.addEventListener("click", async () => {
+    if (!window.confirm("Apply latest update? A database backup will be created first and restart may be required.")) return;
+    const response = await apiFetch("/api/admin/updates/apply", { method: "POST", body: JSON.stringify({ confirm: true }) });
+    const data = await response.json();
+    if (!response.ok) return setText(updatesMsg, data.error || "Update failed.");
+    if (updateLatest) updateLatest.textContent = data.appliedVersion || "unknown";
+    setText(updatesMsg, `Update applied (${data.appliedVersion}). Backup: ${data.backup}. Click Restart Service to apply.`);
+  });
+
+  restartServiceBtn?.addEventListener("click", async () => {
+    if (!window.confirm("Restart service now? Active sessions may disconnect briefly.")) return;
+    const response = await apiFetch("/api/admin/restart-service", { method: "POST", body: JSON.stringify({}) });
+    const data = await response.json();
+    if (!response.ok) return setText(updatesMsg, data.error || "Unable to restart service.");
+    setText(updatesMsg, data.message || "Service restart initiated.");
+  });
+
+  return { render: loadSettings };
+}
+
 function initMonthlyPaymentsReportPage() {
   const monthInput = document.getElementById("report-month");
   const runBtn = document.getElementById("run-monthly-report-btn");
@@ -2540,6 +2606,11 @@ async function initPageData() {
 
   if (page === "admin-backups") {
     if (!pageController) pageController = initAdminBackupsPage();
+    return pageController.render();
+  }
+
+  if (page === "admin-updates") {
+    if (!pageController) pageController = initAdminUpdatesPage();
     return pageController.render();
   }
 
