@@ -14,6 +14,7 @@ import sys
 import threading
 import smtplib
 import sqlite3
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
@@ -257,11 +258,31 @@ def init_default_settings(conn: sqlite3.Connection):
 
 
 
-def _github_api_headers(token: str | None = None) -> dict[str, str]:
-    headers = {"User-Agent": "finance-tracker-updater", "Accept": "application/vnd.github+json"}
+def _github_api_headers(token: str | None = None, auth_scheme: str = "Bearer") -> dict[str, str]:
+    headers = {
+        "User-Agent": "finance-tracker-updater",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
     if token:
-        headers["Authorization"] = f"Bearer {token}"
+        headers["Authorization"] = f"{auth_scheme} {token}"
     return headers
+
+
+def _github_open(url: str, token: str | None = None, timeout: int = 20):
+    attempts: list[str | None] = [None]
+    if token:
+        attempts = ["Bearer", "token"]
+    last_error: Exception | None = None
+    for scheme in attempts:
+        try:
+            req = urllib.request.Request(url, headers=_github_api_headers(token, scheme or "Bearer"))
+            return urllib.request.urlopen(req, timeout=timeout)
+        except Exception as error:
+            last_error = error
+    if last_error:
+        raise last_error
+    raise RuntimeError("Unable to open GitHub URL.")
 
 
 def _restart_process_soon(delay_seconds: float = 0.5):
@@ -2259,8 +2280,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 token = decrypt_field_value(get_setting(conn, "update_github_token", ""))
             try:
                 url = f"https://api.github.com/repos/{repo}/releases/latest"
-                req = urllib.request.Request(url, headers=_github_api_headers(token))
-                with urllib.request.urlopen(req, timeout=15) as response:
+                with _github_open(url, token=token, timeout=15) as response:
                     data = json.loads(response.read().decode("utf-8"))
                 latest = str(data.get("tag_name", "")).strip()
                 html_url = str(data.get("html_url", "")).strip()
@@ -2268,6 +2288,18 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 current = read_version()
                 update_available = bool(latest) and latest != current
                 self._send_json(200, {"repo": repo, "currentVersion": current, "latestVersion": latest or current, "updateAvailable": update_available, "releaseUrl": html_url, "tarballUrl": tarball_url})
+            except urllib.error.HTTPError as error:
+                details = ""
+                try:
+                    details = error.read().decode("utf-8", errors="ignore")
+                except Exception:
+                    details = ""
+                message = f"Unable to check updates ({error.code}): {error.reason}"
+                if error.code == 404:
+                    message += ". Verify repo path and ensure your GitHub token has access to private repositories/releases."
+                if details:
+                    message += f" | {details[:500]}"
+                self._send_json(502, {"error": message})
             except Exception as error:
                 self._send_json(500, {"error": f"Unable to check updates: {error}"})
             return
@@ -3337,8 +3369,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 backup_file = create_backup_snapshot()
                 enforce_backup_retention(keep_count)
             try:
-                req = urllib.request.Request(f"https://api.github.com/repos/{repo}/releases/latest", headers=_github_api_headers(token))
-                with urllib.request.urlopen(req, timeout=20) as response:
+                with _github_open(f"https://api.github.com/repos/{repo}/releases/latest", token=token, timeout=20) as response:
                     release = json.loads(response.read().decode("utf-8"))
                 tarball_url = str(release.get("tarball_url", "")).strip()
                 latest = str(release.get("tag_name", "")).strip() or "unknown"
@@ -3347,7 +3378,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 UPDATES_DIR.mkdir(parents=True, exist_ok=True)
                 with tempfile.TemporaryDirectory(prefix="networth-update-") as tmpdir:
                     archive_path = Path(tmpdir) / "release.tar.gz"
-                    with urllib.request.urlopen(urllib.request.Request(tarball_url, headers=_github_api_headers(token)), timeout=60) as response:
+                    with _github_open(tarball_url, token=token, timeout=60) as response:
                         archive_path.write_bytes(response.read())
                     extract_dir = Path(tmpdir) / "extract"
                     extract_dir.mkdir(parents=True, exist_ok=True)
@@ -3375,6 +3406,18 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                         shutil.copy2(src, dest)
                         changed += 1
                 self._send_json(200, {"success": True, "appliedVersion": latest, "backup": backup_file.name, "filesUpdated": changed, "restartRequired": True})
+            except urllib.error.HTTPError as error:
+                details = ""
+                try:
+                    details = error.read().decode("utf-8", errors="ignore")
+                except Exception:
+                    details = ""
+                message = f"Update failed after backup {backup_file.name} ({error.code}): {error.reason}"
+                if error.code == 404:
+                    message += ". Verify repo path and token access for private releases and archives."
+                if details:
+                    message += f" | {details[:500]}"
+                self._send_json(502, {"error": message})
             except Exception as error:
                 self._send_json(500, {"error": f"Update failed after backup {backup_file.name}: {error}"})
             return
