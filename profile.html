@@ -85,11 +85,19 @@
             <h2>Settings</h2>
             <form id="profile-settings-form">
               <div class="form-grid">
-                <label>Giving Goal Percentage <input id="profile-giving-goal-percent" type="number" min="0" max="100" step="0.1" value="10" /></label>
+                <label>Giving Goal Percentage <input id="profile-giving-goal-percent" type="number" min="0" max="100" step="0.1" value="10" /></label><label class="checkbox-row"><input id="profile-dark-mode" type="checkbox" /> Enable dark mode</label>
               </div>
               <button type="submit">Save Settings</button>
               <p id="profile-settings-message"></p>
             </form>
+          </section>
+          <section class="card">
+            <h2>Notification Preferences</h2>
+            <div class="form-grid">
+              <label class="checkbox-row"><input id="notif-credit-card-promo" type="checkbox" /> Credit card promo expiry alerts</label>
+              <label class="checkbox-row"><input id="notif-vehicle-inspection" type="checkbox" /> Vehicle inspection expiry alerts</label>
+              <label class="checkbox-row"><input id="notif-system" type="checkbox" /> System/admin notifications</label>
+            </div>
           </section>
 
         </section>

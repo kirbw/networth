@@ -23,7 +23,7 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/profile.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html", "/notifications.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/liabilities-recurring-expenses.html", "/profile.html", "/goals.html", "/taxes.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html", "/notifications.html"}
 ADMIN_PAGES = {"/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
@@ -222,6 +222,12 @@ def set_user_setting(conn: sqlite3.Connection, user_id: int, key: str, value: st
         "INSERT INTO user_settings (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value",
         (user_id, key, value),
     )
+
+
+def is_user_setting_enabled(conn: sqlite3.Connection, user_id: int, key: str, default: bool = True) -> bool:
+    fallback = "1" if default else "0"
+    value = get_user_setting(conn, user_id, key, fallback).strip().lower()
+    return value in ("1", "true", "yes", "on")
 
 
 def init_default_settings(conn: sqlite3.Connection):
@@ -631,6 +637,72 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS liability_recurring_expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                category TEXT NOT NULL,
+                amount REAL NOT NULL,
+                frequency TEXT NOT NULL,
+                start_date TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                goal_type TEXT NOT NULL,
+                target_amount REAL NOT NULL,
+                target_category TEXT NOT NULL,
+                target_subtype TEXT NOT NULL,
+                goal_date TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tax_years (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                tax_year INTEGER NOT NULL,
+                federal_tax REAL NOT NULL DEFAULT 0,
+                state_tax REAL NOT NULL DEFAULT 0,
+                local_tax REAL NOT NULL DEFAULT 0,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, tax_year),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tax_documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                tax_year_id INTEGER NOT NULL,
+                file_name TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                file_data TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(tax_year_id) REFERENCES tax_years(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS user_settings (
                 user_id INTEGER NOT NULL,
                 key TEXT NOT NULL,
@@ -715,6 +787,13 @@ def init_db():
             conn.execute("ALTER TABLE investments ADD COLUMN broker TEXT NOT NULL DEFAULT ''")
         if table_info_investments and "manual_quote" not in inv_cols:
             conn.execute("ALTER TABLE investments ADD COLUMN manual_quote INTEGER NOT NULL DEFAULT 0")
+
+        table_info_asset_vehicles = conn.execute("PRAGMA table_info(asset_vehicles)").fetchall()
+        vehicle_cols = {col[1] for col in table_info_asset_vehicles}
+        if table_info_asset_vehicles and "date_purchased" not in vehicle_cols:
+            conn.execute("ALTER TABLE asset_vehicles ADD COLUMN date_purchased TEXT")
+        if table_info_asset_vehicles and "inspection_expires_on" not in vehicle_cols:
+            conn.execute("ALTER TABLE asset_vehicles ADD COLUMN inspection_expires_on TEXT")
 
         table_info_asset_guns = conn.execute("PRAGMA table_info(asset_guns)").fetchall()
         gun_cols = {col[1] for col in table_info_asset_guns}
@@ -974,12 +1053,16 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return "investments"
         if path in ("/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html"):
             return "assets"
-        if path in ("/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html"):
+        if path in ("/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/liabilities-recurring-expenses.html"):
             return "liabilities"
         if path in ("/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html"):
             return "reports"
         if path == "/profile.html":
             return "profile"
+        if path == "/goals.html":
+            return "goals"
+        if path == "/taxes.html":
+            return "taxes"
         if path == "/notifications.html":
             return "notifications"
         if path in ("/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-notifications.html"):
@@ -996,8 +1079,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             '<nav class="side-menu">'
             f'<a href="/"{active("home")}>Home</a>'
             f'<a href="/investments.html"{active("investments")}>Investments</a>'
-            f'<a href="/assets-vehicles.html"{active("assets")}>Assets</a>'
+            f'<a href="/assets-bank-accounts.html"{active("assets")}>Assets</a>'
             f'<a href="/liabilities-mortgages.html"{active("liabilities")}>Liabilities</a>'
+            f'<a href="/goals.html"{active("goals")}>Goals</a>'
+            f'<a href="/taxes.html"{active("taxes")}>Taxes</a>'
             f'<a href="/net-worth-report.html"{active("reports")}>Reports</a>'
             f'<a href="/profile.html"{active("profile")}>My Profile</a>'
             f'<a href="/notifications.html"{active("notifications")}>Notifications</a>'
@@ -1009,6 +1094,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         now = utc_now()
         window_end = now + timedelta(days=30)
         with sqlite3.connect(DB_PATH) as conn:
+            if not is_user_setting_enabled(conn, user_id, "notif_credit_card_promo", True):
+                return
             conn.row_factory = sqlite3.Row
             rows = conn.execute("SELECT id, description, special_rate_end_date FROM liability_credit_cards WHERE user_id = ? AND special_interest_rate IS NOT NULL AND special_rate_end_date IS NOT NULL", (user_id,)).fetchall()
             for row in rows:
@@ -1025,6 +1112,32 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     exists = conn.execute("SELECT 1 FROM notifications WHERE user_id = ? AND dedupe_key = ?", (user_id, dedupe_key)).fetchone()
                     if not exists:
                         conn.execute("INSERT INTO notifications (user_id, type, title, message, status, dedupe_key, created_at, updated_at) VALUES (?, 'credit-card-promo-expiry', ?, ?, 'unread', ?, ?, ?)", (user_id, title, message, dedupe_key, ts, ts))
+
+    def _upsert_vehicle_inspection_notifications(self, user_id: int):
+        with sqlite3.connect(DB_PATH) as conn:
+            if not is_user_setting_enabled(conn, user_id, "notif_vehicle_inspection", True):
+                return
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("SELECT id, description, inspection_expires_on FROM asset_vehicles WHERE user_id = ? AND inspection_expires_on IS NOT NULL", (user_id,)).fetchall()
+            for row in rows:
+                expiry = (row["inspection_expires_on"] or "")[:10]
+                if not expiry:
+                    continue
+                try:
+                    exp_date = datetime.strptime(expiry, "%Y-%m-%d").date()
+                except ValueError:
+                    continue
+                notify_date = exp_date - timedelta(days=30)
+                if utc_now().date() < notify_date:
+                    continue
+                dedupe_key = f"vehicle-inspection-expiry:{row['id']}:{expiry}"
+                exists = conn.execute("SELECT 1 FROM notifications WHERE user_id = ? AND dedupe_key = ?", (user_id, dedupe_key)).fetchone()
+                if exists:
+                    continue
+                ts = utc_now_iso()
+                title = "Vehicle inspection expiring soon"
+                message = f"{row['description']} inspection expires on {expiry}."
+                conn.execute("INSERT INTO notifications (user_id, type, title, message, status, dedupe_key, created_at, updated_at) VALUES (?, 'vehicle-inspection-expiry', ?, ?, 'unread', ?, ?, ?)", (user_id, title, message, dedupe_key, ts, ts))
 
     def _serve_templated_html(self, path: str) -> bool:
         if path == "/":
@@ -1065,10 +1178,17 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 self._send_json(200, {"authenticated": False})
                 return
             self._upsert_credit_card_promo_notifications(user["id"])
+            self._upsert_vehicle_inspection_notifications(user["id"])
             with sqlite3.connect(DB_PATH) as conn:
                 unread_count = conn.execute("SELECT COUNT(1) FROM notifications WHERE user_id = ? AND status = 'unread'", (user["id"],)).fetchone()[0]
                 giving_goal = safe_float(get_user_setting(conn, user["id"], "giving_goal_percent", "10"), 10.0)
-            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "streetAddress": user["street_address"], "city": user["city"], "state": user["state"], "zip": user["zip"], "role": user["role"], "unreadNotifications": int(unread_count), "givingGoalPercent": giving_goal}})
+                dark_mode = is_user_setting_enabled(conn, user["id"], "dark_mode", False)
+                notification_settings = {
+                    "creditCardPromo": is_user_setting_enabled(conn, user["id"], "notif_credit_card_promo", True),
+                    "vehicleInspection": is_user_setting_enabled(conn, user["id"], "notif_vehicle_inspection", True),
+                    "system": is_user_setting_enabled(conn, user["id"], "notif_system", True),
+                }
+            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "streetAddress": user["street_address"], "city": user["city"], "state": user["state"], "zip": user["zip"], "role": user["role"], "unreadNotifications": int(unread_count), "givingGoalPercent": giving_goal, "darkMode": dark_mode, "notificationSettings": notification_settings}})
             return
 
         if parsed.path == "/api/user-settings":
@@ -1077,7 +1197,13 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 giving_goal = safe_float(get_user_setting(conn, user["id"], "giving_goal_percent", "10"), 10.0)
-            self._send_json(200, {"givingGoalPercent": giving_goal})
+                dark_mode = is_user_setting_enabled(conn, user["id"], "dark_mode", False)
+                notification_settings = {
+                    "creditCardPromo": is_user_setting_enabled(conn, user["id"], "notif_credit_card_promo", True),
+                    "vehicleInspection": is_user_setting_enabled(conn, user["id"], "notif_vehicle_inspection", True),
+                    "system": is_user_setting_enabled(conn, user["id"], "notif_system", True),
+                }
+            self._send_json(200, {"givingGoalPercent": giving_goal, "darkMode": dark_mode, "notifications": notification_settings})
             return
 
         if parsed.path == "/api/quote":
@@ -1221,7 +1347,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                rows = conn.execute("SELECT id, description, make, model, model_year, value, created_at, updated_at FROM asset_vehicles WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+                rows = conn.execute("SELECT id, description, make, model, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at FROM asset_vehicles WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
             self._send_json(200, [dict(row) for row in rows])
             return
 
@@ -1320,15 +1446,69 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        if parsed.path == "/api/liabilities/recurring-expenses":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, description, category, amount, frequency, start_date, created_at, updated_at FROM liability_recurring_expenses WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(r) for r in rows])
+            return
+
+        if parsed.path == "/api/goals":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, name, goal_type, target_amount, target_category, target_subtype, goal_date, created_at, updated_at FROM goals WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+                retire_total = conn.execute("SELECT COALESCE(SUM(value), 0) FROM retirement_accounts WHERE user_id = ?", (user["id"],)).fetchone()[0]
+            payload = []
+            for r in rows:
+                item = dict(r)
+                progress = 0.0
+                if item["target_subtype"] == "retirement-accounts":
+                    progress = float(retire_total)
+                item["progress_amount"] = progress
+                payload.append(item)
+            self._send_json(200, payload)
+            return
+
+        if parsed.path == "/api/taxes":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT y.id, y.tax_year, y.federal_tax, y.state_tax, y.local_tax, y.notes, y.created_at, y.updated_at, d.id AS document_id, d.file_name FROM tax_years y LEFT JOIN tax_documents d ON d.tax_year_id = y.id AND d.user_id = y.user_id WHERE y.user_id = ? ORDER BY y.tax_year DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(r) for r in rows])
+            return
+
         if parsed.path == "/api/notifications":
             user = self._require_auth()
             if not user:
                 return
             self._upsert_credit_card_promo_notifications(user["id"])
+            self._upsert_vehicle_inspection_notifications(user["id"])
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
+                show_system = is_user_setting_enabled(conn, user["id"], "notif_system", True)
+                show_cc = is_user_setting_enabled(conn, user["id"], "notif_credit_card_promo", True)
+                show_vehicle = is_user_setting_enabled(conn, user["id"], "notif_vehicle_inspection", True)
                 rows = conn.execute("SELECT id, type, title, message, status, created_at, updated_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC", (user["id"],)).fetchall()
-            self._send_json(200, [dict(r) for r in rows])
+            allowed = []
+            for row in rows:
+                item = dict(row)
+                ntype = (item.get("type") or "").strip().lower()
+                if ntype == "system" and not show_system:
+                    continue
+                if ntype == "credit-card-promo-expiry" and not show_cc:
+                    continue
+                if ntype == "vehicle-inspection-expiry" and not show_vehicle:
+                    continue
+                allowed.append(item)
+            self._send_json(200, allowed)
             return
 
         if parsed.path == "/api/reports/monthly-payments":
@@ -1361,6 +1541,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 mortgages = conn.execute("SELECT description, monthly_payment, start_date FROM liability_mortgages WHERE user_id = ?", (user["id"],)).fetchall()
                 cards = conn.execute("SELECT description, monthly_payment, start_date FROM liability_credit_cards WHERE user_id = ?", (user["id"],)).fetchall()
                 loans = conn.execute("SELECT description, payment_amount, payment_frequency, start_date, loan_type FROM liability_loans WHERE user_id = ?", (user["id"],)).fetchall()
+                recurring = conn.execute("SELECT description, category, amount, frequency, start_date FROM liability_recurring_expenses WHERE user_id = ?", (user["id"],)).fetchall()
 
             for row in mortgages:
                 day = parse_day(row["start_date"])
@@ -1385,6 +1566,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                         month_index = (year - start_dt.year) * 12 + (month - start_dt.month)
                         if month_index < 0:
                             due_in_month = False
+                        elif frequency == "weekly":
+                            due_in_month = True
                         elif frequency == "quarterly":
                             due_in_month = month_index % 3 == 0
                         elif frequency == "annual":
@@ -1395,6 +1578,32 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 if due_in_month:
                     periodic_items.append({"category": "Loan", "description": row["description"], "loanType": row["loan_type"], "frequency": frequency, "amount": amount, "dueDate": f"{year:04d}-{month:02d}-{day:02d}"})
 
+            for row in recurring:
+                frequency = (row["frequency"] or "monthly").lower()
+                start_date = row["start_date"]
+                day = parse_day(start_date)
+                amount = float(row["amount"] or 0)
+                due_in_month = True
+                if start_date:
+                    try:
+                        start_dt = datetime.strptime(start_date[:10], "%Y-%m-%d")
+                        month_index = (year - start_dt.year) * 12 + (month - start_dt.month)
+                        if month_index < 0:
+                            due_in_month = False
+                        elif frequency == "quarterly":
+                            due_in_month = month_index % 3 == 0
+                        elif frequency == "yearly":
+                            due_in_month = month_index % 12 == 0
+                    except ValueError:
+                        pass
+                if not due_in_month:
+                    continue
+                category_name = row["category"] or "Recurring Expense"
+                if frequency == "monthly":
+                    monthly_items.append({"category": category_name, "description": row["description"], "amount": amount, "dueDate": f"{year:04d}-{month:02d}-{day:02d}"})
+                else:
+                    periodic_items.append({"category": category_name, "description": row["description"], "frequency": frequency, "amount": amount, "dueDate": f"{year:04d}-{month:02d}-{day:02d}"})
+
             monthly_items.sort(key=lambda item: (item["dueDate"], item["category"], item["description"].lower()))
             periodic_items.sort(key=lambda item: (item["frequency"], item["dueDate"], item["description"].lower()))
 
@@ -1403,6 +1612,32 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 "monthlyPayments": monthly_items,
                 "periodicPayments": periodic_items,
             })
+            return
+
+        if parsed.path.startswith("/api/taxes/documents/") and parsed.path.endswith("/download"):
+            user = self._require_auth()
+            if not user:
+                return
+            parts = parsed.path.strip("/").split("/")
+            try:
+                doc_id = int(parts[3])
+            except Exception:
+                self._send_json(400, {"error": "Invalid document id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                row = conn.execute("SELECT file_name, content_type, file_data FROM tax_documents WHERE id = ? AND user_id = ?", (doc_id, user["id"])).fetchone()
+            if not row:
+                self._send_json(404, {"error": "Document not found."})
+                return
+            payload = decrypt_field_value(row["file_data"]) or ""
+            raw = base64.b64decode(payload.encode("ascii")) if payload else b""
+            self.send_response(200)
+            self.send_header("Content-Type", row["content_type"] or "application/pdf")
+            self.send_header("Content-Disposition", f"attachment; filename=\"{row['file_name']}\"")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
             return
 
         if parsed.path == "/api/notifications/mark":
@@ -1488,9 +1723,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
                 if record_id is None:
-                    conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, model_year, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, model_year, value, now, now))
+                    conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, model_year, date_purchased, inspection_expires_on, value, now, now))
                 else:
-                    cursor = conn.execute("UPDATE asset_vehicles SET description = ?, make = ?, model = ?, model_year = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, make, model, model_year, value, now, record_id, user["id"]))
+                    cursor = conn.execute("UPDATE asset_vehicles SET description = ?, make = ?, model = ?, model_year = ?, date_purchased = ?, inspection_expires_on = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, make, model, model_year, date_purchased, inspection_expires_on, value, now, record_id, user["id"]))
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Vehicle not found."})
                         return
@@ -1543,7 +1778,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 institution = str(data.get("institution", "")).strip()
                 account_type = str(data.get("type", "")).strip()
                 balance = float(data.get("balance", 0))
-                if not description or not institution or not account_type or balance < 0:
+                if account_type not in ("Checking", "Savings", "Money Market Account") or not description or not institution or balance < 0:
                     raise ValueError
             except (ValueError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Invalid bank account data."})
@@ -1689,7 +1924,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 payment_frequency = str(data.get("paymentFrequency", "monthly")).strip().lower()
                 account_number = normalize_account_number(data.get("accountNumber"))
                 account_number_stored = encrypt_field_value(account_number)
-                if payment_frequency not in ("monthly", "quarterly", "annual"):
+                if payment_frequency not in ("weekly", "monthly", "quarterly", "annual"):
                     raise ValueError
                 if not description or not loan_type or interest_rate < 0 or payment_amount < 0 or initial_amount < 0 or current_balance < 0:
                     raise ValueError
@@ -1706,6 +1941,114 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                         self._send_json(404, {"error": "Loan not found."})
                         return
             self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/liabilities/recurring-expenses":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                category = str(data.get("category", "")).strip() or "Recurring Expense"
+                amount = float(data.get("amount", 0))
+                frequency = str(data.get("frequency", "monthly")).strip().lower()
+                start_date = str(data.get("startDate", "")).strip() or None
+                if frequency not in ("weekly", "monthly", "quarterly", "yearly"):
+                    raise ValueError
+                if not description or amount < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid recurring expense data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO liability_recurring_expenses (user_id, description, category, amount, frequency, start_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, category, amount, frequency, start_date, now, now))
+                else:
+                    cur = conn.execute("UPDATE liability_recurring_expenses SET description = ?, category = ?, amount = ?, frequency = ?, start_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, category, amount, frequency, start_date, now, record_id, user["id"]))
+                    if cur.rowcount == 0:
+                        self._send_json(404, {"error": "Recurring expense not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/goals":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                name = str(data.get("name", "")).strip()
+                goal_type = str(data.get("goalType", "save-up")).strip().lower()
+                target_amount = float(data.get("targetAmount", 0))
+                target_category = str(data.get("targetCategory", "asset")).strip().lower()
+                target_subtype = str(data.get("targetSubtype", "retirement-accounts")).strip()
+                goal_date = str(data.get("goalDate", "")).strip() or None
+                if goal_type not in ("save-up", "pay-down"):
+                    raise ValueError
+                if target_category not in ("asset", "investment", "liability"):
+                    raise ValueError
+                if not name or target_amount <= 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid goal data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO goals (user_id, name, goal_type, target_amount, target_category, target_subtype, goal_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], name, goal_type, target_amount, target_category, target_subtype, goal_date, now, now))
+                else:
+                    cur = conn.execute("UPDATE goals SET name = ?, goal_type = ?, target_amount = ?, target_category = ?, target_subtype = ?, goal_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (name, goal_type, target_amount, target_category, target_subtype, goal_date, now, record_id, user["id"]))
+                    if cur.rowcount == 0:
+                        self._send_json(404, {"error": "Goal not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/taxes":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                year = int(data.get("taxYear"))
+                file_name = str(data.get("fileName", "taxes.pdf")).strip() or "taxes.pdf"
+                content_type = str(data.get("contentType", "application/pdf")).strip() or "application/pdf"
+                file_base64 = str(data.get("fileBase64", "")).strip()
+                notes = str(data.get("notes", "")).strip() or None
+                if year < 1900 or year > 3000 or not file_base64:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid tax upload payload."})
+                return
+            # Simple AI-like extraction from decoded PDF text bytes
+            federal = state = local = 0.0
+            try:
+                raw = base64.b64decode(file_base64.encode("ascii"), validate=True)
+                text = raw.decode("latin-1", errors="ignore")
+                def extract(label):
+                    m = re.search(rf"{label}[^0-9$]*\$?([0-9][0-9,]*(?:\.[0-9]{{2}})?)", text, flags=re.I)
+                    return float((m.group(1).replace(',', '')) if m else 0)
+                federal = extract("federal")
+                state = extract("state")
+                local = extract("local")
+            except Exception:
+                pass
+            stored = encrypt_field_value(file_base64)
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                conn.execute("INSERT INTO tax_years (user_id, tax_year, federal_tax, state_tax, local_tax, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, tax_year) DO UPDATE SET federal_tax=excluded.federal_tax, state_tax=excluded.state_tax, local_tax=excluded.local_tax, notes=excluded.notes, updated_at=excluded.updated_at", (user["id"], year, federal, state, local, notes, now, now))
+                y = conn.execute("SELECT id FROM tax_years WHERE user_id = ? AND tax_year = ?", (user["id"], year)).fetchone()
+                tax_year_id = y["id"]
+                conn.execute("DELETE FROM tax_documents WHERE user_id = ? AND tax_year_id = ?", (user["id"], tax_year_id))
+                conn.execute("INSERT INTO tax_documents (user_id, tax_year_id, file_name, content_type, file_data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], tax_year_id, file_name, content_type, stored, now, now))
+            self._send_json(200, {"success": True, "federalTax": federal, "stateTax": state, "localTax": local})
             return
 
         if parsed.path == "/api/admin/users":
@@ -1828,12 +2171,18 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 giving_goal = float(data.get("givingGoalPercent", 10))
                 if giving_goal < 0 or giving_goal > 100:
                     raise ValueError
+                dark_mode = 1 if bool(data.get("darkMode", False)) else 0
+                notifications = data.get("notifications", {}) or {}
             except (ValueError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Invalid user settings."})
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 set_user_setting(conn, user["id"], "giving_goal_percent", str(giving_goal))
-            self._send_json(200, {"success": True, "givingGoalPercent": giving_goal})
+                set_user_setting(conn, user["id"], "dark_mode", str(dark_mode))
+                set_user_setting(conn, user["id"], "notif_credit_card_promo", "1" if bool(notifications.get("creditCardPromo", True)) else "0")
+                set_user_setting(conn, user["id"], "notif_vehicle_inspection", "1" if bool(notifications.get("vehicleInspection", True)) else "0")
+                set_user_setting(conn, user["id"], "notif_system", "1" if bool(notifications.get("system", True)) else "0")
+            self._send_json(200, {"success": True, "givingGoalPercent": giving_goal, "darkMode": bool(dark_mode), "notifications": notifications})
             return
 
         if parsed.path == "/api/signup":
@@ -2309,9 +2658,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
                 if record_id is None:
-                    conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, model_year, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, model_year, value, now, now))
+                    conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, model_year, date_purchased, inspection_expires_on, value, now, now))
                 else:
-                    cursor = conn.execute("UPDATE asset_vehicles SET description = ?, make = ?, model = ?, model_year = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, make, model, model_year, value, now, record_id, user["id"]))
+                    cursor = conn.execute("UPDATE asset_vehicles SET description = ?, make = ?, model = ?, model_year = ?, date_purchased = ?, inspection_expires_on = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, make, model, model_year, date_purchased, inspection_expires_on, value, now, record_id, user["id"]))
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Vehicle not found."})
                         return
@@ -2364,7 +2713,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 institution = str(data.get("institution", "")).strip()
                 account_type = str(data.get("type", "")).strip()
                 balance = float(data.get("balance", 0))
-                if not description or not institution or not account_type or balance < 0:
+                if account_type not in ("Checking", "Savings", "Money Market Account") or not description or not institution or balance < 0:
                     raise ValueError
             except (ValueError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Invalid bank account data."})
@@ -2510,7 +2859,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 payment_frequency = str(data.get("paymentFrequency", "monthly")).strip().lower()
                 account_number = normalize_account_number(data.get("accountNumber"))
                 account_number_stored = encrypt_field_value(account_number)
-                if payment_frequency not in ("monthly", "quarterly", "annual"):
+                if payment_frequency not in ("weekly", "monthly", "quarterly", "annual"):
                     raise ValueError
                 if not description or not loan_type or interest_rate < 0 or payment_amount < 0 or initial_amount < 0 or current_balance < 0:
                     raise ValueError
@@ -2711,6 +3060,48 @@ class FinanceHandler(SimpleHTTPRequestHandler):
 
         user = self._require_auth()
         if not user:
+            return
+
+        if parsed.path.startswith("/api/liabilities/recurring-expenses/"):
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid recurring expense id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM liability_recurring_expenses WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/goals/"):
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid goal id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM goals WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/taxes/"):
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid tax year id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM tax_years WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
             return
 
         if parsed.path.startswith("/api/notifications/"):
