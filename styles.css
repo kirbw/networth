@@ -339,3 +339,97 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 .full-width { grid-column: 1 / -1; }
 
 .print-only { display: none; }
+
+body.dark-mode {
+  --bg: #121722;
+  --card: #1b2332;
+  --text: #e7edf8;
+  --muted: #a2b0c8;
+  --border: #2a354a;
+  --success-bg: #183d2c;
+  --success-text: #b8f3d1;
+  --warning-bg: #4b3b1e;
+  --warning-text: #ffdca8;
+}
+
+body.dark-mode .sidebar,
+body.dark-mode .topbar {
+  background: #161e2d;
+}
+
+body.dark-mode .side-menu a.active,
+body.dark-mode .admin-subnav a.active {
+  background: #24365f;
+  border-color: #3956f6;
+}
+
+body.dark-mode .button-link { background: #374151; }
+body.dark-mode .totals-row td { background: #1a2538; }
+
+.notifications-actions {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.mark-read-btn,
+.mark-unread-btn {
+  margin-top: 0;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.85rem;
+  border-radius: 10px;
+  border: none;
+  color: #fff;
+  background: #2d6cdf;
+}
+
+.goal-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+progress { width: 220px; height: 0.9rem; }
+
+.settings-form {
+  max-width: 560px;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.setting-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.setting-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.compact-input {
+  width: 120px;
+}
+
+.setting-suffix {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.setting-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  max-width: fit-content;
+}
+
+.setting-toggle input {
+  width: auto;
+  margin: 0;
+}
