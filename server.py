@@ -299,16 +299,23 @@ def _github_release_for_channel(repo: str, token: str | None, channel: str) -> d
         with _github_open(f"https://api.github.com/repos/{repo}/releases/latest", token=token, timeout=20) as response:
             return json.loads(response.read().decode("utf-8"))
 
-    with _github_open(f"https://api.github.com/repos/{repo}/releases?per_page=30", token=token, timeout=20) as response:
-        releases = json.loads(response.read().decode("utf-8"))
-    if not isinstance(releases, list) or not releases:
-        raise RuntimeError("No releases found for repository.")
-    for rel in releases:
-        if not isinstance(rel, dict):
-            continue
-        if str(rel.get("tag_name", "")).strip():
-            return rel
-    raise RuntimeError("No valid releases found for repository.")
+    # Prerelease channel: explicitly select a GitHub release marked as prerelease.
+    for page in range(1, 6):
+        with _github_open(f"https://api.github.com/repos/{repo}/releases?per_page=100&page={page}", token=token, timeout=20) as response:
+            releases = json.loads(response.read().decode("utf-8"))
+        if not isinstance(releases, list) or not releases:
+            break
+        for rel in releases:
+            if not isinstance(rel, dict):
+                continue
+            if not rel.get("prerelease"):
+                continue
+            if rel.get("draft"):
+                continue
+            if str(rel.get("tag_name", "")).strip():
+                return rel
+
+    raise RuntimeError("No prerelease versions found for repository.")
 
 def _restart_process_soon(delay_seconds: float = 0.5):
     def _restart():
