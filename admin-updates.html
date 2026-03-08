@@ -27,6 +27,12 @@
             <h2>Application Updates</h2>
             <div class="form-grid">
               <label>GitHub Repo (owner/repo) <input id="update-repo" type="text" value="kirbw/networth" /></label>
+              <label>Release Channel
+                <select id="update-channel">
+                  <option value="stable">Stable</option>
+                  <option value="prerelease">Prerelease</option>
+                </select>
+              </label>
               <label>GitHub Token (optional/private repo) <input id="update-token" type="password" placeholder="ghp_..." /></label>
               <label class="checkbox-row"><input id="update-clear-token" type="checkbox" /> Clear saved token</label>
             </div>
@@ -41,6 +47,7 @@
             </div>
             <p class="small-note">Applying updates creates a backup first and updates application files. Use Restart Service to apply fully.</p>
             <p id="updates-message"></p>
+            <div id="updates-progress" class="update-progress hidden"></div>
           </section>
         </section>
       </main>
