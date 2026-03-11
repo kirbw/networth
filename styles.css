@@ -247,6 +247,32 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 }
 
 
+.calculator-categories {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.35rem 0.8rem;
+}
+
+.calculator-categories legend {
+  padding: 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.investment-calculator-chart {
+  min-height: 360px;
+}
+
+.investment-calculator-chart canvas {
+  width: 100% !important;
+  height: 340px !important;
+}
+
+
+
 @media (max-width: 1100px) {
   .home-charts-grid { grid-template-columns: 1fr; }
   .chart-card-wide { grid-column: auto; }
@@ -382,7 +408,7 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 .report-col-value { width: 25%; text-align: right; white-space: nowrap; }
 
 @media print {
-  .sidebar, .topbar, .version-footer, #auth-card, .admin-subnav-card, .report-actions, .report-condensed-toggle, #print-networth-btn, #print-monthly-report-btn, #print-liquid-report-btn { display: none !important; }
+  .sidebar, .topbar, .version-footer, #auth-card, .admin-subnav-card, .report-actions, .report-condensed-toggle, #print-networth-btn, #print-monthly-report-btn, #print-liquid-report-btn, #print-investment-calculator-btn { display: none !important; }
   .layout, .main-column { display: block; }
   .container { max-width: 100%; margin: 0; padding: 0; gap: 0.5rem; }
   body { background: #fff; }
@@ -392,6 +418,7 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
   body[data-page="monthly-payments-report"] #app-content > .card:not(#monthly-report-monthly-card):not(#monthly-report-periodic-card) { display: none !important; }
   body[data-page="liquid-cash-report"] #app-content > .card:not(#liquid-report-bank-card):not(#liquid-report-cash-card) { display: none !important; }
   body[data-page="net-worth-report"] #app-content > .card:not(.report-header):not(#networth-report-content):not(:last-child) { display: none !important; }
+  body[data-page="investment-calculator-report"] #app-content > .card:not(#investment-calculator-chart-card) { display: none !important; }
 }
 
 .report-liabilities-heading {
