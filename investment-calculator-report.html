@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Investment Calculator Report</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body data-page="investment-calculator-report">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <div class="main-column">
+      <header class="topbar">
+        <div class="session-controls">
+          <span id="session-name">Not signed in</span>
+          <button id="logout-btn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden"></section>
+
+        <section id="app-content" class="hidden">
+          <h1 id="investment-print-title" class="print-only">Investment Projection Report</h1>
+
+          <section class="card admin-subnav-card">
+            <div class="admin-subnav">
+              <a href="/net-worth-report.html">Net Worth</a>
+              <a href="/monthly-payments-report.html">Monthly Payments</a>
+              <a href="/liquid-cash-report.html">Liquid Cash</a>
+              <a href="/investment-calculator-report.html" class="active">Investment Calculator</a>
+              <a href="/loan-amortization-report.html">Loan Amortization</a>
+            </div>
+          </section>
+
+          <section class="card report-header">
+            <h2>Futuristic Investment Calculator</h2>
+            <p class="small-note" id="investment-projection-generated">Run a projection to generate your report.</p>
+            <form id="investment-calculator-form">
+              <div class="form-grid">
+                <fieldset class="calculator-categories full-width">
+                  <legend>Select investments</legend>
+                  <label class="checkbox-row"><input id="calc-stocks" type="checkbox" checked /> Stocks</label>
+                  <label class="checkbox-row"><input id="calc-retirementAccounts" type="checkbox" checked /> Retirement Accounts</label>
+                  <label class="checkbox-row"><input id="calc-preciousMetals" type="checkbox" /> Precious Metals</label>
+                  <label class="checkbox-row"><input id="calc-realEstate" type="checkbox" /> Real Estate</label>
+                  <label class="checkbox-row"><input id="calc-businessVentures" type="checkbox" /> Business Ventures</label>
+                </fieldset>
+                <label>Annual Return (%) <input id="calc-annual-return" type="number" min="0" step="0.1" value="8" required /></label>
+                <label>Additional Monthly Contribution ($) <input id="calc-monthly-contribution" type="number" min="0" step="0.01" value="0" /></label>
+                <label>Years <input id="calc-years" type="number" min="1" max="80" step="1" value="20" required /></label>
+              </div>
+              <div class="report-actions">
+                <button type="submit">Generate Projection</button>
+                <button id="print-investment-calculator-btn" type="button">Print / Save as PDF</button>
+              </div>
+            </form>
+            <p id="investment-projection-summary" class="small-note"></p>
+          </section>
+
+          <section class="card investment-calculator-chart" id="investment-calculator-chart-card">
+            <canvas id="investment-projection-chart"></canvas>
+            <h3>Projection Breakdown</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Year</th>
+                    <th>Contributions Added</th>
+                    <th>Projected Growth</th>
+                    <th>Total Amount</th>
+                  </tr>
+                </thead>
+                <tbody id="investment-projection-table-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>

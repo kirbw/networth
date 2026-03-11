@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -30,6 +30,7 @@ let goalProgressChart;
 let investmentsSummaryChart;
 let liabilitiesSummaryChart;
 let assetsSummaryChart;
+let investmentProjectionChart;
 
 function apiFetch(url, options = {}) {
   const headers = options.body ? { "Content-Type": "application/json", ...(options.headers || {}) } : (options.headers || {});
@@ -2488,6 +2489,243 @@ function initTaxesPage() {
   return { render };
 }
 
+function initInvestmentCalculatorReportPage() {
+  const form = document.getElementById("investment-calculator-form");
+  const chartEl = document.getElementById("investment-projection-chart");
+  const summary = document.getElementById("investment-projection-summary");
+  const printBtn = document.getElementById("print-investment-calculator-btn");
+  const generated = document.getElementById("investment-projection-generated");
+  const tableBody = document.getElementById("investment-projection-table-body");
+
+  const categories = [
+    { key: "stocks", label: "Stocks", endpoint: "/api/investments", total: (items) => items.reduce((sum, item) => sum + (Number(item.shares) * Number(item.current_price || 0)), 0) },
+    { key: "preciousMetals", label: "Precious Metals", endpoint: "/api/precious-metals", total: (items) => items.reduce((sum, item) => sum + Number(item.current_value || 0), 0) },
+    { key: "realEstate", label: "Real Estate", endpoint: "/api/real-estate", total: (items) => items.reduce((sum, item) => sum + (Number(item.current_value || 0) * (Number(item.percentage_owned || 0) / 100)), 0) },
+    { key: "businessVentures", label: "Business Ventures", endpoint: "/api/business-ventures", total: (items) => items.reduce((sum, item) => sum + (Number(item.business_value || 0) * (Number(item.percentage_owned || 0) / 100)), 0) },
+    { key: "retirementAccounts", label: "Retirement Accounts", endpoint: "/api/retirement-accounts", total: (items) => items.reduce((sum, item) => sum + Number(item.value || 0), 0) },
+  ];
+
+  async function loadTotals() {
+    const responses = await Promise.all(categories.map((cat) => apiFetch(cat.endpoint)));
+    if (!responses.every((res) => res.ok)) throw new Error("Unable to load investments.");
+    const payloads = await Promise.all(responses.map((res) => res.json()));
+    return categories.reduce((acc, category, idx) => {
+      acc[category.key] = category.total(payloads[idx]);
+      return acc;
+    }, {});
+  }
+
+  function projectGrowth(principal, annualReturnPct, monthlyContribution, years) {
+    const monthlyRate = (annualReturnPct / 100) / 12;
+    const points = [{ year: 0, value: principal, contributionsAdded: 0, projectedGrowth: 0 }];
+    let balance = principal;
+    for (let month = 1; month <= years * 12; month += 1) {
+      balance = (balance + monthlyContribution) * (1 + monthlyRate);
+      if (month % 12 === 0) {
+        const year = month / 12;
+        const contributionsAdded = monthlyContribution * month;
+        const baseContributions = principal + contributionsAdded;
+        points.push({
+          year,
+          value: balance,
+          contributionsAdded,
+          projectedGrowth: balance - baseContributions,
+        });
+      }
+    }
+    return points;
+  }
+
+
+  function renderProjectionTable(points) {
+    if (!tableBody) return;
+    const yearlyPoints = points.filter((p) => p.year > 0);
+    if (!yearlyPoints.length) {
+      tableBody.innerHTML = '<tr><td colspan="4">Run a projection to view yearly details.</td></tr>';
+      return;
+    }
+    tableBody.innerHTML = yearlyPoints.map((point) => (
+      `<tr><td>${point.year}</td><td>${currency(point.contributionsAdded)}</td><td>${currency(point.projectedGrowth)}</td><td>${currency(point.value)}</td></tr>`
+    )).join("");
+  }
+  function renderProjection(points) {
+    if (!chartEl || typeof Chart === "undefined") return;
+    if (investmentProjectionChart) investmentProjectionChart.destroy();
+    investmentProjectionChart = new Chart(chartEl.getContext("2d"), {
+      type: "line",
+      data: {
+        labels: points.map((p) => `Year ${p.year}`),
+        datasets: [{
+          label: "Projected Value",
+          data: points.map((p) => Number(p.value.toFixed(2))),
+          borderColor: "#4f46e5",
+          backgroundColor: "rgba(79, 70, 229, 0.16)",
+          borderWidth: 3,
+          fill: true,
+          tension: 0.25,
+          pointRadius: 2,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { ticks: { callback: (value) => formatCompactCurrency(value) } },
+        },
+      },
+    });
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!summary) return;
+    try {
+      const selected = categories.filter((cat) => document.getElementById(`calc-${cat.key}`)?.checked);
+      if (!selected.length) {
+        setText(summary, "Select at least one investment category.");
+        return;
+      }
+      const annualReturnPct = Number(document.getElementById("calc-annual-return")?.value || 0);
+      const monthlyContribution = Number(document.getElementById("calc-monthly-contribution")?.value || 0);
+      const years = Number(document.getElementById("calc-years")?.value || 0);
+      if (annualReturnPct < 0 || years <= 0) {
+        setText(summary, "Enter a valid annual return and number of years.");
+        return;
+      }
+
+      const totals = await loadTotals();
+      const principal = selected.reduce((sum, cat) => sum + Number(totals[cat.key] || 0), 0);
+      const points = projectGrowth(principal, annualReturnPct, monthlyContribution, years);
+      const finalValue = points[points.length - 1]?.value || principal;
+      const totalContributions = principal + (monthlyContribution * years * 12);
+      const totalGrowth = finalValue - totalContributions;
+
+      renderProjection(points);
+      renderProjectionTable(points);
+      setText(summary, `Starting balance: ${currency(principal)} · Projected value: ${currency(finalValue)} · Estimated growth: ${currency(totalGrowth)}`);
+      if (generated) generated.textContent = `Generated ${new Date().toLocaleString()}`;
+    } catch {
+      setText(summary, "Unable to calculate projection right now.");
+    }
+  });
+
+  printBtn?.addEventListener("click", () => window.print());
+
+  return {
+    render: async () => {
+      if (generated) generated.textContent = "Run a projection to generate your report.";
+      setText(summary, "");
+      if (investmentProjectionChart) {
+        investmentProjectionChart.destroy();
+        investmentProjectionChart = null;
+      }
+      renderProjectionTable([]);
+    },
+  };
+}
+
+
+function initLoanAmortizationReportPage() {
+  const form = document.getElementById("loan-amortization-form");
+  const tableBody = document.getElementById("loan-amortization-body");
+  const summary = document.getElementById("loan-amort-summary");
+  const generated = document.getElementById("loan-amort-generated");
+  const printTitle = document.getElementById("loan-amort-print-title");
+  const printBtn = document.getElementById("print-loan-amortization-btn");
+
+  function addMonths(dateValue, monthsToAdd) {
+    const dt = new Date(dateValue);
+    dt.setMonth(dt.getMonth() + monthsToAdd);
+    return dt;
+  }
+
+  function formatDate(dateValue) {
+    return new Date(dateValue).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+
+  function calcMonthlyPayment(principal, annualRate, months) {
+    const monthlyRate = annualRate / 100 / 12;
+    if (monthlyRate === 0) return principal / months;
+    return principal * (monthlyRate / (1 - ((1 + monthlyRate) ** -months)));
+  }
+
+  function renderSchedule(startDate, principal, annualRate, months) {
+    const monthlyRate = annualRate / 100 / 12;
+    const monthlyPayment = calcMonthlyPayment(principal, annualRate, months);
+    const rows = [];
+    let balance = principal;
+    let totalInterest = 0;
+
+    for (let month = 1; month <= months; month += 1) {
+      const interest = balance * monthlyRate;
+      let principalPaid = monthlyPayment - interest;
+      if (month === months || principalPaid > balance) {
+        principalPaid = balance;
+      }
+      const payment = principalPaid + interest;
+      balance = Math.max(0, balance - principalPaid);
+      totalInterest += interest;
+
+      rows.push({
+        dueDate: formatDate(addMonths(startDate, month - 1)),
+        month,
+        interest,
+        principal: principalPaid,
+        payment,
+        remaining: balance,
+      });
+    }
+
+    return { rows, monthlyPayment, totalInterest, totalPaid: principal + totalInterest };
+  }
+
+  function setPlaceholder() {
+    if (tableBody) tableBody.innerHTML = '<tr><td colspan="6">Run a calculation to view the loan schedule.</td></tr>';
+    if (summary) summary.innerHTML = "";
+  }
+
+  form?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const startDate = document.getElementById("loan-start-date")?.value;
+    const principal = Number(document.getElementById("loan-start-balance")?.value || 0);
+    const annualRate = Number(document.getElementById("loan-interest-rate")?.value || 0);
+    const months = Number(document.getElementById("loan-term-months")?.value || 0);
+
+    if (!startDate || principal <= 0 || months <= 0 || annualRate < 0) {
+      if (generated) generated.textContent = "Please enter valid loan details to calculate the schedule.";
+      setPlaceholder();
+      return;
+    }
+
+    const schedule = renderSchedule(startDate, principal, annualRate, months);
+
+    if (tableBody) {
+      tableBody.innerHTML = schedule.rows.map((row) => (
+        `<tr><td>${row.dueDate}</td><td>${row.month}</td><td>${currency(row.interest)}</td><td>${currency(row.principal)}</td><td>${currency(row.payment)}</td><td>${currency(row.remaining)}</td></tr>`
+      )).join("");
+    }
+
+    if (summary) {
+      summary.innerHTML = `
+        <div class="loan-summary-pill"><span>Monthly Payment</span><strong>${currency(schedule.monthlyPayment)}</strong></div>
+        <div class="loan-summary-pill"><span>Total Interest</span><strong>${currency(schedule.totalInterest)}</strong></div>
+        <div class="loan-summary-pill"><span>Total Paid</span><strong>${currency(schedule.totalPaid)}</strong></div>
+        <div class="loan-summary-pill"><span>Payoff Date</span><strong>${formatDate(addMonths(startDate, months - 1))}</strong></div>
+      `;
+    }
+
+    if (printTitle) {
+      printTitle.textContent = `Loan Amortization Schedule — ${currency(principal)} at ${annualRate.toFixed(3)}% for ${months} months`;
+    }
+    if (generated) generated.textContent = `Generated ${new Date().toLocaleString()}`;
+  });
+
+  printBtn?.addEventListener("click", () => window.print());
+
+  return { render: async () => setPlaceholder() };
+}
+
 function initResetPasswordPage() {
   const form = document.getElementById("reset-password-page-form");
   const msg = document.getElementById("reset-password-page-message");
@@ -2565,6 +2803,16 @@ async function initPageData() {
 
   if (page === "liquid-cash-report") {
     if (!pageController) pageController = initLiquidCashReportPage();
+    return pageController.render();
+  }
+
+  if (page === "investment-calculator-report") {
+    if (!pageController) pageController = initInvestmentCalculatorReportPage();
+    return pageController.render();
+  }
+
+  if (page === "loan-amortization-report") {
+    if (!pageController) pageController = initLoanAmortizationReportPage();
     return pageController.render();
   }
 
