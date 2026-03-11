@@ -2495,6 +2495,7 @@ function initInvestmentCalculatorReportPage() {
   const summary = document.getElementById("investment-projection-summary");
   const printBtn = document.getElementById("print-investment-calculator-btn");
   const generated = document.getElementById("investment-projection-generated");
+  const tableBody = document.getElementById("investment-projection-table-body");
 
   const categories = [
     { key: "stocks", label: "Stocks", endpoint: "/api/investments", total: (items) => items.reduce((sum, item) => sum + (Number(item.shares) * Number(item.current_price || 0)), 0) },
@@ -2516,15 +2517,37 @@ function initInvestmentCalculatorReportPage() {
 
   function projectGrowth(principal, annualReturnPct, monthlyContribution, years) {
     const monthlyRate = (annualReturnPct / 100) / 12;
-    const points = [{ year: 0, value: principal }];
+    const points = [{ year: 0, value: principal, contributionsAdded: 0, projectedGrowth: 0 }];
     let balance = principal;
     for (let month = 1; month <= years * 12; month += 1) {
       balance = (balance + monthlyContribution) * (1 + monthlyRate);
-      if (month % 12 === 0) points.push({ year: month / 12, value: balance });
+      if (month % 12 === 0) {
+        const year = month / 12;
+        const contributionsAdded = monthlyContribution * month;
+        const baseContributions = principal + contributionsAdded;
+        points.push({
+          year,
+          value: balance,
+          contributionsAdded,
+          projectedGrowth: balance - baseContributions,
+        });
+      }
     }
     return points;
   }
 
+
+  function renderProjectionTable(points) {
+    if (!tableBody) return;
+    const yearlyPoints = points.filter((p) => p.year > 0);
+    if (!yearlyPoints.length) {
+      tableBody.innerHTML = '<tr><td colspan="4">Run a projection to view yearly details.</td></tr>';
+      return;
+    }
+    tableBody.innerHTML = yearlyPoints.map((point) => (
+      `<tr><td>${point.year}</td><td>${currency(point.contributionsAdded)}</td><td>${currency(point.projectedGrowth)}</td><td>${currency(point.value)}</td></tr>`
+    )).join("");
+  }
   function renderProjection(points) {
     if (!chartEl || typeof Chart === "undefined") return;
     if (investmentProjectionChart) investmentProjectionChart.destroy();
@@ -2579,6 +2602,7 @@ function initInvestmentCalculatorReportPage() {
       const totalGrowth = finalValue - totalContributions;
 
       renderProjection(points);
+      renderProjectionTable(points);
       setText(summary, `Starting balance: ${currency(principal)} · Projected value: ${currency(finalValue)} · Estimated growth: ${currency(totalGrowth)}`);
       if (generated) generated.textContent = `Generated ${new Date().toLocaleString()}`;
     } catch {
@@ -2596,6 +2620,7 @@ function initInvestmentCalculatorReportPage() {
         investmentProjectionChart.destroy();
         investmentProjectionChart = null;
       }
+      renderProjectionTable([]);
     },
   };
 }
