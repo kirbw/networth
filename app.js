@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -2625,6 +2625,107 @@ function initInvestmentCalculatorReportPage() {
   };
 }
 
+
+function initLoanAmortizationReportPage() {
+  const form = document.getElementById("loan-amortization-form");
+  const tableBody = document.getElementById("loan-amortization-body");
+  const summary = document.getElementById("loan-amort-summary");
+  const generated = document.getElementById("loan-amort-generated");
+  const printTitle = document.getElementById("loan-amort-print-title");
+  const printBtn = document.getElementById("print-loan-amortization-btn");
+
+  function addMonths(dateValue, monthsToAdd) {
+    const dt = new Date(dateValue);
+    dt.setMonth(dt.getMonth() + monthsToAdd);
+    return dt;
+  }
+
+  function formatDate(dateValue) {
+    return new Date(dateValue).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+
+  function calcMonthlyPayment(principal, annualRate, months) {
+    const monthlyRate = annualRate / 100 / 12;
+    if (monthlyRate === 0) return principal / months;
+    return principal * (monthlyRate / (1 - ((1 + monthlyRate) ** -months)));
+  }
+
+  function renderSchedule(startDate, principal, annualRate, months) {
+    const monthlyRate = annualRate / 100 / 12;
+    const monthlyPayment = calcMonthlyPayment(principal, annualRate, months);
+    const rows = [];
+    let balance = principal;
+    let totalInterest = 0;
+
+    for (let month = 1; month <= months; month += 1) {
+      const interest = balance * monthlyRate;
+      let principalPaid = monthlyPayment - interest;
+      if (month === months || principalPaid > balance) {
+        principalPaid = balance;
+      }
+      const payment = principalPaid + interest;
+      balance = Math.max(0, balance - principalPaid);
+      totalInterest += interest;
+
+      rows.push({
+        dueDate: formatDate(addMonths(startDate, month - 1)),
+        month,
+        interest,
+        principal: principalPaid,
+        payment,
+        remaining: balance,
+      });
+    }
+
+    return { rows, monthlyPayment, totalInterest, totalPaid: principal + totalInterest };
+  }
+
+  function setPlaceholder() {
+    if (tableBody) tableBody.innerHTML = '<tr><td colspan="6">Run a calculation to view the loan schedule.</td></tr>';
+    if (summary) summary.innerHTML = "";
+  }
+
+  form?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const startDate = document.getElementById("loan-start-date")?.value;
+    const principal = Number(document.getElementById("loan-start-balance")?.value || 0);
+    const annualRate = Number(document.getElementById("loan-interest-rate")?.value || 0);
+    const months = Number(document.getElementById("loan-term-months")?.value || 0);
+
+    if (!startDate || principal <= 0 || months <= 0 || annualRate < 0) {
+      if (generated) generated.textContent = "Please enter valid loan details to calculate the schedule.";
+      setPlaceholder();
+      return;
+    }
+
+    const schedule = renderSchedule(startDate, principal, annualRate, months);
+
+    if (tableBody) {
+      tableBody.innerHTML = schedule.rows.map((row) => (
+        `<tr><td>${row.dueDate}</td><td>${row.month}</td><td>${currency(row.interest)}</td><td>${currency(row.principal)}</td><td>${currency(row.payment)}</td><td>${currency(row.remaining)}</td></tr>`
+      )).join("");
+    }
+
+    if (summary) {
+      summary.innerHTML = `
+        <div class="loan-summary-pill"><span>Monthly Payment</span><strong>${currency(schedule.monthlyPayment)}</strong></div>
+        <div class="loan-summary-pill"><span>Total Interest</span><strong>${currency(schedule.totalInterest)}</strong></div>
+        <div class="loan-summary-pill"><span>Total Paid</span><strong>${currency(schedule.totalPaid)}</strong></div>
+        <div class="loan-summary-pill"><span>Payoff Date</span><strong>${formatDate(addMonths(startDate, months - 1))}</strong></div>
+      `;
+    }
+
+    if (printTitle) {
+      printTitle.textContent = `Loan Amortization Schedule — ${currency(principal)} at ${annualRate.toFixed(3)}% for ${months} months`;
+    }
+    if (generated) generated.textContent = `Generated ${new Date().toLocaleString()}`;
+  });
+
+  printBtn?.addEventListener("click", () => window.print());
+
+  return { render: async () => setPlaceholder() };
+}
+
 function initResetPasswordPage() {
   const form = document.getElementById("reset-password-page-form");
   const msg = document.getElementById("reset-password-page-message");
@@ -2707,6 +2808,11 @@ async function initPageData() {
 
   if (page === "investment-calculator-report") {
     if (!pageController) pageController = initInvestmentCalculatorReportPage();
+    return pageController.render();
+  }
+
+  if (page === "loan-amortization-report") {
+    if (!pageController) pageController = initLoanAmortizationReportPage();
     return pageController.render();
   }
 

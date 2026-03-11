@@ -271,6 +271,31 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
   height: 340px !important;
 }
 
+.loan-amort-summary {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.loan-summary-pill {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  background: color-mix(in srgb, var(--card) 88%, #dbeafe 12%);
+}
+
+.loan-summary-pill span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  display: block;
+}
+
+.loan-summary-pill strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.05rem;
+}
 
 
 @media (max-width: 1100px) {
@@ -408,7 +433,7 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
 .report-col-value { width: 25%; text-align: right; white-space: nowrap; }
 
 @media print {
-  .sidebar, .topbar, .version-footer, #auth-card, .admin-subnav-card, .report-actions, .report-condensed-toggle, #print-networth-btn, #print-monthly-report-btn, #print-liquid-report-btn, #print-investment-calculator-btn { display: none !important; }
+  .sidebar, .topbar, .version-footer, #auth-card, .admin-subnav-card, .report-actions, .report-condensed-toggle, #print-networth-btn, #print-monthly-report-btn, #print-liquid-report-btn, #print-investment-calculator-btn, #print-loan-amortization-btn { display: none !important; }
   .layout, .main-column { display: block; }
   .container { max-width: 100%; margin: 0; padding: 0; gap: 0.5rem; }
   body { background: #fff; }
@@ -419,6 +444,7 @@ th, td { border-bottom: 1px solid var(--border); padding: 0.65rem; text-align: l
   body[data-page="liquid-cash-report"] #app-content > .card:not(#liquid-report-bank-card):not(#liquid-report-cash-card) { display: none !important; }
   body[data-page="net-worth-report"] #app-content > .card:not(.report-header):not(#networth-report-content):not(:last-child) { display: none !important; }
   body[data-page="investment-calculator-report"] #app-content > .card:not(#investment-calculator-chart-card) { display: none !important; }
+  body[data-page="loan-amortization-report"] #app-content > .card:not(#loan-amort-schedule-card):not(#loan-amort-header-card) { display: none !important; }
 }
 
 .report-liabilities-heading {

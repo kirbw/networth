@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Loan Amortization Calculator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="loan-amortization-report">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <div class="main-column">
+      <header class="topbar">
+        <div class="session-controls">
+          <span id="session-name">Not signed in</span>
+          <button id="logout-btn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <main class="container">
+        <section id="auth-card" class="card auth-card hidden"></section>
+
+        <section id="app-content" class="hidden">
+          <h1 id="loan-amort-print-title" class="print-only">Loan Amortization Schedule</h1>
+
+          <section class="card admin-subnav-card">
+            <div class="admin-subnav">
+              <a href="/net-worth-report.html">Net Worth</a>
+              <a href="/monthly-payments-report.html">Monthly Payments</a>
+              <a href="/liquid-cash-report.html">Liquid Cash</a>
+              <a href="/investment-calculator-report.html">Investment Calculator</a>
+              <a href="/loan-amortization-report.html" class="active">Loan Amortization</a>
+            </div>
+          </section>
+
+          <section class="card report-header" id="loan-amort-header-card">
+            <h2>Loan Amortization Calculator</h2>
+            <p class="small-note" id="loan-amort-generated">Enter loan details to generate a payoff schedule.</p>
+            <form id="loan-amortization-form">
+              <div class="form-grid">
+                <label>Loan Start Date <input id="loan-start-date" type="date" required /></label>
+                <label>Starting Balance ($) <input id="loan-start-balance" type="number" min="0.01" step="0.01" required /></label>
+                <label>Interest Rate (%) <input id="loan-interest-rate" type="number" min="0" step="0.001" required /></label>
+                <label>Number of Months <input id="loan-term-months" type="number" min="1" max="600" step="1" required /></label>
+              </div>
+              <div class="report-actions">
+                <button type="submit">Calculate Schedule</button>
+                <button id="print-loan-amortization-btn" type="button">Print / Save as PDF</button>
+              </div>
+            </form>
+            <div class="loan-amort-summary" id="loan-amort-summary"></div>
+          </section>
+
+          <section class="card" id="loan-amort-schedule-card">
+            <h3>Payoff Schedule</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Due Date</th>
+                    <th>Month</th>
+                    <th>Interest</th>
+                    <th>Principal</th>
+                    <th>Payment</th>
+                    <th>Remaining</th>
+                  </tr>
+                </thead>
+                <tbody id="loan-amortization-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>
