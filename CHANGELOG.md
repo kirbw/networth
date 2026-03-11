@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [v0.0.80] - 2026-03-11
+
+### Added
+- Added an **Admin Updates prerelease channel** with richer progress/status messaging during update checks and installs.
+- Added an **Investment Calculator report** with growth projection charting and a yearly projection breakdown table.
+- Added a **Loan Amortization report** with payment inputs and a printable amortization schedule.
+
+### Changed
+- Improved responsive/mobile layout behavior across the app and report pages.
+- Tightened prerelease update selection so prerelease checks only resolve prerelease tags.
+- Updated release metadata and documentation for the `v0.0.80` milestone.
+
 ## [v0.0.75] - 2026-03-07
 
 ### Added

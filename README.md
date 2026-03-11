@@ -4,7 +4,7 @@ NetWorth is a self-hosted personal finance web application for tracking income, 
 
 ## Release status
 
-**Current release: `v0.0.75`**  
+**Current release: `v0.0.80`**  
 This is the first release intended to be **deployment-ready**.
 
 ## What it does
