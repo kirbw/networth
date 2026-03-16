@@ -28,7 +28,7 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/liabilities-recurring-expenses.html", "/profile.html", "/goals.html", "/taxes.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/liabilities-recurring-expenses.html", "/profile.html", "/goals.html", "/taxes.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html"}
 ADMIN_PAGES = {"/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
@@ -762,6 +762,66 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS sandy_goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                goal_title TEXT NOT NULL,
+                goal_details TEXT,
+                goal_year INTEGER NOT NULL,
+                percent_complete REAL NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sandy_deer_harvest (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                harvest_year INTEGER NOT NULL,
+                hunter_name TEXT NOT NULL,
+                deer_type TEXT NOT NULL,
+                notes TEXT,
+                photo_data TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sandy_food_plots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                activity_date TEXT NOT NULL,
+                plot_name TEXT NOT NULL,
+                activity_details TEXT NOT NULL,
+                photo_data TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sandy_expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                expense_date TEXT NOT NULL,
+                amount REAL NOT NULL,
+                description TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS tax_years (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -1160,6 +1220,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return "goals"
         if path == "/taxes.html":
             return "taxes"
+        if path in ("/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html"):
+            return "sandy-lake"
         if path == "/notifications.html":
             return "notifications"
         if path in ("/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html"):
@@ -1181,6 +1243,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             f'<a href="/goals.html"{active("goals")}>Goals</a>'
             f'<a href="/taxes.html"{active("taxes")}>Taxes</a>'
             f'<a href="/net-worth-report.html"{active("reports")}>Reports</a>'
+            f'<a href="/sandy-goals.html"{active("sandy-lake")}>Sandy Lake Retreat</a>'
             f'<a href="/profile.html"{active("profile")}>My Profile</a>'
             f'<a id="nav-admin" href="/admin-users.html" class="hidden{(" active" if group == "admin" else "")}">Admin</a>'
             '</nav></aside>'
@@ -1596,6 +1659,46 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 item["progress_amount"] = float(progress_by_subtype.get(item.get("target_subtype"), 0.0))
                 payload.append(item)
             self._send_json(200, payload)
+            return
+
+        if parsed.path == "/api/sandy/goals":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, goal_title, goal_details, goal_year, percent_complete, created_at, updated_at FROM sandy_goals WHERE user_id = ? ORDER BY goal_year DESC, id DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(r) for r in rows])
+            return
+
+        if parsed.path == "/api/sandy/deer-harvest":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, harvest_year, hunter_name, deer_type, notes, photo_data, created_at, updated_at FROM sandy_deer_harvest WHERE user_id = ? ORDER BY harvest_year DESC, id DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(r) for r in rows])
+            return
+
+        if parsed.path == "/api/sandy/food-plots":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, activity_date, plot_name, activity_details, photo_data, created_at, updated_at FROM sandy_food_plots WHERE user_id = ? ORDER BY activity_date DESC, id DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(r) for r in rows])
+            return
+
+        if parsed.path == "/api/sandy/expenses":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, expense_date, amount, description, created_at, updated_at FROM sandy_expenses WHERE user_id = ? ORDER BY expense_date DESC, id DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(r) for r in rows])
             return
 
         if parsed.path == "/api/taxes":
@@ -2181,6 +2284,132 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     cur = conn.execute("UPDATE goals SET name = ?, goal_type = ?, target_amount = ?, target_category = ?, target_subtype = ?, goal_date = ?, updated_at = ? WHERE id = ? AND user_id = ?", (name, goal_type, target_amount, target_category, target_subtype, goal_date, now, record_id, user["id"]))
                     if cur.rowcount == 0:
                         self._send_json(404, {"error": "Goal not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/sandy/goals":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                title = str(data.get("title", "")).strip()
+                details = str(data.get("details", "")).strip() or None
+                year = int(data.get("year"))
+                percent_complete = float(data.get("percentComplete", 0))
+                if not title or year < 1900 or year > 3000 or percent_complete < 0 or percent_complete > 100:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid Sandy Lake goal data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO sandy_goals (user_id, goal_title, goal_details, goal_year, percent_complete, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], title, details, year, percent_complete, now, now))
+                else:
+                    cur = conn.execute("UPDATE sandy_goals SET goal_title = ?, goal_details = ?, goal_year = ?, percent_complete = ?, updated_at = ? WHERE id = ? AND user_id = ?", (title, details, year, percent_complete, now, record_id, user["id"]))
+                    if cur.rowcount == 0:
+                        self._send_json(404, {"error": "Goal not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/sandy/deer-harvest":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                year = int(data.get("year"))
+                hunter = str(data.get("hunter", "")).strip()
+                deer_type = str(data.get("deerType", "")).strip().title()
+                notes = str(data.get("notes", "")).strip() or None
+                photo_data = str(data.get("photoData", "")).strip() or None
+                clear_photo = bool(data.get("clearPhoto", False))
+                if deer_type not in ("Buck", "Doe") or not hunter or year < 1900 or year > 3000:
+                    raise ValueError
+                if photo_data and not photo_data.startswith("data:image/"):
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid deer harvest data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO sandy_deer_harvest (user_id, harvest_year, hunter_name, deer_type, notes, photo_data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], year, hunter, deer_type, notes, photo_data, now, now))
+                else:
+                    existing = conn.execute("SELECT photo_data FROM sandy_deer_harvest WHERE id = ? AND user_id = ?", (record_id, user["id"])).fetchone()
+                    if not existing:
+                        self._send_json(404, {"error": "Harvest record not found."})
+                        return
+                    final_photo = None if clear_photo else (photo_data if photo_data is not None else existing[0])
+                    conn.execute("UPDATE sandy_deer_harvest SET harvest_year = ?, hunter_name = ?, deer_type = ?, notes = ?, photo_data = ?, updated_at = ? WHERE id = ? AND user_id = ?", (year, hunter, deer_type, notes, final_photo, now, record_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/sandy/food-plots":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                activity_date = str(data.get("date", "")).strip()
+                plot_name = str(data.get("plotName", "")).strip()
+                activity = str(data.get("activity", "")).strip()
+                photo_data = str(data.get("photoData", "")).strip() or None
+                clear_photo = bool(data.get("clearPhoto", False))
+                if not activity_date or not plot_name or not activity:
+                    raise ValueError
+                if photo_data and not photo_data.startswith("data:image/"):
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid food plot history data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO sandy_food_plots (user_id, activity_date, plot_name, activity_details, photo_data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], activity_date, plot_name, activity, photo_data, now, now))
+                else:
+                    existing = conn.execute("SELECT photo_data FROM sandy_food_plots WHERE id = ? AND user_id = ?", (record_id, user["id"])).fetchone()
+                    if not existing:
+                        self._send_json(404, {"error": "Food plot entry not found."})
+                        return
+                    final_photo = None if clear_photo else (photo_data if photo_data is not None else existing[0])
+                    conn.execute("UPDATE sandy_food_plots SET activity_date = ?, plot_name = ?, activity_details = ?, photo_data = ?, updated_at = ? WHERE id = ? AND user_id = ?", (activity_date, plot_name, activity, final_photo, now, record_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/sandy/expenses":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                expense_date = str(data.get("date", "")).strip()
+                amount = float(data.get("amount", 0))
+                description = str(data.get("description", "")).strip()
+                if not expense_date or amount < 0 or not description:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid expense data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO sandy_expenses (user_id, expense_date, amount, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", (user["id"], expense_date, amount, description, now, now))
+                else:
+                    cur = conn.execute("UPDATE sandy_expenses SET expense_date = ?, amount = ?, description = ?, updated_at = ? WHERE id = ? AND user_id = ?", (expense_date, amount, description, now, record_id, user["id"]))
+                    if cur.rowcount == 0:
+                        self._send_json(404, {"error": "Expense not found."})
                         return
             self._send_json(200, {"success": True})
             return
@@ -3197,6 +3426,132 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+        if parsed.path == "/api/sandy/goals":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                title = str(data.get("title", "")).strip()
+                details = str(data.get("details", "")).strip() or None
+                year = int(data.get("year"))
+                percent_complete = float(data.get("percentComplete", 0))
+                if not title or year < 1900 or year > 3000 or percent_complete < 0 or percent_complete > 100:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid Sandy Lake goal data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO sandy_goals (user_id, goal_title, goal_details, goal_year, percent_complete, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], title, details, year, percent_complete, now, now))
+                else:
+                    cur = conn.execute("UPDATE sandy_goals SET goal_title = ?, goal_details = ?, goal_year = ?, percent_complete = ?, updated_at = ? WHERE id = ? AND user_id = ?", (title, details, year, percent_complete, now, record_id, user["id"]))
+                    if cur.rowcount == 0:
+                        self._send_json(404, {"error": "Goal not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/sandy/deer-harvest":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                year = int(data.get("year"))
+                hunter = str(data.get("hunter", "")).strip()
+                deer_type = str(data.get("deerType", "")).strip().title()
+                notes = str(data.get("notes", "")).strip() or None
+                photo_data = str(data.get("photoData", "")).strip() or None
+                clear_photo = bool(data.get("clearPhoto", False))
+                if deer_type not in ("Buck", "Doe") or not hunter or year < 1900 or year > 3000:
+                    raise ValueError
+                if photo_data and not photo_data.startswith("data:image/"):
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid deer harvest data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO sandy_deer_harvest (user_id, harvest_year, hunter_name, deer_type, notes, photo_data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], year, hunter, deer_type, notes, photo_data, now, now))
+                else:
+                    existing = conn.execute("SELECT photo_data FROM sandy_deer_harvest WHERE id = ? AND user_id = ?", (record_id, user["id"])).fetchone()
+                    if not existing:
+                        self._send_json(404, {"error": "Harvest record not found."})
+                        return
+                    final_photo = None if clear_photo else (photo_data if photo_data is not None else existing[0])
+                    conn.execute("UPDATE sandy_deer_harvest SET harvest_year = ?, hunter_name = ?, deer_type = ?, notes = ?, photo_data = ?, updated_at = ? WHERE id = ? AND user_id = ?", (year, hunter, deer_type, notes, final_photo, now, record_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/sandy/food-plots":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                activity_date = str(data.get("date", "")).strip()
+                plot_name = str(data.get("plotName", "")).strip()
+                activity = str(data.get("activity", "")).strip()
+                photo_data = str(data.get("photoData", "")).strip() or None
+                clear_photo = bool(data.get("clearPhoto", False))
+                if not activity_date or not plot_name or not activity:
+                    raise ValueError
+                if photo_data and not photo_data.startswith("data:image/"):
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid food plot history data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO sandy_food_plots (user_id, activity_date, plot_name, activity_details, photo_data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], activity_date, plot_name, activity, photo_data, now, now))
+                else:
+                    existing = conn.execute("SELECT photo_data FROM sandy_food_plots WHERE id = ? AND user_id = ?", (record_id, user["id"])).fetchone()
+                    if not existing:
+                        self._send_json(404, {"error": "Food plot entry not found."})
+                        return
+                    final_photo = None if clear_photo else (photo_data if photo_data is not None else existing[0])
+                    conn.execute("UPDATE sandy_food_plots SET activity_date = ?, plot_name = ?, activity_details = ?, photo_data = ?, updated_at = ? WHERE id = ? AND user_id = ?", (activity_date, plot_name, activity, final_photo, now, record_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/sandy/expenses":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                expense_date = str(data.get("date", "")).strip()
+                amount = float(data.get("amount", 0))
+                description = str(data.get("description", "")).strip()
+                if not expense_date or amount < 0 or not description:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid expense data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO sandy_expenses (user_id, expense_date, amount, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", (user["id"], expense_date, amount, description, now, now))
+                else:
+                    cur = conn.execute("UPDATE sandy_expenses SET expense_date = ?, amount = ?, description = ?, updated_at = ? WHERE id = ? AND user_id = ?", (expense_date, amount, description, now, record_id, user["id"]))
+                    if cur.rowcount == 0:
+                        self._send_json(404, {"error": "Expense not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
         if parsed.path == "/api/taxes":
             user = self._require_auth()
             if not user:
@@ -3562,6 +3917,50 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute("DELETE FROM goals WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/sandy/goals/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid Sandy goal id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM sandy_goals WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/sandy/deer-harvest/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid deer harvest id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM sandy_deer_harvest WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/sandy/food-plots/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid food plot id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM sandy_food_plots WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/sandy/expenses/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid expense id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM sandy_expenses WHERE id = ? AND user_id = ?", (item_id, user["id"]))
             self._send_json(200, {"success": True})
             return
 
