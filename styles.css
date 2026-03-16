@@ -89,6 +89,46 @@ button {
 }
 button:hover { opacity: 0.92; }
 
+
+textarea {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem;
+  font-size: 1rem;
+  resize: vertical;
+}
+
+.small-note { color: var(--muted); font-size: 0.9rem; }
+.form-span-all { grid-column: 1 / -1; }
+
+.sandy-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.sandy-subnav a {
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.4rem 0.8rem;
+  color: var(--text);
+}
+
+.sandy-subnav a.active {
+  background: #e9eeff;
+  border-color: #cfd9ff;
+}
+
+.thumb-image {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+
 .auth-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem; }
 #auth-message, #form-message, #records-message, #admin-message, #email-settings-message, #reset-password-page-message { min-height: 1.2rem; color: var(--muted); }
 

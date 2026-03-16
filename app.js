@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html", "/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -57,6 +57,17 @@ function formatCompactCurrency(value) {
 
 function setText(el, text) {
   if (el) el.textContent = text;
+}
+
+
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Unable to read file."));
+    reader.readAsDataURL(file);
+  });
 }
 
 function getGoalPercent() {
@@ -2375,6 +2386,363 @@ function initGoalsPage() {
   return { render };
 }
 
+
+function initSandyGoalsPage() {
+  const form = document.getElementById("sandy-goals-form");
+  const body = document.getElementById("sandy-goals-body");
+  const msg = document.getElementById("sandy-goals-message");
+  const submitBtn = document.getElementById("sandy-goals-submit-btn");
+  let rows = [];
+  let editingId = null;
+
+  async function loadRows() {
+    const response = await apiFetch("/api/sandy/goals");
+    if (!response.ok) return;
+    rows = await response.json();
+  }
+
+  function render() {
+    body.innerHTML = "";
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="6">No property goals yet.</td></tr>';
+      return;
+    }
+    rows.forEach((x) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${x.goal_title}</td><td>${x.goal_details || "—"}</td><td>${x.goal_year}</td><td><div class="goal-progress-wrap"><progress max="100" value="${x.percent_complete}"></progress><span>${Number(x.percent_complete || 0).toFixed(0)}%</span></div></td><td>${x.updated_at ? new Date(x.updated_at).toLocaleDateString() : "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+      body.appendChild(tr);
+    });
+  }
+
+  function resetEdit() {
+    editingId = null;
+    if (submitBtn) submitBtn.textContent = "Add Goal";
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      id: editingId,
+      title: document.getElementById("sandy-goal-title").value.trim(),
+      details: document.getElementById("sandy-goal-details").value.trim(),
+      year: Number(document.getElementById("sandy-goal-year").value),
+      percentComplete: Number(document.getElementById("sandy-goal-progress").value),
+    };
+    const response = await apiFetch("/api/sandy/goals", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save goal.");
+    form.reset();
+    document.getElementById("sandy-goal-progress").value = 0;
+    resetEdit();
+    await loadRows();
+    render();
+    setText(msg, "Goal saved.");
+  });
+
+  body?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const row = rows.find((x) => x.id === id);
+      if (!row) return;
+      document.getElementById("sandy-goal-title").value = row.goal_title || "";
+      document.getElementById("sandy-goal-details").value = row.goal_details || "";
+      document.getElementById("sandy-goal-year").value = row.goal_year || "";
+      document.getElementById("sandy-goal-progress").value = row.percent_complete || 0;
+      editingId = id;
+      if (submitBtn) submitBtn.textContent = "Update Goal";
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm("Delete this goal?")) return;
+    await apiFetch(`/api/sandy/goals/${id}`, { method: "DELETE" });
+    if (editingId === id) { form?.reset(); resetEdit(); }
+    await loadRows();
+    render();
+  });
+
+  return { render: async () => { await loadRows(); render(); } };
+}
+
+function initSandyDeerHarvestPage() {
+  const form = document.getElementById("sandy-deer-form");
+  const body = document.getElementById("sandy-deer-body");
+  const msg = document.getElementById("sandy-deer-message");
+  const chartCanvas = document.getElementById("sandy-deer-hunter-chart");
+  const submitBtn = document.getElementById("sandy-deer-submit-btn");
+  const fileInput = document.getElementById("sandy-deer-photo");
+  let rows = [];
+  let editingId = null;
+  let hunterChart = null;
+
+  async function loadRows() {
+    const response = await apiFetch("/api/sandy/deer-harvest");
+    if (!response.ok) return;
+    rows = await response.json();
+  }
+
+  function renderChart() {
+    if (!chartCanvas || typeof Chart === "undefined") return;
+    const counts = rows.reduce((acc, row) => {
+      const hunter = row.hunter_name || "Unknown";
+      acc[hunter] = (acc[hunter] || 0) + 1;
+      return acc;
+    }, {});
+    if (hunterChart) hunterChart.destroy();
+    hunterChart = new Chart(chartCanvas, {
+      type: "bar",
+      data: {
+        labels: Object.keys(counts),
+        datasets: [{ label: "Deer Harvested", data: Object.values(counts), backgroundColor: "#3956f6" }],
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } },
+    });
+  }
+
+  function render() {
+    body.innerHTML = "";
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="6">No harvest entries yet.</td></tr>';
+    } else {
+      rows.forEach((x) => {
+        const tr = document.createElement("tr");
+        const img = x.photo_data ? `<a href="${x.photo_data}" target="_blank" rel="noopener"><img class="thumb-image" src="${x.photo_data}" alt="Harvest photo" /></a>` : "—";
+        tr.innerHTML = `<td>${x.harvest_year}</td><td>${x.hunter_name}</td><td>${x.deer_type}</td><td>${x.notes || "—"}</td><td>${img}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+        body.appendChild(tr);
+      });
+    }
+    renderChart();
+  }
+
+  function resetEdit() {
+    editingId = null;
+    if (submitBtn) submitBtn.textContent = "Add Harvest";
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    let photoData = null;
+    const file = fileInput?.files?.[0];
+    if (file) photoData = await readFileAsDataUrl(file);
+    const payload = {
+      id: editingId,
+      year: Number(document.getElementById("sandy-deer-year").value),
+      hunter: document.getElementById("sandy-deer-hunter").value.trim(),
+      deerType: document.getElementById("sandy-deer-type").value,
+      notes: document.getElementById("sandy-deer-notes").value.trim(),
+      photoData,
+      clearPhoto: document.getElementById("sandy-deer-clear-photo").checked,
+    };
+    const response = await apiFetch("/api/sandy/deer-harvest", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save harvest entry.");
+    form.reset();
+    resetEdit();
+    await loadRows();
+    render();
+    setText(msg, "Harvest entry saved.");
+  });
+
+  body?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const row = rows.find((x) => x.id === id);
+      if (!row) return;
+      document.getElementById("sandy-deer-year").value = row.harvest_year || "";
+      document.getElementById("sandy-deer-hunter").value = row.hunter_name || "";
+      document.getElementById("sandy-deer-type").value = row.deer_type || "Buck";
+      document.getElementById("sandy-deer-notes").value = row.notes || "";
+      editingId = id;
+      if (submitBtn) submitBtn.textContent = "Update Harvest";
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm("Delete this harvest entry?")) return;
+    await apiFetch(`/api/sandy/deer-harvest/${id}`, { method: "DELETE" });
+    await loadRows();
+    render();
+  });
+
+  return { render: async () => { await loadRows(); render(); } };
+}
+
+function initSandyFoodPlotsPage() {
+  const form = document.getElementById("sandy-food-form");
+  const body = document.getElementById("sandy-food-body");
+  const msg = document.getElementById("sandy-food-message");
+  const fileInput = document.getElementById("sandy-food-photo");
+  const submitBtn = document.getElementById("sandy-food-submit-btn");
+  let rows = [];
+  let editingId = null;
+
+  async function loadRows() {
+    const response = await apiFetch("/api/sandy/food-plots");
+    if (!response.ok) return;
+    rows = await response.json();
+  }
+
+  function render() {
+    body.innerHTML = "";
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="5">No food plot history yet.</td></tr>';
+      return;
+    }
+    rows.forEach((x) => {
+      const tr = document.createElement("tr");
+      const img = x.photo_data ? `<a href="${x.photo_data}" target="_blank" rel="noopener"><img class="thumb-image" src="${x.photo_data}" alt="Food plot photo" /></a>` : "—";
+      tr.innerHTML = `<td>${x.activity_date}</td><td>${x.plot_name}</td><td>${x.activity_details}</td><td>${img}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+      body.appendChild(tr);
+    });
+  }
+
+  function resetEdit() {
+    editingId = null;
+    if (submitBtn) submitBtn.textContent = "Add History Entry";
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    let photoData = null;
+    const file = fileInput?.files?.[0];
+    if (file) photoData = await readFileAsDataUrl(file);
+    const payload = {
+      id: editingId,
+      date: document.getElementById("sandy-food-date").value,
+      plotName: document.getElementById("sandy-food-plot").value.trim(),
+      activity: document.getElementById("sandy-food-activity").value.trim(),
+      photoData,
+      clearPhoto: document.getElementById("sandy-food-clear-photo").checked,
+    };
+    const response = await apiFetch("/api/sandy/food-plots", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save food plot entry.");
+    form.reset();
+    resetEdit();
+    await loadRows();
+    render();
+    setText(msg, "Food plot entry saved.");
+  });
+
+  body?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const row = rows.find((x) => x.id === id);
+      if (!row) return;
+      document.getElementById("sandy-food-date").value = row.activity_date || "";
+      document.getElementById("sandy-food-plot").value = row.plot_name || "";
+      document.getElementById("sandy-food-activity").value = row.activity_details || "";
+      editingId = id;
+      if (submitBtn) submitBtn.textContent = "Update History Entry";
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm("Delete this food plot entry?")) return;
+    await apiFetch(`/api/sandy/food-plots/${id}`, { method: "DELETE" });
+    await loadRows();
+    render();
+  });
+
+  return { render: async () => { await loadRows(); render(); } };
+}
+
+function initSandyExpensesPage() {
+  const form = document.getElementById("sandy-expenses-form");
+  const body = document.getElementById("sandy-expenses-body");
+  const msg = document.getElementById("sandy-expenses-message");
+  const yearFilter = document.getElementById("sandy-expenses-year-filter");
+  const totalEl = document.getElementById("sandy-expenses-total");
+  const submitBtn = document.getElementById("sandy-expenses-submit-btn");
+  let rows = [];
+  let editingId = null;
+
+  async function loadRows() {
+    const response = await apiFetch("/api/sandy/expenses");
+    if (!response.ok) return;
+    rows = await response.json();
+    const years = [...new Set(rows.map((x) => String(new Date(x.expense_date).getFullYear())))].sort((a, b) => b.localeCompare(a));
+    const current = yearFilter.value;
+    yearFilter.innerHTML = '<option value="">All Years</option>';
+    years.forEach((year) => {
+      const option = document.createElement("option");
+      option.value = year;
+      option.textContent = year;
+      yearFilter.appendChild(option);
+    });
+    yearFilter.value = years.includes(current) ? current : "";
+  }
+
+  function render() {
+    body.innerHTML = "";
+    const activeYear = yearFilter.value;
+    const shown = rows.filter((x) => !activeYear || String(new Date(x.expense_date).getFullYear()) === activeYear);
+    let total = 0;
+    if (!shown.length) {
+      body.innerHTML = '<tr><td colspan="4">No expense entries for this filter.</td></tr>';
+    } else {
+      shown.forEach((x) => {
+        total += Number(x.amount || 0);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${x.expense_date}</td><td>${currency(x.amount)}</td><td>${x.description}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+        body.appendChild(tr);
+      });
+    }
+    totalEl.textContent = currency(total);
+  }
+
+  function resetEdit() {
+    editingId = null;
+    if (submitBtn) submitBtn.textContent = "Add Expense";
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      id: editingId,
+      date: document.getElementById("sandy-expense-date").value,
+      amount: Number(document.getElementById("sandy-expense-amount").value),
+      description: document.getElementById("sandy-expense-description").value.trim(),
+    };
+    const response = await apiFetch("/api/sandy/expenses", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save expense.");
+    form.reset();
+    resetEdit();
+    await loadRows();
+    render();
+    setText(msg, "Expense saved.");
+  });
+
+  yearFilter?.addEventListener("change", render);
+
+  body?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const row = rows.find((x) => x.id === id);
+      if (!row) return;
+      document.getElementById("sandy-expense-date").value = row.expense_date || "";
+      document.getElementById("sandy-expense-amount").value = row.amount || "";
+      document.getElementById("sandy-expense-description").value = row.description || "";
+      editingId = id;
+      if (submitBtn) submitBtn.textContent = "Update Expense";
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm("Delete this expense?")) return;
+    await apiFetch(`/api/sandy/expenses/${id}`, { method: "DELETE" });
+    await loadRows();
+    render();
+  });
+
+  return { render: async () => { await loadRows(); render(); } };
+}
+
 function initTaxesPage() {
   const form = document.getElementById("taxes-form");
   const submitBtn = document.getElementById("taxes-submit-btn");
@@ -2863,6 +3231,27 @@ async function initPageData() {
 
   if (page === "goals") {
     if (!pageController) pageController = initGoalsPage();
+    return pageController.render();
+  }
+
+
+  if (page === "sandy-goals") {
+    if (!pageController) pageController = initSandyGoalsPage();
+    return pageController.render();
+  }
+
+  if (page === "sandy-deer-harvest") {
+    if (!pageController) pageController = initSandyDeerHarvestPage();
+    return pageController.render();
+  }
+
+  if (page === "sandy-food-plots") {
+    if (!pageController) pageController = initSandyFoodPlotsPage();
+    return pageController.render();
+  }
+
+  if (page === "sandy-expenses") {
+    if (!pageController) pageController = initSandyExpensesPage();
     return pageController.render();
   }
 
