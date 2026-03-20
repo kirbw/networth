@@ -59,7 +59,36 @@ function setText(el, text) {
   if (el) el.textContent = text;
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
+function actionIcon(type) {
+  if (type === "edit") {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1.003 1.003 0 0 0 0-1.42l-2.5-2.5a1.003 1.003 0 0 0-1.42 0l-1.96 1.96 3.75 3.75 2.13-1.79Z" fill="currentColor"/></svg>';
+  }
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h5v2H3V5h5l1-2Zm1 6h2v8h-2V9Zm4 0h2v8h-2V9ZM7 9h2v8H7V9Zm1 12a2 2 0 0 1-2-2V8h12v11a2 2 0 0 1-2 2H8Z" fill="currentColor"/></svg>';
+}
+
+function actionButton(type, attrs, label, extraClasses = "") {
+  const attrText = Object.entries(attrs)
+    .map(([key, value]) => ` ${key}="${escapeHtml(value)}"`)
+    .join("");
+  const classes = `${type}-btn action-icon-btn ${extraClasses}`.trim();
+  return `<button class="${classes}" type="button" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"${attrText}>${actionIcon(type)}</button>`;
+}
+
+function editDeleteButtons(attrs, itemLabel = "item") {
+  return `<div class="row-actions">${actionButton("edit", attrs, `Edit ${itemLabel}`)}${actionButton("delete", attrs, `Delete ${itemLabel}`)}</div>`;
+}
+
+function deleteButton(attrs, itemLabel = "item") {
+  return actionButton("delete", attrs, `Delete ${itemLabel}`);
+}
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -431,7 +460,7 @@ function initRecordsPage() {
     }
     for (const r of records) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${r.year}</td><td>${currency(r.income)}</td><td>${currency(r.donation)}</td><td>${r.netWorth == null ? "—" : currency(r.netWorth)}</td><td><button class="edit-btn" data-year="${r.year}" type="button">Edit</button><button class="delete-btn" data-year="${r.year}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${r.year}</td><td>${currency(r.income)}</td><td>${currency(r.donation)}</td><td>${r.netWorth == null ? "—" : currency(r.netWorth)}</td><td>${editDeleteButtons({ "data-year": r.year }, "record")}</td>`;
       tbody.appendChild(tr);
     }
   }
@@ -573,7 +602,7 @@ function initInvestmentsPage() {
 
       const tr = document.createElement("tr");
       const quoteSource = inv.manual_quote ? "Manual" : "Market";
-      tr.innerHTML = `<td>${inv.ticker}</td><td>${inv.broker || "—"}</td><td>${companyName}</td><td>${inv.purchase_date}</td><td>${inv.shares}</td><td>${currency(inv.purchase_price)}</td><td>${currency(purchaseValue)}</td><td>${currentPriceText}</td><td>${quoteSource}</td><td>${gainLossCell}</td><td>${gainLossPctCell}</td><td><button class="edit-btn" data-id="${inv.id}" type="button">Edit</button><button class="delete-btn" data-id="${inv.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${inv.ticker}</td><td>${inv.broker || "—"}</td><td>${companyName}</td><td>${inv.purchase_date}</td><td>${inv.shares}</td><td>${currency(inv.purchase_price)}</td><td>${currency(purchaseValue)}</td><td>${currentPriceText}</td><td>${quoteSource}</td><td>${gainLossCell}</td><td>${gainLossPctCell}</td><td>${editDeleteButtons({ "data-id": inv.id }, "stock entry")}</td>`;
       tableBody.appendChild(tr);
     }
 
@@ -741,7 +770,7 @@ function initPreciousMetalsPage() {
       const gainLoss = Number(item.current_value) - Number(item.purchase_price);
       const gainLossPct = Number(item.purchase_price) > 0 ? (gainLoss / Number(item.purchase_price)) * 100 : 0;
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${item.metal_type}</td><td>${item.description}</td><td>${item.quantity}</td><td>${item.weight}</td><td>${item.purchase_date}</td><td>${item.where_purchased}</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${gainLoss >= 0 ? `<span class="gain-positive">+${currency(gainLoss)}</span>` : `<span class="gain-negative">${currency(gainLoss)}</span>`}</td><td>${gainLossPct >= 0 ? `<span class="gain-positive">+${gainLossPct.toFixed(2)}%</span>` : `<span class="gain-negative">${gainLossPct.toFixed(2)}%</span>`}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${item.metal_type}</td><td>${item.description}</td><td>${item.quantity}</td><td>${item.weight}</td><td>${item.purchase_date}</td><td>${item.where_purchased}</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${gainLoss >= 0 ? `<span class="gain-positive">+${currency(gainLoss)}</span>` : `<span class="gain-negative">${currency(gainLoss)}</span>`}</td><td>${gainLossPct >= 0 ? `<span class="gain-positive">+${gainLossPct.toFixed(2)}%</span>` : `<span class="gain-negative">${gainLossPct.toFixed(2)}%</span>`}</td><td>${editDeleteButtons({ "data-id": item.id }, "precious metal entry")}</td>`;
       tableBody.appendChild(tr);
     }
 
@@ -873,7 +902,7 @@ function initRealEstatePage() {
     for (const item of rows) {
       const myValue = Number(item.current_value) * (Number(item.percentage_owned) / 100);
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${item.description || "—"}</td><td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${myValue >= 0 ? `<span class="gain-positive">${currency(myValue)}</span>` : `<span class="gain-negative">${currency(myValue)}</span>`}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${item.description || "—"}</td><td><a href="${mapsLink(item.address)}" target="_blank" rel="noopener noreferrer">${item.address}</a></td><td>${item.percentage_owned}%</td><td>${currency(item.purchase_price)}</td><td>${currency(item.current_value)}</td><td>${myValue >= 0 ? `<span class="gain-positive">${currency(myValue)}</span>` : `<span class="gain-negative">${currency(myValue)}</span>`}</td><td>${editDeleteButtons({ "data-id": item.id }, "real estate entry")}</td>`;
       tableBody.appendChild(tr);
     }
   }
@@ -984,7 +1013,7 @@ function initBusinessVenturesPage() {
     for (const item of rows) {
       const myValue = Number(item.business_value) * (Number(item.percentage_owned) / 100);
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${item.business_name}</td><td>${item.percentage_owned}%</td><td>${currency(item.business_value)}</td><td>${myValue >= 0 ? `<span class="gain-positive">${currency(myValue)}</span>` : `<span class="gain-negative">${currency(myValue)}</span>`}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${item.business_name}</td><td>${item.percentage_owned}%</td><td>${currency(item.business_value)}</td><td>${myValue >= 0 ? `<span class="gain-positive">${currency(myValue)}</span>` : `<span class="gain-negative">${currency(myValue)}</span>`}</td><td>${editDeleteButtons({ "data-id": item.id }, "business venture entry")}</td>`;
       tableBody.appendChild(tr);
     }
   }
@@ -1097,7 +1126,7 @@ function initRetirementAccountsPage() {
       totalValue += Number(item.value);
       const taxableLabel = Number(item.taxable) === 1 ? "Yes" : "No";
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${item.description}</td><td>${item.account_type}</td><td>${item.broker}</td><td>${taxableLabel}</td><td>${currency(item.value)}</td><td><button class="edit-btn" data-id="${item.id}" type="button">Edit</button><button class="delete-btn" data-id="${item.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${item.description}</td><td>${item.account_type}</td><td>${item.broker}</td><td>${taxableLabel}</td><td>${currency(item.value)}</td><td>${editDeleteButtons({ "data-id": item.id }, "retirement account entry")}</td>`;
       tableBody.appendChild(tr);
     }
     const totalRow = document.createElement("tr");
@@ -1508,7 +1537,7 @@ function initAssetsVehiclesPage() {
     defaultSort: "description", sortDataset: "sortVehicles", apiBase: "/api/assets/vehicles", addLabel: "Add Vehicle", updateLabel: "Update Vehicle",
     emptyText: "No vehicles yet.", colspan: 9, totalLabelColspan: 5, savedText: "Vehicle saved.", deleteConfirm: "Delete this vehicle entry?",
     valueGetter: (x) => x.value,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.model_year || "—"}</td><td>${x.make}</td><td>${x.model}</td><td>${currency(x.value)}</td><td>${x.date_purchased || "—"}</td><td>${x.inspection_expires_on || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.model_year || "—"}</td><td>${x.make}</td><td>${x.model}</td><td>${currency(x.value)}</td><td>${x.date_purchased || "—"}</td><td>${x.inspection_expires_on || "—"}</td><td>${editDeleteButtons({ "data-id": x.id }, "vehicle entry")}</td>`,
     collectPayload: (id) => ({ id, description: document.getElementById("veh-description").value.trim(), year: document.getElementById("veh-year").value.trim(), make: document.getElementById("veh-make").value.trim(), model: document.getElementById("veh-model").value.trim(), datePurchased: document.getElementById("veh-date-purchased").value, inspectionExpiresOn: document.getElementById("veh-inspection-expires-on").value, value: Number(document.getElementById("veh-value").value) }),
     startEdit: (x) => { document.getElementById("veh-description").value = x.description; document.getElementById("veh-year").value = x.model_year || ""; document.getElementById("veh-make").value = x.make; document.getElementById("veh-model").value = x.model; document.getElementById("veh-date-purchased").value = x.date_purchased || ""; document.getElementById("veh-inspection-expires-on").value = x.inspection_expires_on || ""; document.getElementById("veh-value").value = x.value; },
   });
@@ -1520,7 +1549,7 @@ function initAssetsGunsPage() {
     defaultSort: "description", sortDataset: "sortGuns", apiBase: "/api/assets/guns", addLabel: "Add Gun", updateLabel: "Update Gun",
     emptyText: "No guns yet.", colspan: 9, totalLabelColspan: 7, savedText: "Gun entry saved.", deleteConfirm: "Delete this gun entry?",
     valueGetter: (x) => x.value,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.gun_type}</td><td>${x.manufacturer || "—"}</td><td>${x.model || "—"}</td><td>${x.year_acquired || "—"}</td><td>${x.notes || "—"}</td><td>${currency(x.value)}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.gun_type}</td><td>${x.manufacturer || "—"}</td><td>${x.model || "—"}</td><td>${x.year_acquired || "—"}</td><td>${x.notes || "—"}</td><td>${currency(x.value)}</td><td>${editDeleteButtons({ "data-id": x.id }, "gun entry")}</td>`,
     collectPayload: (id) => ({ id, description: document.getElementById("gun-description").value.trim(), type: document.getElementById("gun-type").value, manufacturer: document.getElementById("gun-manufacturer").value.trim(), model: document.getElementById("gun-model").value.trim(), yearAcquired: document.getElementById("gun-year-acquired").value, notes: document.getElementById("gun-notes").value.trim(), value: Number(document.getElementById("gun-value").value) }),
     startEdit: (x) => { document.getElementById("gun-description").value = x.description; document.getElementById("gun-type").value = x.gun_type; document.getElementById("gun-manufacturer").value = x.manufacturer || ""; document.getElementById("gun-model").value = x.model || ""; document.getElementById("gun-year-acquired").value = x.year_acquired || ""; document.getElementById("gun-notes").value = x.notes || ""; document.getElementById("gun-value").value = x.value; },
   });
@@ -1533,7 +1562,7 @@ function initAssetsBankAccountsPage() {
     defaultSort: "description", sortDataset: "sortBank", apiBase: "/api/assets/bank-accounts", addLabel: "Add Bank Account", updateLabel: "Update Bank Account",
     emptyText: "No bank accounts yet.", colspan: 6, totalLabelColspan: 4, savedText: "Bank account saved.", deleteConfirm: "Delete this bank account entry?",
     valueGetter: (x) => x.balance,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.institution}</td><td>${x.account_type}</td><td>${currency(x.balance)}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.institution}</td><td>${x.account_type}</td><td>${currency(x.balance)}</td><td>${editDeleteButtons({ "data-id": x.id }, "bank account entry")}</td>`,
     collectPayload: (id) => ({ id, description: document.getElementById("bank-description").value.trim(), institution: document.getElementById("bank-institution").value.trim(), type: document.getElementById("bank-type").value.trim(), balance: Number(document.getElementById("bank-balance").value) }),
     startEdit: (x) => { document.getElementById("bank-description").value = x.description; document.getElementById("bank-institution").value = x.institution; document.getElementById("bank-type").value = x.account_type; document.getElementById("bank-balance").value = x.balance; },
   });
@@ -1545,7 +1574,7 @@ function initAssetsCashPage() {
     defaultSort: "description", sortDataset: "sortCash", apiBase: "/api/assets/cash", addLabel: "Add Cash Entry", updateLabel: "Update Cash Entry",
     emptyText: "No cash entries yet.", colspan: 4, totalLabelColspan: 2, savedText: "Cash entry saved.", deleteConfirm: "Delete this cash entry?",
     valueGetter: (x) => x.amount,
-    rowHtml: (x) => `<td>${x.description}</td><td>${currency(x.amount)}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    rowHtml: (x) => `<td>${x.description}</td><td>${currency(x.amount)}</td><td>${editDeleteButtons({ "data-id": x.id }, "cash entry")}</td>`,
     collectPayload: (id) => ({ id, description: document.getElementById("cash-description").value.trim(), amount: Number(document.getElementById("cash-amount").value) }),
     startEdit: (x) => { document.getElementById("cash-description").value = x.description; document.getElementById("cash-amount").value = x.amount; },
   });
@@ -1665,7 +1694,7 @@ function initLiabilitiesMortgagesPage() {
     defaultSort: "description", sortDataset: "sortMortgages", apiBase: "/api/liabilities/mortgages", addLabel: "Add Mortgage", updateLabel: "Update Mortgage",
     emptyText: "No mortgages yet.", colspan: 12, totalLabelColspan: 10, savedText: "Mortgage saved.", deleteConfirm: "Delete this mortgage entry?",
     balanceGetter: (x) => x.current_balance,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.real_estate_address || "—"}</td><td>${x.account_number || "—"}</td><td>${x.interest_rate}%</td><td>${x.monthly_payment ? currency(x.monthly_payment) : "—"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${x.interest_change_date || "—"}</td><td>${x.end_date || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.real_estate_address || "—"}</td><td>${x.account_number || "—"}</td><td>${x.interest_rate}%</td><td>${x.monthly_payment ? currency(x.monthly_payment) : "—"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${x.interest_change_date || "—"}</td><td>${x.end_date || "—"}</td><td>${editDeleteButtons({ "data-id": x.id }, "mortgage entry")}</td>`,
     collectPayload: (id) => ({ id, description: document.getElementById("mort-description").value.trim(), realEstateId: document.getElementById("mort-real-estate-id").value, accountNumber: document.getElementById("mort-account-number").value.trim(), interestRate: Number(document.getElementById("mort-interest-rate").value), monthlyPayment: Number(document.getElementById("mort-monthly-payment").value || 0), startDate: document.getElementById("mort-start-date").value, initialAmount: Number(document.getElementById("mort-initial-amount").value), currentBalance: Number(document.getElementById("mort-current-balance").value), endDate: document.getElementById("mort-end-date").value, interestChangeDate: document.getElementById("mort-interest-change-date").value }),
     startEdit: (x) => { document.getElementById("mort-description").value = x.description; document.getElementById("mort-real-estate-id").value = x.real_estate_id || ""; document.getElementById("mort-account-number").value = x.account_number || ""; document.getElementById("mort-interest-rate").value = x.interest_rate; document.getElementById("mort-monthly-payment").value = x.monthly_payment || ""; document.getElementById("mort-start-date").value = x.start_date || ""; document.getElementById("mort-initial-amount").value = x.initial_amount; document.getElementById("mort-current-balance").value = x.current_balance; document.getElementById("mort-end-date").value = x.end_date || ""; document.getElementById("mort-interest-change-date").value = x.interest_change_date || ""; },
     beforeLoad: loadRealEstateOptions,
@@ -1678,7 +1707,7 @@ function initLiabilitiesCreditCardsPage() {
     defaultSort: "description", sortDataset: "sortCreditCards", apiBase: "/api/liabilities/credit-cards", addLabel: "Add Credit Card", updateLabel: "Update Credit Card",
     emptyText: "No credit cards yet.", colspan: 12, totalLabelColspan: 10, savedText: "Credit card saved.", deleteConfirm: "Delete this credit card entry?",
     balanceGetter: (x) => x.current_balance,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.account_number_last4 ? `•••• ${x.account_number_last4}` : "—"}</td><td>${x.interest_rate}%</td><td>${x.special_interest_rate == null ? "—" : `${x.special_interest_rate}%`}</td><td>${x.special_rate_end_date || "—"}</td><td>${x.monthly_payment ? currency(x.monthly_payment) : "—"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${currency(x.credit_limit)}</td><td>${x.end_date || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.account_number_last4 ? `•••• ${x.account_number_last4}` : "—"}</td><td>${x.interest_rate}%</td><td>${x.special_interest_rate == null ? "—" : `${x.special_interest_rate}%`}</td><td>${x.special_rate_end_date || "—"}</td><td>${x.monthly_payment ? currency(x.monthly_payment) : "—"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${currency(x.credit_limit)}</td><td>${x.end_date || "—"}</td><td>${editDeleteButtons({ "data-id": x.id }, "credit card entry")}</td>`,
     collectPayload: (id) => ({ id, description: document.getElementById("cc-description").value.trim(), accountNumberLast4: document.getElementById("cc-account-number-last4").value.trim(), interestRate: Number(document.getElementById("cc-interest-rate").value), specialInterestRate: document.getElementById("cc-special-rate").value.trim(), specialRateEndDate: document.getElementById("cc-special-rate-end").value, monthlyPayment: Number(document.getElementById("cc-monthly-payment").value || 0), startDate: document.getElementById("cc-start-date").value, initialAmount: Number(document.getElementById("cc-initial-amount").value), currentBalance: Number(document.getElementById("cc-current-balance").value), endDate: document.getElementById("cc-end-date").value, creditLimit: Number(document.getElementById("cc-credit-limit").value) }),
     startEdit: (x) => { document.getElementById("cc-description").value = x.description; document.getElementById("cc-account-number-last4").value = x.account_number_last4 || ""; document.getElementById("cc-interest-rate").value = x.interest_rate; document.getElementById("cc-special-rate").value = x.special_interest_rate ?? ""; document.getElementById("cc-special-rate-end").value = x.special_rate_end_date || ""; document.getElementById("cc-monthly-payment").value = x.monthly_payment || ""; document.getElementById("cc-start-date").value = x.start_date || ""; document.getElementById("cc-initial-amount").value = x.initial_amount; document.getElementById("cc-current-balance").value = x.current_balance; document.getElementById("cc-end-date").value = x.end_date || ""; document.getElementById("cc-credit-limit").value = x.credit_limit; },
   });
@@ -1703,7 +1732,7 @@ function initLiabilitiesLoansPage() {
     defaultSort: "description", sortDataset: "sortLoans", apiBase: "/api/liabilities/loans", addLabel: "Add Loan", updateLabel: "Update Loan",
     emptyText: "No loans yet.", colspan: 15, totalLabelColspan: 13, savedText: "Loan saved.", deleteConfirm: "Delete this loan entry?",
     balanceGetter: (x) => x.current_balance,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.loan_type}</td><td>${x.account_number || "—"}</td><td>${x.is_private ? "Yes" : "No"}</td><td>${x.is_secured ? "Yes" : "No"}</td><td>${x.interest_only ? "Yes" : "No"}</td><td>${x.vehicle_description || "—"}</td><td>${x.interest_rate}%</td><td>${x.payment_amount ? currency(x.payment_amount) : "—"}</td><td>${x.payment_frequency || "monthly"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${x.end_date || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.loan_type}</td><td>${x.account_number || "—"}</td><td>${x.is_private ? "Yes" : "No"}</td><td>${x.is_secured ? "Yes" : "No"}</td><td>${x.interest_only ? "Yes" : "No"}</td><td>${x.vehicle_description || "—"}</td><td>${x.interest_rate}%</td><td>${x.payment_amount ? currency(x.payment_amount) : "—"}</td><td>${x.payment_frequency || "monthly"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${x.end_date || "—"}</td><td>${editDeleteButtons({ "data-id": x.id }, "loan entry")}</td>`,
     collectPayload: (id) => ({ id, description: document.getElementById("loan-description").value.trim(), loanType: document.getElementById("loan-type").value.trim(), accountNumber: document.getElementById("loan-account-number").value.trim(), isPrivate: document.getElementById("loan-is-private").value, isSecured: document.getElementById("loan-is-secured").value, interestOnly: document.getElementById("loan-interest-only").value, vehicleId: document.getElementById("loan-vehicle-id").value, interestRate: Number(document.getElementById("loan-interest-rate").value), paymentAmount: Number(document.getElementById("loan-payment-amount").value || 0), paymentFrequency: document.getElementById("loan-payment-frequency").value, startDate: document.getElementById("loan-start-date").value, initialAmount: Number(document.getElementById("loan-initial-amount").value), currentBalance: Number(document.getElementById("loan-current-balance").value), endDate: document.getElementById("loan-end-date").value }),
     startEdit: (x) => { document.getElementById("loan-description").value = x.description; document.getElementById("loan-type").value = x.loan_type; document.getElementById("loan-account-number").value = x.account_number || ""; document.getElementById("loan-is-private").value = x.is_private ? "yes" : "no"; document.getElementById("loan-is-secured").value = x.is_secured ? "yes" : "no"; document.getElementById("loan-interest-only").value = x.interest_only ? "yes" : "no"; document.getElementById("loan-vehicle-id").value = x.vehicle_id || ""; document.getElementById("loan-interest-rate").value = x.interest_rate; document.getElementById("loan-payment-amount").value = x.payment_amount || ""; document.getElementById("loan-payment-frequency").value = x.payment_frequency || "monthly"; document.getElementById("loan-start-date").value = x.start_date || ""; document.getElementById("loan-initial-amount").value = x.initial_amount; document.getElementById("loan-current-balance").value = x.current_balance; document.getElementById("loan-end-date").value = x.end_date || ""; },
     beforeLoad: loadVehicleOptions,
@@ -1730,7 +1759,7 @@ function initAdminUsersPage() {
       userSelect.appendChild(option);
 
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${user.fullName}</td><td>${user.username}</td><td>${user.email || "—"}</td><td>${user.role}</td><td>${user.isVerified ? "Yes" : "No"}</td><td>${user.dbUsageHuman || "0 B"}</td><td><button class="delete-btn" data-user-id="${user.id}" data-username="${user.username}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${user.fullName}</td><td>${user.username}</td><td>${user.email || "—"}</td><td>${user.role}</td><td>${user.isVerified ? "Yes" : "No"}</td><td>${user.dbUsageHuman || "0 B"}</td><td>${deleteButton({ "data-user-id": user.id, "data-username": user.username }, "user")}</td>`;
       tableBody.appendChild(tr);
     }
   }
@@ -1836,7 +1865,7 @@ function initAdminBackupsPage() {
     listBody.innerHTML = "";
     files.forEach((file) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${file.name}</td><td>${file.sizeHuman}</td><td>${new Date(file.createdAt).toLocaleString()}</td><td><a href="/api/admin/backups/download?name=${encodeURIComponent(file.name)}">Download</a> <button class="delete-backup-btn" data-name="${file.name}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${file.name}</td><td>${file.sizeHuman}</td><td>${new Date(file.createdAt).toLocaleString()}</td><td><a href="/api/admin/backups/download?name=${encodeURIComponent(file.name)}">Download</a> ${actionButton("delete", { "data-name": file.name }, "Delete backup", "delete-backup-btn")}</td>`;
       listBody.appendChild(tr);
     });
   }
@@ -2099,7 +2128,7 @@ function initNotificationsPage() {
     }
     items.forEach((n) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${new Date(n.created_at).toLocaleString()}</td><td>${n.title}</td><td>${n.message}</td><td>${n.status}</td><td><div class="notifications-actions"><button class="mark-read-btn" data-id="${n.id}" type="button">Mark Read</button><button class="mark-unread-btn" data-id="${n.id}" type="button">Mark Unread</button><button class="delete-btn" data-id="${n.id}" type="button">Delete</button></div></td>`;
+      tr.innerHTML = `<td>${new Date(n.created_at).toLocaleString()}</td><td>${n.title}</td><td>${n.message}</td><td>${n.status}</td><td><div class="notifications-actions"><button class="mark-read-btn" data-id="${n.id}" type="button">Mark Read</button><button class="mark-unread-btn" data-id="${n.id}" type="button">Mark Unread</button>${deleteButton({ "data-id": n.id }, "notification")}</div></td>`;
       body.appendChild(tr);
     });
   }
@@ -2212,7 +2241,7 @@ function initRecurringExpensesPage() {
     rows.forEach((x) => {
       total += Number(x.amount || 0);
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${x.description}</td><td>${x.category || "—"}</td><td>${currency(x.amount)}</td><td>${x.frequency}</td><td>${x.start_date || "—"}</td><td>${x.end_date || "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${x.description}</td><td>${x.category || "—"}</td><td>${currency(x.amount)}</td><td>${x.frequency}</td><td>${x.start_date || "—"}</td><td>${x.end_date || "—"}</td><td>${editDeleteButtons({ "data-id": x.id }, "recurring expense entry")}</td>`;
       body.appendChild(tr);
     });
     const tr = document.createElement("tr");
@@ -2348,7 +2377,7 @@ function initGoalsPage() {
     rows.forEach((x) => {
       const pct = x.target_amount > 0 ? Math.min(100, (Number(x.progress_amount || 0) / Number(x.target_amount)) * 100) : 0;
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${x.name}</td><td>${x.goal_type}</td><td>${currency(x.target_amount)}</td><td><div class="goal-progress-wrap"><progress max="100" value="${pct}"></progress><span>${pct.toFixed(1)}%</span></div></td><td>${x.goal_date || "—"}</td><td><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${x.name}</td><td>${x.goal_type}</td><td>${currency(x.target_amount)}</td><td><div class="goal-progress-wrap"><progress max="100" value="${pct}"></progress><span>${pct.toFixed(1)}%</span></div></td><td>${x.goal_date || "—"}</td><td>${deleteButton({ "data-id": x.id }, "goal")}</td>`;
       body.appendChild(tr);
     });
   }
@@ -2409,7 +2438,7 @@ function initSandyGoalsPage() {
     }
     rows.forEach((x) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${x.goal_title}</td><td>${x.goal_details || "—"}</td><td>${x.goal_year}</td><td><div class="goal-progress-wrap"><progress max="100" value="${x.percent_complete}"></progress><span>${Number(x.percent_complete || 0).toFixed(0)}%</span></div></td><td>${x.updated_at ? new Date(x.updated_at).toLocaleDateString() : "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${x.goal_title}</td><td>${x.goal_details || "—"}</td><td>${x.goal_year}</td><td><div class="goal-progress-wrap"><progress max="100" value="${x.percent_complete}"></progress><span>${Number(x.percent_complete || 0).toFixed(0)}%</span></div></td><td>${x.updated_at ? new Date(x.updated_at).toLocaleDateString() : "—"}</td><td>${editDeleteButtons({ "data-id": x.id }, "goal")}</td>`;
       body.appendChild(tr);
     });
   }
@@ -2508,7 +2537,7 @@ function initSandyDeerHarvestPage() {
       rows.forEach((x) => {
         const tr = document.createElement("tr");
         const img = x.photo_data ? `<a href="${x.photo_data}" target="_blank" rel="noopener"><img class="thumb-image" src="${x.photo_data}" alt="Harvest photo" /></a>` : "—";
-        tr.innerHTML = `<td>${x.harvest_year}</td><td>${x.hunter_name}</td><td>${x.deer_type}</td><td>${x.notes || "—"}</td><td>${img}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+        tr.innerHTML = `<td>${x.harvest_year}</td><td>${x.hunter_name}</td><td>${x.deer_type}</td><td>${x.notes || "—"}</td><td>${img}</td><td>${editDeleteButtons({ "data-id": x.id }, "harvest entry")}</td>`;
         body.appendChild(tr);
       });
     }
@@ -2593,7 +2622,7 @@ function initSandyFoodPlotsPage() {
     rows.forEach((x) => {
       const tr = document.createElement("tr");
       const img = x.photo_data ? `<a href="${x.photo_data}" target="_blank" rel="noopener"><img class="thumb-image" src="${x.photo_data}" alt="Food plot photo" /></a>` : "—";
-      tr.innerHTML = `<td>${x.activity_date}</td><td>${x.plot_name}</td><td>${x.activity_details}</td><td>${img}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${x.activity_date}</td><td>${x.plot_name}</td><td>${x.activity_details}</td><td>${img}</td><td>${editDeleteButtons({ "data-id": x.id }, "food plot history entry")}</td>`;
       body.appendChild(tr);
     });
   }
@@ -2687,7 +2716,7 @@ function initSandyExpensesPage() {
       shown.forEach((x) => {
         total += Number(x.amount || 0);
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${x.expense_date}</td><td>${currency(x.amount)}</td><td>${x.description}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+        tr.innerHTML = `<td>${x.expense_date}</td><td>${currency(x.amount)}</td><td>${x.description}</td><td>${editDeleteButtons({ "data-id": x.id }, "expense entry")}</td>`;
         body.appendChild(tr);
       });
     }
@@ -2782,7 +2811,7 @@ function initTaxesPage() {
       const local = Number(x.local_tax || 0);
       totalTax += federal + state + local;
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${x.tax_year}</td><td>${currency(federal)}</td><td>${currency(state)}</td><td>${currency(local)}</td><td>${x.document_id ? `<a href="/api/taxes/documents/${x.document_id}/download">${x.file_name || "Download"}</a>` : "—"}</td><td><button class="edit-btn" data-id="${x.id}" type="button">Edit</button><button class="delete-btn" data-id="${x.id}" type="button">Delete</button></td>`;
+      tr.innerHTML = `<td>${x.tax_year}</td><td>${currency(federal)}</td><td>${currency(state)}</td><td>${currency(local)}</td><td>${x.document_id ? `<a href="/api/taxes/documents/${x.document_id}/download">${x.file_name || "Download"}</a>` : "—"}</td><td>${editDeleteButtons({ "data-id": x.id }, "tax year")}</td>`;
       body.appendChild(tr);
     });
     if (totalEl) totalEl.textContent = currency(totalTax);
