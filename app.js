@@ -1,6 +1,6 @@
 const DEFAULT_GOAL_PERCENT = 10;
 const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html", "/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html"]);
+const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html", "/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html", "/solar-electric-usage.html"]);
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -2772,6 +2772,90 @@ function initSandyExpensesPage() {
   return { render: async () => { await loadRows(); render(); } };
 }
 
+
+function initSolarElectricUsagePage() {
+  const form = document.getElementById("solar-electric-usage-form");
+  const body = document.getElementById("solar-usage-body");
+  const msg = document.getElementById("solar-usage-message");
+  const submitBtn = document.getElementById("solar-usage-submit-btn");
+  let rows = [];
+  let editingId = null;
+
+  async function loadRows() {
+    const response = await apiFetch("/api/solar-electric-usage");
+    if (!response.ok) return;
+    rows = await response.json();
+  }
+
+  function render() {
+    body.innerHTML = "";
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="8">No solar usage entries yet.</td></tr>';
+      return;
+    }
+    rows.forEach((x) => {
+      const solar = Number(x.solar_kwh || 0);
+      const meter1 = Number(x.meter1_kwh || 0);
+      const meter2 = Number(x.meter2_kwh || 0);
+      const totalUsage = meter1 + meter2;
+      const netUsage = totalUsage - solar;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${x.usage_month}</td><td>${solar.toFixed(2)}</td><td>${meter1.toFixed(2)}</td><td>${meter2.toFixed(2)}</td><td>${totalUsage.toFixed(2)}</td><td>${netUsage.toFixed(2)}</td><td>${currency(x.amount_paid)}</td><td>${editDeleteButtons({ "data-id": x.id }, "solar usage entry")}</td>`;
+      body.appendChild(tr);
+    });
+  }
+
+  function resetEdit() {
+    editingId = null;
+    if (submitBtn) submitBtn.textContent = "Add Usage Record";
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      id: editingId,
+      month: document.getElementById("solar-usage-month").value,
+      solarKwh: Number(document.getElementById("solar-generated-kwh").value),
+      meter1Kwh: Number(document.getElementById("solar-meter1-kwh").value),
+      meter2Kwh: Number(document.getElementById("solar-meter2-kwh").value),
+      amountPaid: Number(document.getElementById("solar-amount-paid").value),
+    };
+    const response = await apiFetch("/api/solar-electric-usage", { method: "POST", body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) return setText(msg, data.error || "Unable to save solar usage entry.");
+    form.reset();
+    resetEdit();
+    await loadRows();
+    render();
+    setText(msg, "Solar electric usage saved.");
+  });
+
+  body?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const id = Number(target.dataset.id);
+    if (target.classList.contains("edit-btn")) {
+      const row = rows.find((x) => x.id === id);
+      if (!row) return;
+      document.getElementById("solar-usage-month").value = row.usage_month || "";
+      document.getElementById("solar-generated-kwh").value = row.solar_kwh || "";
+      document.getElementById("solar-meter1-kwh").value = row.meter1_kwh || "";
+      document.getElementById("solar-meter2-kwh").value = row.meter2_kwh || "";
+      document.getElementById("solar-amount-paid").value = row.amount_paid || "";
+      editingId = id;
+      if (submitBtn) submitBtn.textContent = "Update Usage Record";
+      return;
+    }
+    if (!target.classList.contains("delete-btn")) return;
+    if (!window.confirm("Delete this solar usage entry?")) return;
+    await apiFetch(`/api/solar-electric-usage/${id}`, { method: "DELETE" });
+    await loadRows();
+    render();
+  });
+
+  return { render: async () => { await loadRows(); render(); } };
+}
+
 function initTaxesPage() {
   const form = document.getElementById("taxes-form");
   const submitBtn = document.getElementById("taxes-submit-btn");
@@ -3281,6 +3365,11 @@ async function initPageData() {
 
   if (page === "sandy-expenses") {
     if (!pageController) pageController = initSandyExpensesPage();
+    return pageController.render();
+  }
+
+  if (page === "solar-electric-usage") {
+    if (!pageController) pageController = initSolarElectricUsagePage();
     return pageController.render();
   }
 

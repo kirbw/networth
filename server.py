@@ -28,7 +28,7 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/liabilities-recurring-expenses.html", "/profile.html", "/goals.html", "/taxes.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/liabilities-recurring-expenses.html", "/profile.html", "/goals.html", "/taxes.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html", "/solar-electric-usage.html"}
 ADMIN_PAGES = {"/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
@@ -822,6 +822,23 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS solar_electric_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                usage_month TEXT NOT NULL,
+                solar_kwh REAL NOT NULL,
+                meter1_kwh REAL NOT NULL,
+                meter2_kwh REAL NOT NULL,
+                amount_paid REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, usage_month),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS tax_years (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -1220,7 +1237,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return "goals"
         if path == "/taxes.html":
             return "taxes"
-        if path in ("/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html"):
+        if path in ("/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html", "/solar-electric-usage.html"):
             return "sandy-lake"
         if path == "/notifications.html":
             return "notifications"
@@ -1698,6 +1715,16 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute("SELECT id, expense_date, amount, description, created_at, updated_at FROM sandy_expenses WHERE user_id = ? ORDER BY expense_date DESC, id DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(r) for r in rows])
+            return
+
+        if parsed.path == "/api/solar-electric-usage":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, usage_month, solar_kwh, meter1_kwh, meter2_kwh, amount_paid, created_at, updated_at FROM solar_electric_usage WHERE user_id = ? ORDER BY usage_month DESC, id DESC", (user["id"],)).fetchall()
             self._send_json(200, [dict(r) for r in rows])
             return
 
@@ -2411,6 +2438,42 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     if cur.rowcount == 0:
                         self._send_json(404, {"error": "Expense not found."})
                         return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/solar-electric-usage":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                month = str(data.get("month", "")).strip()
+                solar_kwh = float(data.get("solarKwh"))
+                meter1_kwh = float(data.get("meter1Kwh"))
+                meter2_kwh = float(data.get("meter2Kwh"))
+                amount_paid = float(data.get("amountPaid"))
+                if not re.fullmatch(r"\d{4}-\d{2}", month):
+                    raise ValueError
+                if solar_kwh < 0 or meter1_kwh < 0 or meter2_kwh < 0 or amount_paid < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid solar electric usage data."})
+                return
+            now = utc_now_iso()
+            try:
+                with sqlite3.connect(DB_PATH) as conn:
+                    if record_id is None:
+                        conn.execute("INSERT INTO solar_electric_usage (user_id, usage_month, solar_kwh, meter1_kwh, meter2_kwh, amount_paid, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], month, solar_kwh, meter1_kwh, meter2_kwh, amount_paid, now, now))
+                    else:
+                        cur = conn.execute("UPDATE solar_electric_usage SET usage_month = ?, solar_kwh = ?, meter1_kwh = ?, meter2_kwh = ?, amount_paid = ?, updated_at = ? WHERE id = ? AND user_id = ?", (month, solar_kwh, meter1_kwh, meter2_kwh, amount_paid, now, record_id, user["id"]))
+                        if cur.rowcount == 0:
+                            self._send_json(404, {"error": "Solar usage entry not found."})
+                            return
+            except sqlite3.IntegrityError:
+                self._send_json(400, {"error": "A record for this month already exists."})
+                return
             self._send_json(200, {"success": True})
             return
 
@@ -3552,6 +3615,42 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"success": True})
             return
 
+        if parsed.path == "/api/solar-electric-usage":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                month = str(data.get("month", "")).strip()
+                solar_kwh = float(data.get("solarKwh"))
+                meter1_kwh = float(data.get("meter1Kwh"))
+                meter2_kwh = float(data.get("meter2Kwh"))
+                amount_paid = float(data.get("amountPaid"))
+                if not re.fullmatch(r"\d{4}-\d{2}", month):
+                    raise ValueError
+                if solar_kwh < 0 or meter1_kwh < 0 or meter2_kwh < 0 or amount_paid < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid solar electric usage data."})
+                return
+            now = utc_now_iso()
+            try:
+                with sqlite3.connect(DB_PATH) as conn:
+                    if record_id is None:
+                        conn.execute("INSERT INTO solar_electric_usage (user_id, usage_month, solar_kwh, meter1_kwh, meter2_kwh, amount_paid, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], month, solar_kwh, meter1_kwh, meter2_kwh, amount_paid, now, now))
+                    else:
+                        cur = conn.execute("UPDATE solar_electric_usage SET usage_month = ?, solar_kwh = ?, meter1_kwh = ?, meter2_kwh = ?, amount_paid = ?, updated_at = ? WHERE id = ? AND user_id = ?", (month, solar_kwh, meter1_kwh, meter2_kwh, amount_paid, now, record_id, user["id"]))
+                        if cur.rowcount == 0:
+                            self._send_json(404, {"error": "Solar usage entry not found."})
+                            return
+            except sqlite3.IntegrityError:
+                self._send_json(400, {"error": "A record for this month already exists."})
+                return
+            self._send_json(200, {"success": True})
+            return
+
         if parsed.path == "/api/taxes":
             user = self._require_auth()
             if not user:
@@ -3961,6 +4060,17 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute("DELETE FROM sandy_expenses WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/solar-electric-usage/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid solar usage id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM solar_electric_usage WHERE id = ? AND user_id = ?", (item_id, user["id"]))
             self._send_json(200, {"success": True})
             return
 
