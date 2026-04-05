@@ -1,4 +1,119 @@
 const DEFAULT_GOAL_PERCENT = 10;
+
+const PAGE_META = {
+  home: { title: "Dashboard" },
+  records: { title: "Records" },
+  investments: { title: "Investments" },
+  "precious-metals": { title: "Precious Metals" },
+  "real-estate": { title: "Real Estate" },
+  "business-ventures": { title: "Business Ventures" },
+  "retirement-accounts": { title: "Retirement Accounts" },
+  "assets-bank-accounts": { title: "Bank Accounts" },
+  "assets-cash": { title: "Cash" },
+  "assets-vehicles": { title: "Vehicles" },
+  "assets-guns": { title: "Guns" },
+  "liabilities-mortgages": { title: "Mortgages" },
+  "liabilities-credit-cards": { title: "Credit Cards" },
+  "liabilities-loans": { title: "Loans" },
+  "liabilities-recurring-expenses": { title: "Recurring Expenses" },
+  goals: { title: "Goals" },
+  taxes: { title: "Taxes" },
+  "net-worth-report": { title: "Net Worth Report" },
+  "monthly-payments-report": { title: "Monthly Payments Report" },
+  "liquid-cash-report": { title: "Liquid Cash Report" },
+  "investment-calculator-report": { title: "Investment Calculator" },
+  "loan-amortization-report": { title: "Loan Amortization" },
+  profile: { title: "Profile" },
+  notifications: { title: "Notifications" },
+  "admin-users": { title: "Admin · Users" },
+  "admin-email": { title: "Admin · Email" },
+  "admin-backups": { title: "Admin · Backups" },
+  "admin-updates": { title: "Admin · Updates" },
+  "admin-notifications": { title: "Admin · Notifications" },
+  "sandy-goals": { title: "Sandy Lake Goals" },
+  "sandy-deer-harvest": { title: "Sandy Lake Deer Harvest" },
+  "sandy-food-plots": { title: "Sandy Lake Food Plots" },
+  "sandy-expenses": { title: "Sandy Lake Expenses" },
+  "solar-electric-usage": { title: "Solar Electric Usage" },
+};
+
+const PRIMARY_NAV_ITEMS = [
+  { href: "/", label: "Home", match: ["home"] },
+  { href: "/records.html", label: "Records", match: ["records"] },
+  { href: "/investments.html", label: "Investments", match: ["investments", "precious-metals", "real-estate", "business-ventures", "retirement-accounts"] },
+  { href: "/assets-vehicles.html", label: "Assets", match: ["assets-bank-accounts", "assets-cash", "assets-vehicles", "assets-guns"] },
+  { href: "/liabilities-mortgages.html", label: "Liabilities", match: ["liabilities-mortgages", "liabilities-credit-cards", "liabilities-loans", "liabilities-recurring-expenses"] },
+  { href: "/goals.html", label: "Goals", match: ["goals"] },
+  { href: "/taxes.html", label: "Taxes", match: ["taxes"] },
+  { href: "/net-worth-report.html", label: "Reports", match: ["net-worth-report", "monthly-payments-report", "liquid-cash-report", "investment-calculator-report", "loan-amortization-report"] },
+  { href: "/sandy-goals.html", label: "Sandy Lake", match: ["sandy-goals", "sandy-deer-harvest", "sandy-food-plots", "sandy-expenses", "solar-electric-usage"] },
+  { href: "/notifications.html", label: "Notifications", match: ["notifications"] },
+  { href: "/admin-users.html", label: "Admin", match: ["admin-users", "admin-email", "admin-backups", "admin-updates", "admin-notifications"], id: "nav-admin" },
+];
+
+function buildShellNavigation() {
+  const sidebar = document.querySelector(".sidebar");
+  if (!sidebar) return;
+
+  sidebar.innerHTML = "";
+  const brand = document.createElement("div");
+  brand.className = "brand-block";
+  brand.innerHTML = '<h2>Net Worth OS</h2><p>Modern financial command center</p>';
+
+  const nav = document.createElement("nav");
+  nav.className = "side-menu";
+
+  PRIMARY_NAV_ITEMS.forEach((item) => {
+    const link = document.createElement("a");
+    link.href = item.href;
+    link.textContent = item.label;
+    if (item.id) link.id = item.id;
+    if (item.match.includes(page)) link.classList.add("active");
+    nav.appendChild(link);
+  });
+
+  sidebar.appendChild(brand);
+  sidebar.appendChild(nav);
+  navAdmin = document.getElementById("nav-admin");
+
+  const topbar = document.querySelector(".topbar");
+  if (!topbar) return;
+  let titleEl = topbar.querySelector(".topbar-page-title");
+  if (!titleEl) {
+    titleEl = document.createElement("div");
+    titleEl.className = "topbar-page-title";
+    topbar.prepend(titleEl);
+  }
+  titleEl.textContent = PAGE_META[page]?.title || "Finance Tracker";
+}
+
+function setupResponsiveTables() {
+  const setLabels = (table) => {
+    const headers = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent.trim() || "Value");
+    table.querySelectorAll("tbody tr").forEach((row) => {
+      const cells = row.querySelectorAll("td");
+      cells.forEach((cell, index) => {
+        const label = headers[index] || "Value";
+        if (!cell.getAttribute("data-label")) cell.setAttribute("data-label", label);
+      });
+    });
+  };
+
+  document.querySelectorAll("table").forEach((table) => {
+    setLabels(table);
+    const body = table.querySelector("tbody");
+    if (!body) return;
+    const observer = new MutationObserver(() => setLabels(table));
+    observer.observe(body, { childList: true, subtree: true });
+  });
+}
+
+function enhanceSecondaryNavs() {
+  document.querySelectorAll(".admin-subnav, .sandy-subnav").forEach((nav) => {
+    nav.classList.add("subnav-scroller");
+  });
+}
+
 const page = document.body.dataset.page;
 const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html", "/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html", "/solar-electric-usage.html"]);
 
@@ -8,7 +123,7 @@ const sessionName = document.getElementById("session-name");
 const logoutBtn = document.getElementById("logout-btn");
 let notificationsBtn = document.getElementById("notifications-btn");
 let notificationsBadge = document.getElementById("notifications-badge");
-const navAdmin = document.getElementById("nav-admin");
+let navAdmin = document.getElementById("nav-admin");
 const versionInfo = document.getElementById("version-info");
 let mobileMenuBtn = null;
 let mobileNavBackdrop = null;
@@ -3470,8 +3585,11 @@ async function initPageData() {
 }
 
 async function bootstrap() {
+  buildShellNavigation();
+  enhanceSecondaryNavs();
   bindAuthUI();
   setupMobileNav();
+  setupResponsiveTables();
   populateYearOptions();
   showAuthMode("login");
   await loadVersion();
