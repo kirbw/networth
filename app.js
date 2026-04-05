@@ -352,9 +352,12 @@ function renderAuthState() {
   authCard?.classList.toggle("hidden", authenticated);
   appContent?.classList.toggle("hidden", !authenticated);
   if (sessionName) {
-    sessionName.textContent = authenticated ? `${currentUser.fullName || currentUser.username} (${currentUser.role})` : "Not signed in";
+    const fullLabel = `${currentUser?.fullName || currentUser?.username || "User"} (${currentUser?.role || "user"})`;
+    sessionName.textContent = authenticated ? "User" : "Guest";
+    sessionName.classList.toggle("hidden", !authenticated);
     sessionName.style.cursor = authenticated ? "pointer" : "default";
-    sessionName.title = authenticated ? "Open profile" : "";
+    sessionName.title = authenticated ? `Open profile · ${fullLabel}` : "";
+    sessionName.setAttribute("aria-label", authenticated ? `Open profile for ${fullLabel}` : "User profile");
   }
   if (notificationsBtn) {
     notificationsBtn.classList.toggle("hidden", !authenticated);
