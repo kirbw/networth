@@ -38,17 +38,84 @@ const PAGE_META = {
 };
 
 const PRIMARY_NAV_ITEMS = [
-  { href: "/", label: "Home", match: ["home"] },
-  { href: "/records.html", label: "Records", match: ["records"] },
-  { href: "/investments.html", label: "Investments", match: ["investments", "precious-metals", "real-estate", "business-ventures", "retirement-accounts"] },
-  { href: "/assets-vehicles.html", label: "Assets", match: ["assets-bank-accounts", "assets-cash", "assets-vehicles", "assets-guns"] },
-  { href: "/liabilities-mortgages.html", label: "Liabilities", match: ["liabilities-mortgages", "liabilities-credit-cards", "liabilities-loans", "liabilities-recurring-expenses"] },
-  { href: "/goals.html", label: "Goals", match: ["goals"] },
-  { href: "/taxes.html", label: "Taxes", match: ["taxes"] },
-  { href: "/net-worth-report.html", label: "Reports", match: ["net-worth-report", "monthly-payments-report", "liquid-cash-report", "investment-calculator-report", "loan-amortization-report"] },
-  { href: "/sandy-goals.html", label: "Sandy Lake", match: ["sandy-goals", "sandy-deer-harvest", "sandy-food-plots", "sandy-expenses", "solar-electric-usage"] },
-  { href: "/notifications.html", label: "Notifications", match: ["notifications"] },
-  { href: "/admin-users.html", label: "Admin", match: ["admin-users", "admin-email", "admin-backups", "admin-updates", "admin-notifications"], id: "nav-admin" },
+  { href: "/", label: "Home", match: ["home"], section: "Core" },
+  { href: "/records.html", label: "Records", match: ["records"], section: "Core" },
+  { href: "/goals.html", label: "Goals", match: ["goals"], section: "Core" },
+  { href: "/taxes.html", label: "Taxes", match: ["taxes"], section: "Core" },
+  {
+    href: "/investments.html",
+    label: "Investments",
+    section: "Portfolio",
+    match: ["investments", "precious-metals", "real-estate", "business-ventures", "retirement-accounts"],
+    children: [
+      { href: "/precious-metals.html", label: "Precious Metals", match: ["precious-metals"] },
+      { href: "/real-estate.html", label: "Real Estate", match: ["real-estate"] },
+      { href: "/business-ventures.html", label: "Business Ventures", match: ["business-ventures"] },
+      { href: "/retirement-accounts.html", label: "Retirement Accounts", match: ["retirement-accounts"] },
+    ],
+  },
+  {
+    href: "/assets-vehicles.html",
+    label: "Assets",
+    section: "Portfolio",
+    match: ["assets-bank-accounts", "assets-cash", "assets-vehicles", "assets-guns"],
+    children: [
+      { href: "/assets-bank-accounts.html", label: "Bank Accounts", match: ["assets-bank-accounts"] },
+      { href: "/assets-cash.html", label: "Cash", match: ["assets-cash"] },
+      { href: "/assets-vehicles.html", label: "Vehicles", match: ["assets-vehicles"] },
+      { href: "/assets-guns.html", label: "Guns", match: ["assets-guns"] },
+    ],
+  },
+  {
+    href: "/liabilities-mortgages.html",
+    label: "Liabilities",
+    section: "Portfolio",
+    match: ["liabilities-mortgages", "liabilities-credit-cards", "liabilities-loans", "liabilities-recurring-expenses"],
+    children: [
+      { href: "/liabilities-mortgages.html", label: "Mortgages", match: ["liabilities-mortgages"] },
+      { href: "/liabilities-credit-cards.html", label: "Credit Cards", match: ["liabilities-credit-cards"] },
+      { href: "/liabilities-loans.html", label: "Loans", match: ["liabilities-loans"] },
+      { href: "/liabilities-recurring-expenses.html", label: "Recurring Expenses", match: ["liabilities-recurring-expenses"] },
+    ],
+  },
+  {
+    href: "/net-worth-report.html",
+    label: "Reports",
+    section: "Reports & Alerts",
+    match: ["net-worth-report", "monthly-payments-report", "liquid-cash-report", "investment-calculator-report", "loan-amortization-report"],
+    children: [
+      { href: "/monthly-payments-report.html", label: "Monthly Payments", match: ["monthly-payments-report"] },
+      { href: "/liquid-cash-report.html", label: "Liquid Cash", match: ["liquid-cash-report"] },
+      { href: "/investment-calculator-report.html", label: "Investment Calculator", match: ["investment-calculator-report"] },
+      { href: "/loan-amortization-report.html", label: "Loan Amortization", match: ["loan-amortization-report"] },
+    ],
+  },
+  { href: "/notifications.html", label: "Notifications", match: ["notifications"], section: "Reports & Alerts" },
+  {
+    href: "/sandy-goals.html",
+    label: "Sandy Lake",
+    section: "Projects",
+    match: ["sandy-goals", "sandy-deer-harvest", "sandy-food-plots", "sandy-expenses", "solar-electric-usage"],
+    children: [
+      { href: "/sandy-deer-harvest.html", label: "Deer Harvest", match: ["sandy-deer-harvest"] },
+      { href: "/sandy-food-plots.html", label: "Food Plot History", match: ["sandy-food-plots"] },
+      { href: "/sandy-expenses.html", label: "Expenses", match: ["sandy-expenses"] },
+      { href: "/solar-electric-usage.html", label: "Solar Electric", match: ["solar-electric-usage"] },
+    ],
+  },
+  {
+    href: "/admin-users.html",
+    label: "Admin",
+    section: "Administration",
+    match: ["admin-users", "admin-email", "admin-backups", "admin-updates", "admin-notifications"],
+    id: "nav-admin",
+    children: [
+      { href: "/admin-email.html", label: "Email", match: ["admin-email"] },
+      { href: "/admin-backups.html", label: "Backups", match: ["admin-backups"] },
+      { href: "/admin-updates.html", label: "Updates", match: ["admin-updates"] },
+      { href: "/admin-notifications.html", label: "Notifications", match: ["admin-notifications"] },
+    ],
+  },
 ];
 
 function buildShellNavigation() {
@@ -63,13 +130,46 @@ function buildShellNavigation() {
   const nav = document.createElement("nav");
   nav.className = "side-menu";
 
-  PRIMARY_NAV_ITEMS.forEach((item) => {
-    const link = document.createElement("a");
-    link.href = item.href;
-    link.textContent = item.label;
-    if (item.id) link.id = item.id;
-    if (item.match.includes(page)) link.classList.add("active");
-    nav.appendChild(link);
+  const groupedItems = PRIMARY_NAV_ITEMS.reduce((acc, item) => {
+    const section = item.section || "General";
+    if (!acc[section]) acc[section] = [];
+    acc[section].push(item);
+    return acc;
+  }, {});
+
+  Object.entries(groupedItems).forEach(([section, items]) => {
+    const sectionEl = document.createElement("section");
+    sectionEl.className = "nav-section";
+    sectionEl.innerHTML = `<h3 class="nav-section-title">${section}</h3>`;
+
+    items.forEach((item) => {
+      const itemWrap = document.createElement("div");
+      itemWrap.className = "nav-item-wrap";
+
+      const link = document.createElement("a");
+      link.href = item.href;
+      link.textContent = item.label;
+      if (item.id) link.id = item.id;
+      if (item.match.includes(page)) link.classList.add("active");
+      itemWrap.appendChild(link);
+
+      if (Array.isArray(item.children) && item.children.length) {
+        const submenu = document.createElement("div");
+        submenu.className = "side-submenu";
+        item.children.forEach((child) => {
+          const childLink = document.createElement("a");
+          childLink.href = child.href;
+          childLink.textContent = child.label;
+          if (child.match.includes(page)) childLink.classList.add("active");
+          submenu.appendChild(childLink);
+        });
+        if (item.match.includes(page)) itemWrap.classList.add("expanded");
+        itemWrap.appendChild(submenu);
+      }
+
+      sectionEl.appendChild(itemWrap);
+    });
+    nav.appendChild(sectionEl);
   });
 
   sidebar.appendChild(brand);
@@ -111,6 +211,26 @@ function setupResponsiveTables() {
 function enhanceSecondaryNavs() {
   document.querySelectorAll(".admin-subnav, .sandy-subnav").forEach((nav) => {
     nav.classList.add("subnav-scroller");
+    nav.setAttribute("role", "navigation");
+    nav.querySelectorAll("a").forEach((anchor) => {
+      anchor.classList.add("tw-pill");
+    });
+  });
+}
+
+function applyTailwindUtilityRefresh() {
+  document.body.classList.add("antialiased", "text-slate-900");
+  document.querySelectorAll(".card").forEach((card) => {
+    card.classList.add("transition-shadow", "duration-200");
+  });
+  document.querySelectorAll("button").forEach((button) => {
+    button.classList.add("focus-visible:outline-none", "focus-visible:ring-2", "focus-visible:ring-brand-500/50");
+  });
+  document.querySelectorAll("input, select, textarea").forEach((input) => {
+    input.classList.add("focus-visible:outline-none");
+  });
+  document.querySelectorAll(".table-wrap").forEach((wrap) => {
+    wrap.classList.add("rounded-xl");
   });
 }
 
@@ -3586,6 +3706,7 @@ async function initPageData() {
 
 async function bootstrap() {
   buildShellNavigation();
+  applyTailwindUtilityRefresh();
   enhanceSecondaryNavs();
   bindAuthUI();
   setupMobileNav();
