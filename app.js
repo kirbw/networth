@@ -10,6 +10,8 @@ let notificationsBtn = document.getElementById("notifications-btn");
 let notificationsBadge = document.getElementById("notifications-badge");
 const navAdmin = document.getElementById("nav-admin");
 const versionInfo = document.getElementById("version-info");
+let mobileMenuBtn = null;
+let mobileNavBackdrop = null;
 
 const loginForm = document.getElementById("login-form");
 const signupForm = document.getElementById("signup-form");
@@ -260,6 +262,64 @@ function bindAuthUI() {
   toggleLoginBtn?.addEventListener("click", () => showAuthMode("login"));
   toggleVerifyBtn?.addEventListener("click", () => showAuthMode("verify"));
   toggleForgotBtn?.addEventListener("click", () => showAuthMode("forgot"));
+}
+
+function setMobileNavOpen(open) {
+  document.body.classList.toggle("nav-open", open);
+  if (mobileMenuBtn) {
+    mobileMenuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  if (mobileNavBackdrop) {
+    mobileNavBackdrop.classList.toggle("hidden", !open);
+  }
+}
+
+function closeMobileNav() {
+  setMobileNavOpen(false);
+}
+
+function setupMobileNav() {
+  const topbar = document.querySelector(".topbar");
+  const sidebar = document.querySelector(".sidebar");
+  if (!topbar || !sidebar) return;
+
+  if (!mobileMenuBtn) {
+    mobileMenuBtn = document.createElement("button");
+    mobileMenuBtn.type = "button";
+    mobileMenuBtn.className = "menu-toggle-btn";
+    mobileMenuBtn.setAttribute("aria-label", "Toggle navigation menu");
+    mobileMenuBtn.setAttribute("aria-expanded", "false");
+    mobileMenuBtn.innerHTML = '<span class="menu-toggle-icon" aria-hidden="true">☰</span>';
+    topbar.insertBefore(mobileMenuBtn, topbar.firstChild);
+  }
+
+  if (!mobileNavBackdrop) {
+    mobileNavBackdrop = document.createElement("button");
+    mobileNavBackdrop.type = "button";
+    mobileNavBackdrop.className = "mobile-nav-backdrop hidden";
+    mobileNavBackdrop.setAttribute("aria-label", "Close navigation menu");
+    document.body.appendChild(mobileNavBackdrop);
+  }
+
+  mobileMenuBtn.addEventListener("click", () => {
+    const isOpen = document.body.classList.contains("nav-open");
+    setMobileNavOpen(!isOpen);
+  });
+
+  mobileNavBackdrop.addEventListener("click", closeMobileNav);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeMobileNav();
+  });
+
+  sidebar.addEventListener("click", (event) => {
+    const target = event.target instanceof HTMLElement ? event.target.closest("a") : null;
+    if (target) closeMobileNav();
+  });
+
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 900) closeMobileNav();
+  });
 }
 
 async function loadRecords() {
@@ -3411,6 +3471,7 @@ async function initPageData() {
 
 async function bootstrap() {
   bindAuthUI();
+  setupMobileNav();
   populateYearOptions();
   showAuthMode("login");
   await loadVersion();

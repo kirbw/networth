@@ -86,6 +86,7 @@ video {
 }
 
 .main-column { display: grid; grid-template-rows: auto 1fr; }
+.main-column { min-width: 0; }
 
 .topbar {
   position: sticky;
@@ -97,6 +98,20 @@ video {
   padding: 0.65rem 1rem;
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.menu-toggle-btn {
+  display: none;
+  margin-top: 0;
+  padding: 0.5rem 0.75rem;
+  min-width: 2.7rem;
+}
+
+.menu-toggle-icon {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .session-controls {
@@ -455,8 +470,53 @@ button:focus-visible, a:focus-visible {
 
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
-  .sidebar { border-right: none; border-bottom: 1px solid var(--border); padding-bottom: 0.9rem; }
-  .side-menu { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: min(86vw, 320px);
+    z-index: 30;
+    border-right: 1px solid var(--border);
+    border-bottom: none;
+    padding: 1rem 0.85rem 1.25rem;
+    overflow-y: auto;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+  }
+
+  body.nav-open .sidebar {
+    transform: translateX(0);
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.24);
+  }
+
+  .mobile-nav-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 25;
+  }
+
+  .side-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .side-menu a {
+    white-space: normal;
+  }
+
+  .menu-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .topbar {
+    justify-content: space-between;
+  }
+
   .container { max-width: 100%; margin-top: 0.85rem; padding: 0 0.75rem; }
 }
 
@@ -480,16 +540,15 @@ button:focus-visible, a:focus-visible {
 
   .side-menu {
     display: flex;
-    overflow-x: auto;
-    gap: 0.45rem;
-    padding-bottom: 0.2rem;
-    scrollbar-width: thin;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;
+    gap: 0.5rem;
+    padding-bottom: 0;
+    scrollbar-width: auto;
   }
 
   .side-menu a {
-    white-space: nowrap;
-    flex: 0 0 auto;
+    white-space: normal;
+    flex: initial;
   }
 
   .form-grid,
