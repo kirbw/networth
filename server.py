@@ -28,7 +28,7 @@ VERSION_PATH = Path(__file__).with_name("VERSION")
 SESSION_COOKIE = "session_token"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260000
-PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/liabilities-recurring-expenses.html", "/profile.html", "/goals.html", "/taxes.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html", "/solar-electric-usage.html"}
+PROTECTED_PAGES = {"/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/assets-vehicles.html", "/assets-guns.html", "/assets-equipment.html", "/assets-bank-accounts.html", "/assets-cash.html", "/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/liabilities-recurring-expenses.html", "/profile.html", "/goals.html", "/taxes.html", "/net-worth-report.html", "/monthly-payments-report.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html", "/solar-electric-usage.html"}
 ADMIN_PAGES = {"/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html"}
 LOGIN_WINDOW_SECONDS = 15 * 60
 MAX_LOGIN_ATTEMPTS = 8
@@ -580,6 +580,24 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS asset_equipment (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                equipment_type TEXT NOT NULL,
+                make TEXT NOT NULL,
+                model TEXT NOT NULL,
+                model_year INTEGER,
+                year_purchased INTEGER,
+                value REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS asset_guns (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -677,6 +695,7 @@ def init_db():
                 loan_type TEXT NOT NULL,
                 is_private INTEGER NOT NULL,
                 vehicle_id INTEGER,
+                equipment_id INTEGER,
                 interest_rate REAL NOT NULL,
                 monthly_payment REAL NOT NULL,
                 payment_amount REAL NOT NULL,
@@ -691,7 +710,8 @@ def init_db():
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-                FOREIGN KEY(vehicle_id) REFERENCES asset_vehicles(id) ON DELETE SET NULL
+                FOREIGN KEY(vehicle_id) REFERENCES asset_vehicles(id) ON DELETE SET NULL,
+                FOREIGN KEY(equipment_id) REFERENCES asset_equipment(id) ON DELETE SET NULL
             )
             """
         )
@@ -927,6 +947,8 @@ def init_db():
             conn.execute("ALTER TABLE liability_loans ADD COLUMN is_secured INTEGER NOT NULL DEFAULT 0")
         if table_info_liability_loans and "interest_only" not in loan_cols:
             conn.execute("ALTER TABLE liability_loans ADD COLUMN interest_only INTEGER NOT NULL DEFAULT 0")
+        if table_info_liability_loans and "equipment_id" not in loan_cols:
+            conn.execute("ALTER TABLE liability_loans ADD COLUMN equipment_id INTEGER")
         if table_info_liability_loans and "monthly_payment" in loan_cols and "payment_amount" in loan_cols:
             conn.execute("UPDATE liability_loans SET payment_amount = monthly_payment WHERE payment_amount = 0")
             conn.execute("UPDATE liability_loans SET monthly_payment = payment_amount WHERE monthly_payment = 0")
@@ -1192,6 +1214,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(business_name,'')) + LENGTH(CAST(percentage_owned AS TEXT)) + LENGTH(CAST(business_value AS TEXT)) + 48), 0) FROM business_ventures WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(account_type,'')) + LENGTH(COALESCE(broker,'')) + LENGTH(CAST(taxable AS TEXT)) + LENGTH(CAST(value AS TEXT)) + 48), 0) FROM retirement_accounts WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(make,'')) + LENGTH(COALESCE(model,'')) + LENGTH(COALESCE(CAST(model_year AS TEXT), '')) + LENGTH(CAST(value AS TEXT)) + 48), 0) FROM asset_vehicles WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(equipment_type,'')) + LENGTH(COALESCE(make,'')) + LENGTH(COALESCE(model,'')) + LENGTH(COALESCE(CAST(model_year AS TEXT), '')) + LENGTH(COALESCE(CAST(year_purchased AS TEXT), '')) + LENGTH(CAST(value AS TEXT)) + 64), 0) FROM asset_equipment WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(gun_type,'')) + LENGTH(COALESCE(manufacturer,'')) + LENGTH(COALESCE(model,'')) + LENGTH(COALESCE(CAST(year_acquired AS TEXT), '')) + LENGTH(COALESCE(notes,'')) + LENGTH(CAST(value AS TEXT)) + 72), 0) FROM asset_guns WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(institution,'')) + LENGTH(COALESCE(account_type,'')) + LENGTH(CAST(balance AS TEXT)) + 48), 0) FROM asset_bank_accounts WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(CAST(amount AS TEXT)) + 32), 0) FROM asset_cash WHERE user_id = ?", (user_id,))
@@ -1225,7 +1248,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return "records"
         if path in ("/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html"):
             return "investments"
-        if path in ("/assets-vehicles.html", "/assets-guns.html", "/assets-bank-accounts.html", "/assets-cash.html"):
+        if path in ("/assets-vehicles.html", "/assets-guns.html", "/assets-equipment.html", "/assets-bank-accounts.html", "/assets-cash.html"):
             return "assets"
         if path in ("/liabilities-mortgages.html", "/liabilities-credit-cards.html", "/liabilities-loans.html", "/liabilities-recurring-expenses.html"):
             return "liabilities"
@@ -1527,6 +1550,16 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self._send_json(200, [dict(row) for row in rows])
             return
 
+        if parsed.path == "/api/assets/equipment":
+            user = self._require_auth()
+            if not user:
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT id, description, equipment_type, make, model, model_year, year_purchased, value, created_at, updated_at FROM asset_equipment WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+            self._send_json(200, [dict(row) for row in rows])
+            return
+
         if parsed.path == "/api/assets/guns":
             user = self._require_auth()
             if not user:
@@ -1597,13 +1630,22 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    "SELECT l.id, l.description, l.loan_type, l.is_private, l.vehicle_id, v.description AS vehicle_description, v.make AS vehicle_make, v.model AS vehicle_model, l.interest_rate, l.payment_amount, l.payment_frequency, l.is_secured, l.interest_only, l.start_date, l.initial_amount, l.current_balance, l.end_date, l.account_number, l.created_at, l.updated_at FROM liability_loans l LEFT JOIN asset_vehicles v ON v.id = l.vehicle_id WHERE l.user_id = ? ORDER BY l.id DESC",
+                    "SELECT l.id, l.description, l.loan_type, l.is_private, l.vehicle_id, l.equipment_id, v.description AS vehicle_description, v.make AS vehicle_make, v.model AS vehicle_model, e.description AS equipment_description, e.make AS equipment_make, e.model AS equipment_model, l.interest_rate, l.payment_amount, l.payment_frequency, l.is_secured, l.interest_only, l.start_date, l.initial_amount, l.current_balance, l.end_date, l.account_number, l.created_at, l.updated_at FROM liability_loans l LEFT JOIN asset_vehicles v ON v.id = l.vehicle_id LEFT JOIN asset_equipment e ON e.id = l.equipment_id WHERE l.user_id = ? ORDER BY l.id DESC",
                     (user["id"],),
                 ).fetchall()
             payload = []
             for row in rows:
                 item = dict(row)
                 item["account_number"] = decrypt_field_value(item.get("account_number"))
+                if item.get("equipment_id"):
+                    item["linked_asset_label"] = f'Equipment — {item.get("equipment_description") or ""} ({item.get("equipment_make") or ""} {item.get("equipment_model") or ""})'.strip()
+                    item["linked_asset_ref"] = f'e:{item["equipment_id"]}'
+                elif item.get("vehicle_id"):
+                    item["linked_asset_label"] = f'Vehicle — {item.get("vehicle_description") or ""} ({item.get("vehicle_make") or ""} {item.get("vehicle_model") or ""})'.strip()
+                    item["linked_asset_ref"] = f'v:{item["vehicle_id"]}'
+                else:
+                    item["linked_asset_label"] = None
+                    item["linked_asset_ref"] = ""
                 payload.append(item)
             self._send_json(200, payload)
             return
@@ -1659,6 +1701,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     "bank-accounts": float(conn.execute("SELECT COALESCE(SUM(balance), 0) FROM asset_bank_accounts WHERE user_id = ?", (user["id"],)).fetchone()[0]),
                     "cash": float(conn.execute("SELECT COALESCE(SUM(amount), 0) FROM asset_cash WHERE user_id = ?", (user["id"],)).fetchone()[0]),
                     "vehicles": float(conn.execute("SELECT COALESCE(SUM(value), 0) FROM asset_vehicles WHERE user_id = ?", (user["id"],)).fetchone()[0]),
+                    "equipment": float(conn.execute("SELECT COALESCE(SUM(value), 0) FROM asset_equipment WHERE user_id = ?", (user["id"],)).fetchone()[0]),
                     "guns": float(conn.execute("SELECT COALESCE(SUM(value), 0) FROM asset_guns WHERE user_id = ?", (user["id"],)).fetchone()[0]),
                     "stocks": float(conn.execute("SELECT COALESCE(SUM(shares * current_price), 0) FROM investments WHERE user_id = ? AND current_price IS NOT NULL", (user["id"],)).fetchone()[0]),
                     "precious-metals": float(conn.execute("SELECT COALESCE(SUM(current_value), 0) FROM precious_metals WHERE user_id = ?", (user["id"],)).fetchone()[0]),
@@ -1991,6 +2034,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 model = str(data.get("model", "")).strip()
                 model_year_raw = data.get("year")
                 model_year = None if model_year_raw in (None, "") else int(model_year_raw)
+                date_purchased = str(data.get("datePurchased", "")).strip() or None
+                inspection_expires_on = str(data.get("inspectionExpiresOn", "")).strip() or None
                 value = float(data.get("value", 0))
                 if not description or not make or not model or value < 0:
                     raise ValueError
@@ -1999,13 +2044,47 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, model_year, date_purchased, inspection_expires_on, value, now, now))
                 else:
                     cursor = conn.execute("UPDATE asset_vehicles SET description = ?, make = ?, model = ?, model_year = ?, date_purchased = ?, inspection_expires_on = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, make, model, model_year, date_purchased, inspection_expires_on, value, now, record_id, user["id"]))
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Vehicle not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/assets/equipment":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                equipment_type = str(data.get("type", "")).strip()
+                make = str(data.get("make", "")).strip()
+                model = str(data.get("model", "")).strip()
+                model_year_raw = data.get("year")
+                model_year = None if model_year_raw in (None, "") else int(model_year_raw)
+                year_purchased_raw = data.get("yearPurchased")
+                year_purchased = None if year_purchased_raw in (None, "") else int(year_purchased_raw)
+                value = float(data.get("value", 0))
+                allowed = {"Trailer", "Boat", "Tractor", "UTV", "Implement"}
+                if not description or equipment_type not in allowed or not make or not model or value < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid equipment data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO asset_equipment (user_id, description, equipment_type, make, model, model_year, year_purchased, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, equipment_type, make, model, model_year, year_purchased, value, now, now))
+                else:
+                    cursor = conn.execute("UPDATE asset_equipment SET description = ?, equipment_type = ?, make = ?, model = ?, model_year = ?, year_purchased = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, equipment_type, make, model, model_year, year_purchased, value, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Equipment not found."})
                         return
             self._send_json(200, {"success": True})
             return
@@ -2034,7 +2113,6 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_guns (user_id, description, gun_type, manufacturer, model, year_acquired, notes, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, gun_type, manufacturer, model, year_acquired, notes, value, now, now))
                 else:
@@ -2064,7 +2142,6 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_bank_accounts (user_id, description, institution, account_type, balance, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], description, institution, account_type, balance, now, now))
                 else:
@@ -2092,7 +2169,6 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_cash (user_id, description, amount, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", (user["id"], description, amount, now, now))
                 else:
@@ -2192,8 +2268,19 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 loan_type = str(data.get("loanType", "")).strip()
                 is_private_raw = str(data.get("isPrivate", "no")).strip().lower()
                 is_private = 1 if is_private_raw in ("1", "true", "yes") else 0
+                linked_asset_raw = str(data.get("linkedAsset", "")).strip()
                 vehicle_id_raw = data.get("vehicleId")
-                vehicle_id = None if vehicle_id_raw in (None, "") else int(vehicle_id_raw)
+                vehicle_id = None
+                equipment_id = None
+                if linked_asset_raw:
+                    if linked_asset_raw.startswith("v:"):
+                        vehicle_id = int(linked_asset_raw.split(":", 1)[1])
+                    elif linked_asset_raw.startswith("e:"):
+                        equipment_id = int(linked_asset_raw.split(":", 1)[1])
+                    else:
+                        vehicle_id = int(linked_asset_raw)
+                elif vehicle_id_raw not in (None, ""):
+                    vehicle_id = int(vehicle_id_raw)
                 interest_rate = float(data.get("interestRate", 0))
                 payment_amount = float(data.get("paymentAmount", data.get("monthlyPayment", 0)))
                 start_date = str(data.get("startDate", "")).strip() or None
@@ -2216,11 +2303,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
-                    conn.execute("INSERT INTO liability_loans (user_id, description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, monthly_payment, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number_stored, now, now))
+                    conn.execute("INSERT INTO liability_loans (user_id, description, loan_type, is_private, is_secured, interest_only, vehicle_id, equipment_id, interest_rate, monthly_payment, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, loan_type, is_private, is_secured, interest_only, vehicle_id, equipment_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number_stored, now, now))
                 else:
-                    cursor = conn.execute("UPDATE liability_loans SET description = ?, loan_type = ?, is_private = ?, is_secured = ?, interest_only = ?, vehicle_id = ?, interest_rate = ?, monthly_payment = ?, payment_amount = ?, payment_frequency = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, account_number = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number_stored, now, record_id, user["id"]))
+                    cursor = conn.execute("UPDATE liability_loans SET description = ?, loan_type = ?, is_private = ?, is_secured = ?, interest_only = ?, vehicle_id = ?, equipment_id = ?, interest_rate = ?, monthly_payment = ?, payment_amount = ?, payment_frequency = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, account_number = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, loan_type, is_private, is_secured, interest_only, vehicle_id, equipment_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number_stored, now, record_id, user["id"]))
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Loan not found."})
                         return
@@ -3165,6 +3251,8 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 model = str(data.get("model", "")).strip()
                 model_year_raw = data.get("year")
                 model_year = None if model_year_raw in (None, "") else int(model_year_raw)
+                date_purchased = str(data.get("datePurchased", "")).strip() or None
+                inspection_expires_on = str(data.get("inspectionExpiresOn", "")).strip() or None
                 value = float(data.get("value", 0))
                 if not description or not make or not model or value < 0:
                     raise ValueError
@@ -3173,13 +3261,47 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, model_year, date_purchased, inspection_expires_on, value, now, now))
                 else:
                     cursor = conn.execute("UPDATE asset_vehicles SET description = ?, make = ?, model = ?, model_year = ?, date_purchased = ?, inspection_expires_on = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, make, model, model_year, date_purchased, inspection_expires_on, value, now, record_id, user["id"]))
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Vehicle not found."})
+                        return
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path == "/api/assets/equipment":
+            user = self._require_auth()
+            if not user:
+                return
+            try:
+                data = self._read_json()
+                record_id_raw = data.get("id")
+                record_id = None if record_id_raw in (None, "") else int(record_id_raw)
+                description = str(data.get("description", "")).strip()
+                equipment_type = str(data.get("type", "")).strip()
+                make = str(data.get("make", "")).strip()
+                model = str(data.get("model", "")).strip()
+                model_year_raw = data.get("year")
+                model_year = None if model_year_raw in (None, "") else int(model_year_raw)
+                year_purchased_raw = data.get("yearPurchased")
+                year_purchased = None if year_purchased_raw in (None, "") else int(year_purchased_raw)
+                value = float(data.get("value", 0))
+                allowed = {"Trailer", "Boat", "Tractor", "UTV", "Implement"}
+                if not description or equipment_type not in allowed or not make or not model or value < 0:
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "Invalid equipment data."})
+                return
+            now = utc_now_iso()
+            with sqlite3.connect(DB_PATH) as conn:
+                if record_id is None:
+                    conn.execute("INSERT INTO asset_equipment (user_id, description, equipment_type, make, model, model_year, year_purchased, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, equipment_type, make, model, model_year, year_purchased, value, now, now))
+                else:
+                    cursor = conn.execute("UPDATE asset_equipment SET description = ?, equipment_type = ?, make = ?, model = ?, model_year = ?, year_purchased = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, equipment_type, make, model, model_year, year_purchased, value, now, record_id, user["id"]))
+                    if cursor.rowcount == 0:
+                        self._send_json(404, {"error": "Equipment not found."})
                         return
             self._send_json(200, {"success": True})
             return
@@ -3208,7 +3330,6 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
                     conn.execute("INSERT INTO asset_guns (user_id, description, gun_type, manufacturer, model, year_acquired, notes, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, gun_type, manufacturer, model, year_acquired, notes, value, now, now))
                 else:
@@ -3366,8 +3487,19 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 loan_type = str(data.get("loanType", "")).strip()
                 is_private_raw = str(data.get("isPrivate", "no")).strip().lower()
                 is_private = 1 if is_private_raw in ("1", "true", "yes") else 0
+                linked_asset_raw = str(data.get("linkedAsset", "")).strip()
                 vehicle_id_raw = data.get("vehicleId")
-                vehicle_id = None if vehicle_id_raw in (None, "") else int(vehicle_id_raw)
+                vehicle_id = None
+                equipment_id = None
+                if linked_asset_raw:
+                    if linked_asset_raw.startswith("v:"):
+                        vehicle_id = int(linked_asset_raw.split(":", 1)[1])
+                    elif linked_asset_raw.startswith("e:"):
+                        equipment_id = int(linked_asset_raw.split(":", 1)[1])
+                    else:
+                        vehicle_id = int(linked_asset_raw)
+                elif vehicle_id_raw not in (None, ""):
+                    vehicle_id = int(vehicle_id_raw)
                 interest_rate = float(data.get("interestRate", 0))
                 payment_amount = float(data.get("paymentAmount", data.get("monthlyPayment", 0)))
                 start_date = str(data.get("startDate", "")).strip() or None
@@ -3390,11 +3522,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute("INSERT INTO recurring_expense_categories (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO NOTHING", (user["id"], category, now, now))
                 if record_id is None:
-                    conn.execute("INSERT INTO liability_loans (user_id, description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, monthly_payment, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number_stored, now, now))
+                    conn.execute("INSERT INTO liability_loans (user_id, description, loan_type, is_private, is_secured, interest_only, vehicle_id, equipment_id, interest_rate, monthly_payment, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, loan_type, is_private, is_secured, interest_only, vehicle_id, equipment_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number_stored, now, now))
                 else:
-                    cursor = conn.execute("UPDATE liability_loans SET description = ?, loan_type = ?, is_private = ?, is_secured = ?, interest_only = ?, vehicle_id = ?, interest_rate = ?, monthly_payment = ?, payment_amount = ?, payment_frequency = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, account_number = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, loan_type, is_private, is_secured, interest_only, vehicle_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number_stored, now, record_id, user["id"]))
+                    cursor = conn.execute("UPDATE liability_loans SET description = ?, loan_type = ?, is_private = ?, is_secured = ?, interest_only = ?, vehicle_id = ?, equipment_id = ?, interest_rate = ?, monthly_payment = ?, payment_amount = ?, payment_frequency = ?, start_date = ?, initial_amount = ?, current_balance = ?, end_date = ?, account_number = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, loan_type, is_private, is_secured, interest_only, vehicle_id, equipment_id, interest_rate, payment_amount, payment_amount, payment_frequency, start_date, initial_amount, current_balance, end_date, account_number_stored, now, record_id, user["id"]))
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Loan not found."})
                         return
@@ -4176,6 +4307,17 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute("DELETE FROM asset_guns WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+            self._send_json(200, {"success": True})
+            return
+
+        if parsed.path.startswith("/api/assets/equipment/"):
+            try:
+                item_id = int(parsed.path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid equipment id."})
+                return
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("DELETE FROM asset_equipment WHERE id = ? AND user_id = ?", (item_id, user["id"]))
             self._send_json(200, {"success": True})
             return
 

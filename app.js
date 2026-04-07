@@ -12,6 +12,7 @@ const PAGE_META = {
   "assets-cash": { title: "Cash" },
   "assets-vehicles": { title: "Vehicles" },
   "assets-guns": { title: "Guns" },
+  "assets-equipment": { title: "Equipment" },
   "liabilities-mortgages": { title: "Mortgages" },
   "liabilities-credit-cards": { title: "Credit Cards" },
   "liabilities-loans": { title: "Loans" },
@@ -58,12 +59,13 @@ const PRIMARY_NAV_ITEMS = [
     href: "/assets-vehicles.html",
     label: "Assets",
     section: "Portfolio",
-    match: ["assets-bank-accounts", "assets-cash", "assets-vehicles", "assets-guns"],
+    match: ["assets-bank-accounts", "assets-cash", "assets-vehicles", "assets-guns", "assets-equipment"],
     children: [
       { href: "/assets-bank-accounts.html", label: "Bank Accounts", match: ["assets-bank-accounts"] },
       { href: "/assets-cash.html", label: "Cash", match: ["assets-cash"] },
       { href: "/assets-vehicles.html", label: "Vehicles", match: ["assets-vehicles"] },
       { href: "/assets-guns.html", label: "Guns", match: ["assets-guns"] },
+      { href: "/assets-equipment.html", label: "Equipment", match: ["assets-equipment"] },
     ],
   },
   {
@@ -633,14 +635,16 @@ function initHomePage() {
   async function renderAssetsSummary() {
     const chartEl = document.getElementById("assets-summary-chart");
     if (!chartEl) return;
-    const [vehiclesRes, gunsRes, bankRes, cashRes] = await Promise.all([
+    const [vehiclesRes, equipmentRes, gunsRes, bankRes, cashRes] = await Promise.all([
       apiFetch("/api/assets/vehicles"),
+      apiFetch("/api/assets/equipment"),
       apiFetch("/api/assets/guns"),
       apiFetch("/api/assets/bank-accounts"),
       apiFetch("/api/assets/cash"),
     ]);
-    if (![vehiclesRes, gunsRes, bankRes, cashRes].every((r) => r.ok)) return;
+    if (![vehiclesRes, equipmentRes, gunsRes, bankRes, cashRes].every((r) => r.ok)) return;
     const vehicles = await vehiclesRes.json();
+    const equipment = await equipmentRes.json();
     const guns = await gunsRes.json();
     const bankAccounts = await bankRes.json();
     const cash = await cashRes.json();
@@ -648,6 +652,7 @@ function initHomePage() {
     const entries = [
       { label: "Bank Accounts", value: bankAccounts.reduce((sum, x) => sum + Number(x.balance || 0), 0), color: "#0090d8" },
       { label: "Vehicles", value: vehicles.reduce((sum, x) => sum + Number(x.value || 0), 0), color: "#3956f6" },
+      { label: "Equipment", value: equipment.reduce((sum, x) => sum + Number(x.value || 0), 0), color: "#6b47dc" },
       { label: "Guns", value: guns.reduce((sum, x) => sum + Number(x.value || 0), 0), color: "#9747ff" },
       { label: "Cash", value: cash.reduce((sum, x) => sum + Number(x.amount || 0), 0), color: "#00a76f" },
     ].sort((a, b) => b.value - a.value);
@@ -1555,13 +1560,14 @@ function initNetWorthReportPage() {
 
   async function renderReport() {
     const condensed = Boolean(condensedToggle?.checked);
-    const [stocksRes, metalsRes, realEstateRes, businessRes, retirementRes, vehiclesRes, gunsRes, bankRes, cashRes, mortgagesRes, cardsRes, loansRes] = await Promise.all([
+    const [stocksRes, metalsRes, realEstateRes, businessRes, retirementRes, vehiclesRes, equipmentRes, gunsRes, bankRes, cashRes, mortgagesRes, cardsRes, loansRes] = await Promise.all([
       apiFetch("/api/investments"),
       apiFetch("/api/precious-metals"),
       apiFetch("/api/real-estate"),
       apiFetch("/api/business-ventures"),
       apiFetch("/api/retirement-accounts"),
       apiFetch("/api/assets/vehicles"),
+      apiFetch("/api/assets/equipment"),
       apiFetch("/api/assets/guns"),
       apiFetch("/api/assets/bank-accounts"),
       apiFetch("/api/assets/cash"),
@@ -1569,7 +1575,7 @@ function initNetWorthReportPage() {
       apiFetch("/api/liabilities/credit-cards"),
       apiFetch("/api/liabilities/loans"),
     ]);
-    if (![stocksRes, metalsRes, realEstateRes, businessRes, retirementRes, vehiclesRes, gunsRes, bankRes, cashRes, mortgagesRes, cardsRes, loansRes].every((r) => r.ok)) return;
+    if (![stocksRes, metalsRes, realEstateRes, businessRes, retirementRes, vehiclesRes, equipmentRes, gunsRes, bankRes, cashRes, mortgagesRes, cardsRes, loansRes].every((r) => r.ok)) return;
 
     const stocks = await stocksRes.json();
     const metals = await metalsRes.json();
@@ -1577,6 +1583,7 @@ function initNetWorthReportPage() {
     const business = await businessRes.json();
     const retirement = await retirementRes.json();
     const vehicles = await vehiclesRes.json();
+    const equipment = await equipmentRes.json();
     const guns = await gunsRes.json();
     const bankAccounts = await bankRes.json();
     const cash = await cashRes.json();
@@ -1594,6 +1601,7 @@ function initNetWorthReportPage() {
       { title: "Business Ventures", items: business.map((x) => ({ description: x.business_name, value: Number(x.business_value) * (Number(x.percentage_owned) / 100) })) },
       { title: "Retirement Accounts", items: retirement.map((x) => ({ description: `${x.description} — ${x.account_type} (${x.broker})`, value: Number(x.value) })) },
       { title: "Vehicles", items: vehicles.map((x) => ({ description: `${x.description} — ${x.model_year || ""} ${x.make} ${x.model}`.trim(), value: Number(x.value) })) },
+      { title: "Equipment", items: equipment.map((x) => ({ description: `${x.description} — ${x.equipment_type}${x.model_year ? ` (${x.model_year})` : ""} ${x.make} ${x.model}`.trim(), value: Number(x.value) })) },
       { title: "Guns", items: guns.map((x) => ({ description: `${x.description} — ${x.gun_type}`, value: Number(x.value) })) },
       { title: "Bank Accounts", items: bankAccounts.map((x) => ({ description: `${x.description} — ${x.institution} (${x.account_type})`, value: Number(x.balance) })) },
       { title: "Cash", items: cash.map((x) => ({ description: x.description, value: Number(x.amount) })) },
@@ -1841,6 +1849,19 @@ function initAssetsVehiclesPage() {
   });
 }
 
+
+function initAssetsEquipmentPage() {
+  return initAssetCrudPage({
+    formId: "equipment-form", messageId: "equipment-message", bodyId: "equipment-body", sortSelector: "[data-sort-equipment]", submitBtnId: "equipment-submit-btn",
+    defaultSort: "description", sortDataset: "sortEquipment", apiBase: "/api/assets/equipment", addLabel: "Add Equipment", updateLabel: "Update Equipment",
+    emptyText: "No equipment yet.", colspan: 8, totalLabelColspan: 6, savedText: "Equipment saved.", deleteConfirm: "Delete this equipment entry?",
+    valueGetter: (x) => x.value,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.model_year || "—"}</td><td>${x.equipment_type}</td><td>${x.make}</td><td>${x.model}</td><td>${x.year_purchased || "—"}</td><td>${currency(x.value)}</td><td>${editDeleteButtons({ "data-id": x.id }, "equipment entry")}</td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("equip-description").value.trim(), year: document.getElementById("equip-year").value.trim(), type: document.getElementById("equip-type").value, make: document.getElementById("equip-make").value.trim(), model: document.getElementById("equip-model").value.trim(), yearPurchased: document.getElementById("equip-year-purchased").value.trim(), value: Number(document.getElementById("equip-value").value) }),
+    startEdit: (x) => { document.getElementById("equip-description").value = x.description; document.getElementById("equip-year").value = x.model_year || ""; document.getElementById("equip-type").value = x.equipment_type; document.getElementById("equip-make").value = x.make; document.getElementById("equip-model").value = x.model; document.getElementById("equip-year-purchased").value = x.year_purchased || ""; document.getElementById("equip-value").value = x.value; },
+  });
+}
+
 function initAssetsGunsPage() {
   return initAssetCrudPage({
     formId: "guns-form", messageId: "guns-message", bodyId: "guns-body", sortSelector: "[data-sort-guns]", submitBtnId: "guns-submit-btn",
@@ -2012,17 +2033,28 @@ function initLiabilitiesCreditCardsPage() {
 }
 
 function initLiabilitiesLoansPage() {
-  const vehicleSelect = document.getElementById("loan-vehicle-id");
-  async function loadVehicleOptions() {
-    const response = await apiFetch("/api/assets/vehicles");
-    if (!response.ok || !vehicleSelect) return;
-    const rows = await response.json();
-    vehicleSelect.innerHTML = '<option value="">(optional)</option>';
-    for (const row of rows) {
+  const assetSelect = document.getElementById("loan-asset-id");
+  async function loadLinkedAssetOptions() {
+    if (!assetSelect) return;
+    const [vehiclesRes, equipmentRes] = await Promise.all([
+      apiFetch("/api/assets/vehicles"),
+      apiFetch("/api/assets/equipment"),
+    ]);
+    if (!vehiclesRes.ok || !equipmentRes.ok) return;
+    const vehicles = await vehiclesRes.json();
+    const equipment = await equipmentRes.json();
+    assetSelect.innerHTML = '<option value="">(optional)</option>';
+    for (const row of vehicles) {
       const option = document.createElement("option");
-      option.value = String(row.id);
-      option.textContent = `${row.description} (${row.make} ${row.model})`;
-      vehicleSelect.appendChild(option);
+      option.value = `v:${row.id}`;
+      option.textContent = `Vehicle — ${row.description} (${row.make} ${row.model})`;
+      assetSelect.appendChild(option);
+    }
+    for (const row of equipment) {
+      const option = document.createElement("option");
+      option.value = `e:${row.id}`;
+      option.textContent = `Equipment — ${row.description} (${row.make} ${row.model})`;
+      assetSelect.appendChild(option);
     }
   }
   return initLiabilityCrudPage({
@@ -2030,10 +2062,10 @@ function initLiabilitiesLoansPage() {
     defaultSort: "description", sortDataset: "sortLoans", apiBase: "/api/liabilities/loans", addLabel: "Add Loan", updateLabel: "Update Loan",
     emptyText: "No loans yet.", colspan: 15, totalLabelColspan: 13, savedText: "Loan saved.", deleteConfirm: "Delete this loan entry?",
     balanceGetter: (x) => x.current_balance,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.loan_type}</td><td>${x.account_number || "—"}</td><td>${x.is_private ? "Yes" : "No"}</td><td>${x.is_secured ? "Yes" : "No"}</td><td>${x.interest_only ? "Yes" : "No"}</td><td>${x.vehicle_description || "—"}</td><td>${x.interest_rate}%</td><td>${x.payment_amount ? currency(x.payment_amount) : "—"}</td><td>${x.payment_frequency || "monthly"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${x.end_date || "—"}</td><td>${editDeleteButtons({ "data-id": x.id }, "loan entry")}</td>`,
-    collectPayload: (id) => ({ id, description: document.getElementById("loan-description").value.trim(), loanType: document.getElementById("loan-type").value.trim(), accountNumber: document.getElementById("loan-account-number").value.trim(), isPrivate: document.getElementById("loan-is-private").value, isSecured: document.getElementById("loan-is-secured").value, interestOnly: document.getElementById("loan-interest-only").value, vehicleId: document.getElementById("loan-vehicle-id").value, interestRate: Number(document.getElementById("loan-interest-rate").value), paymentAmount: Number(document.getElementById("loan-payment-amount").value || 0), paymentFrequency: document.getElementById("loan-payment-frequency").value, startDate: document.getElementById("loan-start-date").value, initialAmount: Number(document.getElementById("loan-initial-amount").value), currentBalance: Number(document.getElementById("loan-current-balance").value), endDate: document.getElementById("loan-end-date").value }),
-    startEdit: (x) => { document.getElementById("loan-description").value = x.description; document.getElementById("loan-type").value = x.loan_type; document.getElementById("loan-account-number").value = x.account_number || ""; document.getElementById("loan-is-private").value = x.is_private ? "yes" : "no"; document.getElementById("loan-is-secured").value = x.is_secured ? "yes" : "no"; document.getElementById("loan-interest-only").value = x.interest_only ? "yes" : "no"; document.getElementById("loan-vehicle-id").value = x.vehicle_id || ""; document.getElementById("loan-interest-rate").value = x.interest_rate; document.getElementById("loan-payment-amount").value = x.payment_amount || ""; document.getElementById("loan-payment-frequency").value = x.payment_frequency || "monthly"; document.getElementById("loan-start-date").value = x.start_date || ""; document.getElementById("loan-initial-amount").value = x.initial_amount; document.getElementById("loan-current-balance").value = x.current_balance; document.getElementById("loan-end-date").value = x.end_date || ""; },
-    beforeLoad: loadVehicleOptions,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.loan_type}</td><td>${x.account_number || "—"}</td><td>${x.is_private ? "Yes" : "No"}</td><td>${x.is_secured ? "Yes" : "No"}</td><td>${x.interest_only ? "Yes" : "No"}</td><td>${x.linked_asset_label || x.vehicle_description || "—"}</td><td>${x.interest_rate}%</td><td>${x.payment_amount ? currency(x.payment_amount) : "—"}</td><td>${x.payment_frequency || "monthly"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${x.end_date || "—"}</td><td>${editDeleteButtons({ "data-id": x.id }, "loan entry")}</td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("loan-description").value.trim(), loanType: document.getElementById("loan-type").value.trim(), accountNumber: document.getElementById("loan-account-number").value.trim(), isPrivate: document.getElementById("loan-is-private").value, isSecured: document.getElementById("loan-is-secured").value, interestOnly: document.getElementById("loan-interest-only").value, linkedAsset: document.getElementById("loan-asset-id").value, interestRate: Number(document.getElementById("loan-interest-rate").value), paymentAmount: Number(document.getElementById("loan-payment-amount").value || 0), paymentFrequency: document.getElementById("loan-payment-frequency").value, startDate: document.getElementById("loan-start-date").value, initialAmount: Number(document.getElementById("loan-initial-amount").value), currentBalance: Number(document.getElementById("loan-current-balance").value), endDate: document.getElementById("loan-end-date").value }),
+    startEdit: (x) => { document.getElementById("loan-description").value = x.description; document.getElementById("loan-type").value = x.loan_type; document.getElementById("loan-account-number").value = x.account_number || ""; document.getElementById("loan-is-private").value = x.is_private ? "yes" : "no"; document.getElementById("loan-is-secured").value = x.is_secured ? "yes" : "no"; document.getElementById("loan-interest-only").value = x.interest_only ? "yes" : "no"; document.getElementById("loan-asset-id").value = x.linked_asset_ref || (x.vehicle_id ? `v:${x.vehicle_id}` : (x.equipment_id ? `e:${x.equipment_id}` : "")); document.getElementById("loan-interest-rate").value = x.interest_rate; document.getElementById("loan-payment-amount").value = x.payment_amount || ""; document.getElementById("loan-payment-frequency").value = x.payment_frequency || "monthly"; document.getElementById("loan-start-date").value = x.start_date || ""; document.getElementById("loan-initial-amount").value = x.initial_amount; document.getElementById("loan-current-balance").value = x.current_balance; document.getElementById("loan-end-date").value = x.end_date || ""; },
+    beforeLoad: loadLinkedAssetOptions,
   });
 }
 
@@ -2636,6 +2668,7 @@ function initGoalsPage() {
       { value: "bank-accounts", label: "Bank Accounts" },
       { value: "cash", label: "Cash" },
       { value: "vehicles", label: "Vehicles" },
+      { value: "equipment", label: "Equipment" },
       { value: "guns", label: "Guns" },
     ],
     investment: [
@@ -3607,6 +3640,11 @@ async function initPageData() {
 
   if (page === "assets-guns") {
     if (!pageController) pageController = initAssetsGunsPage();
+    return pageController.render();
+  }
+
+  if (page === "assets-equipment") {
+    if (!pageController) pageController = initAssetsEquipmentPage();
     return pageController.render();
   }
 

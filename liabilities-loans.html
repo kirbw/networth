@@ -68,7 +68,7 @@
                 <label>Private Loan? <select id="loan-is-private"><option value="no">No</option><option value="yes">Yes</option></select></label>
                 <label>Secured Loan? <select id="loan-is-secured"><option value="no">No</option><option value="yes">Yes</option></select></label>
                 <label>Interest Only? <select id="loan-interest-only"><option value="no">No</option><option value="yes">Yes</option></select></label>
-                <label>Linked Vehicle <select id="loan-vehicle-id"></select></label>
+                <label>Linked Asset <select id="loan-asset-id"></select></label>
                 <label>Interest Rate (%) <input id="loan-interest-rate" type="number" min="0" step="0.01" required /></label>
                 <label>Payment Amount ($) <input id="loan-payment-amount" type="number" min="0" step="0.01" /></label>
                 <label>Payment Frequency <select id="loan-payment-frequency"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>
@@ -94,7 +94,7 @@
                     <th data-sort-loans="is_private" class="sortable">Private</th>
                     <th data-sort-loans="is_secured" class="sortable">Secured</th>
                     <th data-sort-loans="interest_only" class="sortable">Interest Only</th>
-                    <th>Linked Vehicle</th>
+                    <th>Linked Asset</th>
                     <th data-sort-loans="interest_rate" class="sortable">Rate</th>
                     <th data-sort-loans="payment_amount" class="sortable">Payment</th>
                     <th data-sort-loans="payment_frequency" class="sortable">Frequency</th>
