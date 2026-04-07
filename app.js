@@ -2033,17 +2033,28 @@ function initLiabilitiesCreditCardsPage() {
 }
 
 function initLiabilitiesLoansPage() {
-  const vehicleSelect = document.getElementById("loan-vehicle-id");
-  async function loadVehicleOptions() {
-    const response = await apiFetch("/api/assets/vehicles");
-    if (!response.ok || !vehicleSelect) return;
-    const rows = await response.json();
-    vehicleSelect.innerHTML = '<option value="">(optional)</option>';
-    for (const row of rows) {
+  const assetSelect = document.getElementById("loan-asset-id");
+  async function loadLinkedAssetOptions() {
+    if (!assetSelect) return;
+    const [vehiclesRes, equipmentRes] = await Promise.all([
+      apiFetch("/api/assets/vehicles"),
+      apiFetch("/api/assets/equipment"),
+    ]);
+    if (!vehiclesRes.ok || !equipmentRes.ok) return;
+    const vehicles = await vehiclesRes.json();
+    const equipment = await equipmentRes.json();
+    assetSelect.innerHTML = '<option value="">(optional)</option>';
+    for (const row of vehicles) {
       const option = document.createElement("option");
-      option.value = String(row.id);
-      option.textContent = `${row.description} (${row.make} ${row.model})`;
-      vehicleSelect.appendChild(option);
+      option.value = `v:${row.id}`;
+      option.textContent = `Vehicle — ${row.description} (${row.make} ${row.model})`;
+      assetSelect.appendChild(option);
+    }
+    for (const row of equipment) {
+      const option = document.createElement("option");
+      option.value = `e:${row.id}`;
+      option.textContent = `Equipment — ${row.description} (${row.make} ${row.model})`;
+      assetSelect.appendChild(option);
     }
   }
   return initLiabilityCrudPage({
@@ -2051,10 +2062,10 @@ function initLiabilitiesLoansPage() {
     defaultSort: "description", sortDataset: "sortLoans", apiBase: "/api/liabilities/loans", addLabel: "Add Loan", updateLabel: "Update Loan",
     emptyText: "No loans yet.", colspan: 15, totalLabelColspan: 13, savedText: "Loan saved.", deleteConfirm: "Delete this loan entry?",
     balanceGetter: (x) => x.current_balance,
-    rowHtml: (x) => `<td>${x.description}</td><td>${x.loan_type}</td><td>${x.account_number || "—"}</td><td>${x.is_private ? "Yes" : "No"}</td><td>${x.is_secured ? "Yes" : "No"}</td><td>${x.interest_only ? "Yes" : "No"}</td><td>${x.vehicle_description || "—"}</td><td>${x.interest_rate}%</td><td>${x.payment_amount ? currency(x.payment_amount) : "—"}</td><td>${x.payment_frequency || "monthly"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${x.end_date || "—"}</td><td>${editDeleteButtons({ "data-id": x.id }, "loan entry")}</td>`,
-    collectPayload: (id) => ({ id, description: document.getElementById("loan-description").value.trim(), loanType: document.getElementById("loan-type").value.trim(), accountNumber: document.getElementById("loan-account-number").value.trim(), isPrivate: document.getElementById("loan-is-private").value, isSecured: document.getElementById("loan-is-secured").value, interestOnly: document.getElementById("loan-interest-only").value, vehicleId: document.getElementById("loan-vehicle-id").value, interestRate: Number(document.getElementById("loan-interest-rate").value), paymentAmount: Number(document.getElementById("loan-payment-amount").value || 0), paymentFrequency: document.getElementById("loan-payment-frequency").value, startDate: document.getElementById("loan-start-date").value, initialAmount: Number(document.getElementById("loan-initial-amount").value), currentBalance: Number(document.getElementById("loan-current-balance").value), endDate: document.getElementById("loan-end-date").value }),
-    startEdit: (x) => { document.getElementById("loan-description").value = x.description; document.getElementById("loan-type").value = x.loan_type; document.getElementById("loan-account-number").value = x.account_number || ""; document.getElementById("loan-is-private").value = x.is_private ? "yes" : "no"; document.getElementById("loan-is-secured").value = x.is_secured ? "yes" : "no"; document.getElementById("loan-interest-only").value = x.interest_only ? "yes" : "no"; document.getElementById("loan-vehicle-id").value = x.vehicle_id || ""; document.getElementById("loan-interest-rate").value = x.interest_rate; document.getElementById("loan-payment-amount").value = x.payment_amount || ""; document.getElementById("loan-payment-frequency").value = x.payment_frequency || "monthly"; document.getElementById("loan-start-date").value = x.start_date || ""; document.getElementById("loan-initial-amount").value = x.initial_amount; document.getElementById("loan-current-balance").value = x.current_balance; document.getElementById("loan-end-date").value = x.end_date || ""; },
-    beforeLoad: loadVehicleOptions,
+    rowHtml: (x) => `<td>${x.description}</td><td>${x.loan_type}</td><td>${x.account_number || "—"}</td><td>${x.is_private ? "Yes" : "No"}</td><td>${x.is_secured ? "Yes" : "No"}</td><td>${x.interest_only ? "Yes" : "No"}</td><td>${x.linked_asset_label || x.vehicle_description || "—"}</td><td>${x.interest_rate}%</td><td>${x.payment_amount ? currency(x.payment_amount) : "—"}</td><td>${x.payment_frequency || "monthly"}</td><td>${x.start_date || "—"}</td><td>${currency(x.initial_amount)}</td><td>${currency(x.current_balance)}</td><td>${x.end_date || "—"}</td><td>${editDeleteButtons({ "data-id": x.id }, "loan entry")}</td>`,
+    collectPayload: (id) => ({ id, description: document.getElementById("loan-description").value.trim(), loanType: document.getElementById("loan-type").value.trim(), accountNumber: document.getElementById("loan-account-number").value.trim(), isPrivate: document.getElementById("loan-is-private").value, isSecured: document.getElementById("loan-is-secured").value, interestOnly: document.getElementById("loan-interest-only").value, linkedAsset: document.getElementById("loan-asset-id").value, interestRate: Number(document.getElementById("loan-interest-rate").value), paymentAmount: Number(document.getElementById("loan-payment-amount").value || 0), paymentFrequency: document.getElementById("loan-payment-frequency").value, startDate: document.getElementById("loan-start-date").value, initialAmount: Number(document.getElementById("loan-initial-amount").value), currentBalance: Number(document.getElementById("loan-current-balance").value), endDate: document.getElementById("loan-end-date").value }),
+    startEdit: (x) => { document.getElementById("loan-description").value = x.description; document.getElementById("loan-type").value = x.loan_type; document.getElementById("loan-account-number").value = x.account_number || ""; document.getElementById("loan-is-private").value = x.is_private ? "yes" : "no"; document.getElementById("loan-is-secured").value = x.is_secured ? "yes" : "no"; document.getElementById("loan-interest-only").value = x.interest_only ? "yes" : "no"; document.getElementById("loan-asset-id").value = x.linked_asset_ref || (x.vehicle_id ? `v:${x.vehicle_id}` : (x.equipment_id ? `e:${x.equipment_id}` : "")); document.getElementById("loan-interest-rate").value = x.interest_rate; document.getElementById("loan-payment-amount").value = x.payment_amount || ""; document.getElementById("loan-payment-frequency").value = x.payment_frequency || "monthly"; document.getElementById("loan-start-date").value = x.start_date || ""; document.getElementById("loan-initial-amount").value = x.initial_amount; document.getElementById("loan-current-balance").value = x.current_balance; document.getElementById("loan-end-date").value = x.end_date || ""; },
+    beforeLoad: loadLinkedAssetOptions,
   });
 }
 
