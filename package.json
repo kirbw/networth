@@ -1,0 +1,9 @@
+{
+  "name": "networth-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:assets": "node tools/build-assets.mjs",
+    "check:frontend": "node --check assets/js/main.js && node --check assets/js/legacy-app.js && node --check assets/js/charts.js && node --check assets/js/page-meta.js && node --check assets/js/shell.js && node --check assets/js/theme.js"
+  }
+}

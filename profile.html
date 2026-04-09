@@ -92,10 +92,15 @@
                     <span class="setting-suffix">%</span>
                   </div>
                 </div>
-                <label class="setting-toggle" for="profile-dark-mode">
-                  <input id="profile-dark-mode" type="checkbox" />
-                  <span>Enable dark mode</span>
-                </label>
+                <div class="setting-item">
+                  <label for="profile-theme-preference">Theme</label>
+                  <select id="profile-theme-preference" class="setting-select">
+                    <option value="system">Use system setting</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                  </select>
+                  <span class="small-note">Theme changes apply across the entire app shell and chart surfaces.</span>
+                </div>
               </div>
               <button type="submit">Save Settings</button>
               <p id="profile-settings-message"></p>

@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [v0.1.0] - 2026-04-09
+
+### Added
+- Added the **Sandy Lake Retreat** workspace with goals, deer harvest, food plot history, expenses, and solar electric usage tracking.
+- Added **Solar Electric Usage** records, API support, and database persistence for monthly generation and meter usage history.
+- Added **Equipment** as an Assets subtab with full CRUD support and totals integration.
+- Added support for linking **Loans** to vehicles or equipment for better collateral tracking.
+- Added a lightweight frontend asset pipeline with `npm run check:frontend` and `npm run build:assets` for release preparation.
+
+### Changed
+- Promoted the project to **`v0.1.0`** as the first release with a fully redesigned frontend shell and release-aligned documentation.
+- Rebuilt the frontend into a more modern multi-page interface with shared shell assets, modular JavaScript entrypoints, and a formal design-token layer.
+- Redesigned dashboard, workspace, report, profile, admin, and Sandy Lake surfaces with stronger typography, calmer density, improved hierarchy, and better responsive behavior from mobile through desktop.
+- Reworked the Home experience so unauthenticated visits now render a dedicated **login-only public landing page**, while authenticated users receive the full application shell after sign-in.
+- Upgraded theme handling from a boolean dark-mode toggle to **`system` / `light` / `dark` theme preference** support, while keeping backward compatibility with existing dark-mode settings.
+- Moved chart loading to an on-demand flow so report and dashboard charting only loads when needed.
+- Consolidated repeated auth UI into a shared login/signup/verification/reset surface served consistently across pages.
+- Improved mobile responsiveness across the app with a slide-out navigation pattern, refined topbar controls, overflow fixes, better table actions, and clearer sub-navigation behavior.
+- Refreshed visual styling with a more deliberate lightweight system and improved dark-mode navigation contrast.
+- Updated release metadata and docs to capture all changes shipped since `v0.0.80`.
+
 ## [v0.0.80] - 2026-03-11
 
 ### Added

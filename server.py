@@ -39,6 +39,76 @@ FIELD_ENCRYPTION_PREFIX = "enc:v1:"
 _AES_GCM = None
 BACKUP_DIR = Path(__file__).with_name("backups")
 UPDATES_DIR = Path(__file__).with_name("updates")
+THEME_OPTIONS = {"system", "light", "dark"}
+APP_HEAD_INJECTION = """
+  <meta name="color-scheme" content="light dark" />
+  <link rel="stylesheet" href="/assets/css/legacy.css" />
+  <link rel="stylesheet" href="/assets/css/app.css" />
+"""
+APP_FOOTER_INJECTION = """
+  <footer class="version-footer"><span id="version-info">Version ...</span></footer>
+  <script type="module" src="/assets/js/main.js"></script>
+"""
+AUTH_CARD_TEMPLATE = """
+<section id="auth-card" class="card auth-card hidden">
+  <h2>Welcome back</h2>
+  <p class="small-note">Sign in to manage records, reports, and portfolio details across every workspace.</p>
+  <form id="login-form">
+    <label>Username <input id="login-username" type="text" required /></label>
+    <label>Password <input id="login-password" type="password" required /></label>
+    <button type="submit">Log In</button>
+  </form>
+  <form id="signup-form" class="hidden">
+    <label>Full Name <input id="signup-full-name" type="text" required /></label>
+    <label>Email <input id="signup-email" type="email" required /></label>
+    <label>Username <input id="signup-username" type="text" required /></label>
+    <label>Password <input id="signup-password" type="password" required /></label>
+    <button type="submit">Create Account</button>
+  </form>
+  <form id="verify-form" class="hidden">
+    <label>Username <input id="verify-username" type="text" required /></label>
+    <label>Verification Code <input id="verify-code" type="text" required /></label>
+    <button type="submit">Verify Account</button>
+  </form>
+  <form id="forgot-password-form" class="hidden">
+    <label>Email or Username <input id="forgot-identifier" type="text" required /></label>
+    <button type="submit">Send Reset Link</button>
+  </form>
+  <div class="auth-actions">
+    <button id="toggle-signup-btn" type="button">Create account</button>
+    <button id="toggle-verify-btn" type="button">Verify account</button>
+    <button id="toggle-forgot-btn" type="button">Forgot password</button>
+    <button id="toggle-login-btn" type="button">Back to login</button>
+  </div>
+  <p id="auth-message"></p>
+</section>
+"""
+PUBLIC_HOME_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Finance Tracker - Sign In</title>
+  {head}
+</head>
+<body data-page="home" class="public-home auth-locked">
+  <main class="public-shell container">
+    <section class="public-brand-panel card">
+      <p class="page-intro-eyebrow">Private finance workspace</p>
+      <h1>NetWorth keeps annual records, reports, and balance-sheet history behind one secure login.</h1>
+      <p class="public-brand-copy">Sign in to access your dashboard, portfolio workspaces, lender-ready reports, tax records, and account settings. Direct links to protected pages continue to redirect here until authentication succeeds.</p>
+      <div class="public-brand-points">
+        <div class="public-brand-point"><strong>Annual records</strong><span>Income, giving, and net worth history in one system.</span></div>
+        <div class="public-brand-point"><strong>Portfolio tracking</strong><span>Assets, liabilities, retirement, business ventures, and reports.</span></div>
+        <div class="public-brand-point"><strong>Secure access</strong><span>Session-backed routes with protected pages and role-aware admin access.</span></div>
+      </div>
+    </section>
+    {auth_card}
+  </main>
+  {footer}
+</body>
+</html>
+"""
 
 
 def utc_now() -> datetime:
@@ -234,6 +304,11 @@ def is_user_setting_enabled(conn: sqlite3.Connection, user_id: int, key: str, de
     fallback = "1" if default else "0"
     value = get_user_setting(conn, user_id, key, fallback).strip().lower()
     return value in ("1", "true", "yes", "on")
+
+
+def normalize_theme_preference(value: str | None, fallback: str = "system") -> str:
+    candidate = (value or "").strip().lower()
+    return candidate if candidate in THEME_OPTIONS else fallback
 
 
 def init_default_settings(conn: sqlite3.Connection):
@@ -1289,6 +1364,20 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             '</nav></aside>'
         )
 
+    def _serve_public_home(self) -> bool:
+        html = PUBLIC_HOME_TEMPLATE.format(
+            head=APP_HEAD_INJECTION.strip(),
+            auth_card=AUTH_CARD_TEMPLATE.strip(),
+            footer=APP_FOOTER_INJECTION.strip(),
+        )
+        body = html.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
     def _upsert_credit_card_promo_notifications(self, user_id: int):
         now = utc_now()
         window_end = now + timedelta(days=30)
@@ -1339,6 +1428,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 conn.execute("INSERT INTO notifications (user_id, type, title, message, status, dedupe_key, created_at, updated_at) VALUES (?, 'vehicle-inspection-expiry', ?, ?, 'unread', ?, ?, ?)", (user_id, title, message, dedupe_key, ts, ts))
 
     def _serve_templated_html(self, path: str) -> bool:
+        user = self._get_current_user()
+        if path in ("/", "/index.html") and not user:
+            return self._serve_public_home()
         if path == "/":
             file_path = "index.html"
         else:
@@ -1348,8 +1440,17 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         if file_path == "reset-password.html":
             return False
         html = Path(file_path).read_text(encoding='utf-8')
+        html = re.sub(r'<script src="https://cdn\.tailwindcss\.com"></script><script>.*?</script>', "", html, flags=re.S)
+        html = re.sub(r'<script src="https://cdn\.jsdelivr\.net/npm/chart\.js"></script>', "", html)
+        html = re.sub(r'<link rel="stylesheet" href="styles\.css"\s*/?>', "", html)
+        html = re.sub(r'<script src="app\.js"></script>', "", html)
+        html = html.replace("</head>", f"{APP_HEAD_INJECTION}</head>")
         sidebar = self._render_sidebar(path)
         html = re.sub(r'<aside class="sidebar">.*?</aside>', sidebar, html, flags=re.S)
+        html = re.sub(r'<section id="auth-card" class="card auth-card hidden">.*?</section>', AUTH_CARD_TEMPLATE, html, flags=re.S)
+        html = re.sub(r'<footer class="version-footer">.*?</footer>', APP_FOOTER_INJECTION.strip(), html, flags=re.S)
+        if APP_FOOTER_INJECTION.strip() not in html:
+            html = html.replace("</body>", f"{APP_FOOTER_INJECTION}</body>")
         body = html.encode('utf-8')
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1382,12 +1483,15 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 unread_count = conn.execute("SELECT COUNT(1) FROM notifications WHERE user_id = ? AND status = 'unread'", (user["id"],)).fetchone()[0]
                 giving_goal = safe_float(get_user_setting(conn, user["id"], "giving_goal_percent", "10"), 10.0)
                 dark_mode = is_user_setting_enabled(conn, user["id"], "dark_mode", False)
+                theme_preference = normalize_theme_preference(get_user_setting(conn, user["id"], "theme_preference", ""))
+                if theme_preference == "system":
+                    theme_preference = "dark" if dark_mode else "system"
                 notification_settings = {
                     "creditCardPromo": is_user_setting_enabled(conn, user["id"], "notif_credit_card_promo", True),
                     "vehicleInspection": is_user_setting_enabled(conn, user["id"], "notif_vehicle_inspection", True),
                     "system": is_user_setting_enabled(conn, user["id"], "notif_system", True),
                 }
-            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "streetAddress": user["street_address"], "city": user["city"], "state": user["state"], "zip": user["zip"], "role": user["role"], "unreadNotifications": int(unread_count), "givingGoalPercent": giving_goal, "darkMode": dark_mode, "notificationSettings": notification_settings}})
+            self._send_json(200, {"authenticated": True, "user": {"id": user["id"], "fullName": user["full_name"], "username": user["username"], "email": user["email"], "phone": user["phone"], "streetAddress": user["street_address"], "city": user["city"], "state": user["state"], "zip": user["zip"], "role": user["role"], "unreadNotifications": int(unread_count), "givingGoalPercent": giving_goal, "darkMode": dark_mode, "themePreference": theme_preference, "notificationSettings": notification_settings}})
             return
 
         if parsed.path == "/api/user-settings":
@@ -1397,12 +1501,15 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as conn:
                 giving_goal = safe_float(get_user_setting(conn, user["id"], "giving_goal_percent", "10"), 10.0)
                 dark_mode = is_user_setting_enabled(conn, user["id"], "dark_mode", False)
+                theme_preference = normalize_theme_preference(get_user_setting(conn, user["id"], "theme_preference", ""))
+                if theme_preference == "system":
+                    theme_preference = "dark" if dark_mode else "system"
                 notification_settings = {
                     "creditCardPromo": is_user_setting_enabled(conn, user["id"], "notif_credit_card_promo", True),
                     "vehicleInspection": is_user_setting_enabled(conn, user["id"], "notif_vehicle_inspection", True),
                     "system": is_user_setting_enabled(conn, user["id"], "notif_system", True),
                 }
-            self._send_json(200, {"givingGoalPercent": giving_goal, "darkMode": dark_mode, "notifications": notification_settings})
+            self._send_json(200, {"givingGoalPercent": giving_goal, "darkMode": dark_mode, "themePreference": theme_preference, "notifications": notification_settings})
             return
 
         if parsed.path == "/api/quote":
@@ -2768,7 +2875,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 giving_goal = float(data.get("givingGoalPercent", 10))
                 if giving_goal < 0 or giving_goal > 100:
                     raise ValueError
-                dark_mode = 1 if bool(data.get("darkMode", False)) else 0
+                theme_preference = normalize_theme_preference(data.get("themePreference"), "")
+                if not theme_preference:
+                    theme_preference = "dark" if bool(data.get("darkMode", False)) else "light"
+                dark_mode = 1 if theme_preference == "dark" else 0
                 notifications = data.get("notifications", {}) or {}
             except (ValueError, TypeError, json.JSONDecodeError):
                 self._send_json(400, {"error": "Invalid user settings."})
@@ -2776,10 +2886,11 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as conn:
                 set_user_setting(conn, user["id"], "giving_goal_percent", str(giving_goal))
                 set_user_setting(conn, user["id"], "dark_mode", str(dark_mode))
+                set_user_setting(conn, user["id"], "theme_preference", theme_preference)
                 set_user_setting(conn, user["id"], "notif_credit_card_promo", "1" if bool(notifications.get("creditCardPromo", True)) else "0")
                 set_user_setting(conn, user["id"], "notif_vehicle_inspection", "1" if bool(notifications.get("vehicleInspection", True)) else "0")
                 set_user_setting(conn, user["id"], "notif_system", "1" if bool(notifications.get("system", True)) else "0")
-            self._send_json(200, {"success": True, "givingGoalPercent": giving_goal, "darkMode": bool(dark_mode), "notifications": notifications})
+            self._send_json(200, {"success": True, "givingGoalPercent": giving_goal, "darkMode": bool(dark_mode), "themePreference": theme_preference, "notifications": notifications})
             return
 
         if parsed.path == "/api/signup":
