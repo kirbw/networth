@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import shutil
+import subprocess
 import tempfile
 import sys
 import threading
@@ -391,6 +392,66 @@ def _github_release_for_channel(repo: str, token: str | None, channel: str) -> d
                 return rel
 
     raise RuntimeError("No prerelease versions found for repository.")
+
+
+def _package_scripts(app_root: Path) -> set[str]:
+    package_path = app_root / "package.json"
+    if not package_path.exists():
+        return set()
+    try:
+        package_data = json.loads(package_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    scripts = package_data.get("scripts", {})
+    if not isinstance(scripts, dict):
+        return set()
+    return {str(key) for key in scripts.keys()}
+
+
+def _run_update_command(command: list[str], app_root: Path, progress: list[str], timeout: int = 180):
+    label = " ".join(command)
+    progress.append(f"Running {label}")
+    try:
+        result = subprocess.run(
+            command,
+            cwd=app_root,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except FileNotFoundError as error:
+        raise RuntimeError(f"{command[0]} is not available on this server.") from error
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(f"{label} timed out after {timeout} seconds.") from error
+
+    output = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part and part.strip())
+    if output:
+        progress.append(output[-1200:])
+    if result.returncode != 0:
+        raise RuntimeError(f"{label} failed with exit code {result.returncode}.")
+    progress.append(f"Finished {label}")
+
+
+def _run_npm_update_commands(app_root: Path, progress: list[str]):
+    package_path = app_root / "package.json"
+    if not package_path.exists():
+        progress.append("No package.json found; skipped npm commands")
+        return
+    if shutil.which("npm") is None:
+        raise RuntimeError("npm is not available on this server.")
+
+    lock_path = app_root / "package-lock.json"
+    install_command = ["npm", "ci"] if lock_path.exists() else ["npm", "install"]
+    _run_update_command(install_command, app_root, progress, timeout=240)
+
+    scripts = _package_scripts(app_root)
+    for script_name in ("check:frontend", "build:assets"):
+        if script_name in scripts:
+            _run_update_command(["npm", "run", script_name], app_root, progress, timeout=180)
+        else:
+            progress.append(f"npm script {script_name} not found; skipped")
+
 
 def _restart_process_soon(delay_seconds: float = 0.5):
     def _restart():
@@ -1335,8 +1396,10 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             return "goals"
         if path == "/taxes.html":
             return "taxes"
-        if path in ("/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html", "/solar-electric-usage.html"):
+        if path in ("/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html"):
             return "sandy-lake"
+        if path == "/solar-electric-usage.html":
+            return "solar"
         if path == "/notifications.html":
             return "notifications"
         if path in ("/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html"):
@@ -1359,6 +1422,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             f'<a href="/taxes.html"{active("taxes")}>Taxes</a>'
             f'<a href="/net-worth-report.html"{active("reports")}>Reports</a>'
             f'<a href="/sandy-goals.html"{active("sandy-lake")}>Sandy Lake Retreat</a>'
+            f'<a href="/solar-electric-usage.html"{active("solar")}>Solar Electric</a>'
             f'<a href="/profile.html"{active("profile")}>My Profile</a>'
             f'<a id="nav-admin" href="/admin-users.html" class="hidden{(" active" if group == "admin" else "")}">Admin</a>'
             '</nav></aside>'
@@ -4126,14 +4190,14 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                     if not roots:
                         raise RuntimeError("Downloaded release archive is empty.")
                     source_root = roots[0]
-                    allowed_ext = {".html", ".css", ".js", ".py", ".md"}
+                    allowed_ext = {".html", ".css", ".js", ".py", ".md", ".json", ".mjs"}
                     for src in source_root.rglob("*"):
                         if not src.is_file():
                             continue
                         rel = src.relative_to(source_root)
                         if any(part.startswith('.') for part in rel.parts):
                             continue
-                        if rel.parts and rel.parts[0] in ("backups", "updates", "__pycache__"):
+                        if rel.parts and rel.parts[0] in ("backups", "updates", "__pycache__", "node_modules"):
                             continue
                         if rel.name in ("finance.db", "AGENTS.md"):
                             continue
@@ -4144,6 +4208,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                         shutil.copy2(src, dest)
                         updated_files.append(rel.as_posix())
                 progress.append(f"Updated {len(updated_files)} files")
+                _run_npm_update_commands(Path(__file__).parent, progress)
                 progress.append("Update finished successfully")
                 self._send_json(200, {"success": True, "channel": channel, "appliedVersion": latest, "backup": backup_file.name, "filesUpdated": len(updated_files), "updatedFiles": updated_files, "progress": progress, "restartRequired": True})
             except urllib.error.HTTPError as error:

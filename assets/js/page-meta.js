@@ -208,8 +208,8 @@ export const PAGE_META = {
   "solar-electric-usage": {
     title: "Solar Electric Usage",
     description: "Monitor production, usage, and cost in a utility-focused workspace with better scanability.",
-    family: "sandy",
-    eyebrow: "Sandy Lake",
+    family: "workspace",
+    eyebrow: "Projects",
   },
   "reset-password": {
     title: "Reset Password",

@@ -64,14 +64,14 @@ const PRIMARY_NAV_ITEMS = [
     href: "/sandy-goals.html",
     label: "Sandy Lake",
     section: "Projects",
-    match: ["sandy-goals", "sandy-deer-harvest", "sandy-food-plots", "sandy-expenses", "solar-electric-usage"],
+    match: ["sandy-goals", "sandy-deer-harvest", "sandy-food-plots", "sandy-expenses"],
     children: [
       { href: "/sandy-deer-harvest.html", label: "Deer Harvest", match: ["sandy-deer-harvest"] },
       { href: "/sandy-food-plots.html", label: "Food Plot History", match: ["sandy-food-plots"] },
       { href: "/sandy-expenses.html", label: "Expenses", match: ["sandy-expenses"] },
-      { href: "/solar-electric-usage.html", label: "Solar Electric", match: ["solar-electric-usage"] },
     ],
   },
+  { href: "/solar-electric-usage.html", label: "Solar Electric", match: ["solar-electric-usage"], section: "Projects" },
   {
     href: "/admin-users.html",
     label: "Admin",
@@ -114,17 +114,32 @@ function buildShellNavigation() {
     items.forEach((item) => {
       const itemWrap = document.createElement("div");
       itemWrap.className = "nav-item-wrap";
+      if (item.id) itemWrap.id = `${item.id}-wrap`;
+      if (item.match.includes(page)) itemWrap.classList.add("active-group");
 
       const link = document.createElement("a");
       link.href = item.href;
       link.textContent = item.label;
       if (item.id) link.id = item.id;
       if (item.match.includes(page)) link.classList.add("active");
-      itemWrap.appendChild(link);
 
       if (Array.isArray(item.children) && item.children.length) {
+        const parentRow = document.createElement("div");
+        parentRow.className = "nav-parent-row";
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "nav-submenu-toggle";
+        toggle.setAttribute("aria-label", `Toggle ${item.label} menu`);
+        toggle.setAttribute("aria-expanded", item.match.includes(page) ? "true" : "false");
+        toggle.innerHTML = '<span aria-hidden="true">v</span>';
+        parentRow.appendChild(link);
+        parentRow.appendChild(toggle);
+        itemWrap.appendChild(parentRow);
+
         const submenu = document.createElement("div");
         submenu.className = "side-submenu";
+        submenu.id = `submenu-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+        toggle.setAttribute("aria-controls", submenu.id);
         item.children.forEach((child) => {
           const childLink = document.createElement("a");
           childLink.href = child.href;
@@ -134,6 +149,12 @@ function buildShellNavigation() {
         });
         if (item.match.includes(page)) itemWrap.classList.add("expanded");
         itemWrap.appendChild(submenu);
+        toggle.addEventListener("click", () => {
+          const expanded = itemWrap.classList.toggle("expanded");
+          toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+        });
+      } else {
+        itemWrap.appendChild(link);
       }
 
       sectionEl.appendChild(itemWrap);
@@ -342,6 +363,7 @@ function renderAuthState() {
     notificationsBadge.classList.toggle("hidden", unread <= 0);
   }
   navAdmin?.classList.toggle("hidden", !(authenticated && currentUser.role === "admin"));
+  document.getElementById("nav-admin-wrap")?.classList.toggle("hidden", !(authenticated && currentUser.role === "admin"));
   const sidebar = document.querySelector(".sidebar");
   if (sidebar) sidebar.setAttribute("aria-hidden", authenticated ? "false" : "true");
   const topbar = document.querySelector(".topbar");
@@ -484,7 +506,10 @@ function bindAuthUI() {
 function setMobileNavOpen(open) {
   document.body.classList.toggle("nav-open", open);
   if (mobileMenuBtn) {
-    mobileMenuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    const isDesktop = window.matchMedia("(min-width: 901px)").matches;
+    const expanded = isDesktop ? !document.body.classList.contains("sidebar-hidden") : open;
+    mobileMenuBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
+    mobileMenuBtn.setAttribute("aria-label", expanded ? "Hide navigation menu" : "Show navigation menu");
   }
   if (mobileNavBackdrop) {
     mobileNavBackdrop.classList.toggle("hidden", !open);
@@ -492,6 +517,16 @@ function setMobileNavOpen(open) {
 }
 
 function closeMobileNav() {
+  setMobileNavOpen(false);
+}
+
+function setSidebarHidden(hidden) {
+  document.body.classList.toggle("sidebar-hidden", hidden);
+  try {
+    window.localStorage.setItem("networth-sidebar-hidden", hidden ? "1" : "0");
+  } catch {
+    // localStorage may be unavailable in private contexts.
+  }
   setMobileNavOpen(false);
 }
 
@@ -504,8 +539,8 @@ function setupMobileNav() {
     mobileMenuBtn = document.createElement("button");
     mobileMenuBtn.type = "button";
     mobileMenuBtn.className = "menu-toggle-btn";
-    mobileMenuBtn.setAttribute("aria-label", "Toggle navigation menu");
-    mobileMenuBtn.setAttribute("aria-expanded", "false");
+    mobileMenuBtn.setAttribute("aria-label", "Show navigation menu");
+    mobileMenuBtn.setAttribute("aria-expanded", "true");
     mobileMenuBtn.innerHTML = '<span class="menu-toggle-icon" aria-hidden="true">☰</span>';
     topbar.insertBefore(mobileMenuBtn, topbar.firstChild);
   }
@@ -519,6 +554,10 @@ function setupMobileNav() {
   }
 
   mobileMenuBtn.addEventListener("click", () => {
+    if (window.matchMedia("(min-width: 901px)").matches) {
+      setSidebarHidden(!document.body.classList.contains("sidebar-hidden"));
+      return;
+    }
     const isOpen = document.body.classList.contains("nav-open");
     setMobileNavOpen(!isOpen);
   });
@@ -536,7 +575,14 @@ function setupMobileNav() {
 
   window.addEventListener("resize", () => {
     if (window.innerWidth > 900) closeMobileNav();
+    setMobileNavOpen(document.body.classList.contains("nav-open"));
   });
+
+  try {
+    setSidebarHidden(window.localStorage.getItem("networth-sidebar-hidden") === "1");
+  } catch {
+    setMobileNavOpen(false);
+  }
 }
 
 async function loadRecords() {
