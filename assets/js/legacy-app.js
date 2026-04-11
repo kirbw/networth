@@ -157,6 +157,7 @@ function activeNavItem() {
 function buildContextNavigation() {
   const existing = document.querySelector(".context-nav");
   existing?.remove();
+  document.body.classList.remove("has-context-nav");
 
   const item = activeNavItem();
   if (!item || !Array.isArray(item.children) || !item.children.length) return;
@@ -172,7 +173,7 @@ function buildContextNavigation() {
   const links = [
     { href: item.href, label: item.contextLabel || item.label, match: [item.match[0]] },
     ...item.children,
-  ];
+  ].filter((linkItem, index, allLinks) => allLinks.findIndex((candidate) => candidate.href === linkItem.href) === index);
 
   links.forEach((linkItem) => {
     const link = document.createElement("a");
@@ -182,6 +183,7 @@ function buildContextNavigation() {
     contextNav.appendChild(link);
   });
 
+  document.body.classList.add("has-context-nav");
   topbar.insertAdjacentElement("afterend", contextNav);
 }
 

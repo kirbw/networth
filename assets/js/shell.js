@@ -38,28 +38,6 @@ export function decoratePageShell(page) {
   document.body.classList.add(`page-id-${page}`);
 
   const container = document.querySelector(".container");
-  if (container && !container.querySelector(".page-intro")) {
-    const intro = document.createElement("section");
-    intro.className = "page-intro";
-    intro.innerHTML = `
-      <div class="page-intro-copy">
-        <p class="page-intro-eyebrow">${meta.eyebrow || "NetWorth"}</p>
-        <h1>${meta.title}</h1>
-        <p>${meta.description}</p>
-      </div>
-      <div class="page-intro-actions"></div>
-    `;
-    const actions = intro.querySelector(".page-intro-actions");
-    if (meta.primaryLabel && meta.primaryHref) {
-      const action = document.createElement("a");
-      action.className = "page-intro-action";
-      action.href = meta.primaryHref;
-      action.textContent = meta.primaryLabel;
-      actions?.appendChild(action);
-    }
-    container.prepend(intro);
-  }
-
   if (page === "home" && container && !document.getElementById("home-kpi-strip")) {
     const kpis = document.createElement("section");
     kpis.className = "surface-kpi-strip";

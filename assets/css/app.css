@@ -3,12 +3,9 @@
   --font-body: "IBM Plex Sans", "Inter", "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", "Consolas", monospace;
   --app-bg: #f3f5f7;
-  --app-bg-accent:
-    radial-gradient(circle at 12% 18%, rgba(47, 125, 244, 0.12), transparent 22%),
-    radial-gradient(circle at 88% 8%, rgba(30, 166, 114, 0.08), transparent 24%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(243, 245, 247, 0.96));
-  --surface-1: rgba(255, 255, 255, 0.92);
-  --surface-2: rgba(255, 255, 255, 0.76);
+  --app-bg-accent: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  --surface-1: rgba(255, 255, 255, 0.96);
+  --surface-2: rgba(248, 250, 252, 0.9);
   --surface-3: #e9edf2;
   --text-strong: #101a29;
   --text: #223044;
@@ -52,10 +49,7 @@ html {
 
 html[data-resolved-theme="dark"] {
   --app-bg: #0b1118;
-  --app-bg-accent:
-    radial-gradient(circle at 18% 16%, rgba(47, 125, 244, 0.16), transparent 24%),
-    radial-gradient(circle at 82% 10%, rgba(30, 166, 114, 0.12), transparent 26%),
-    linear-gradient(180deg, rgba(11, 17, 24, 0.98), rgba(12, 18, 26, 0.98));
+  --app-bg-accent: linear-gradient(180deg, #0b1118 0%, #101824 100%);
   --surface-1: rgba(17, 24, 34, 0.94);
   --surface-2: rgba(20, 29, 40, 0.86);
   --surface-3: #162231;
@@ -75,12 +69,18 @@ html[data-resolved-theme="dark"] {
   --chart-text: #92a1b6;
 }
 
+html[data-resolved-theme="dark"],
+html[data-resolved-theme="dark"] body {
+  background-color: #0b1118;
+}
+
 body {
   font-family: var(--font-body);
   font-variant-numeric: tabular-nums;
   background: var(--app-bg);
   background-image: var(--app-bg-accent);
   color: var(--text);
+  min-height: 100svh;
 }
 
 body.auth-locked .layout {
@@ -134,13 +134,13 @@ body.public-home .container {
 
 .public-brand-panel {
   padding: 1.9rem;
-  border-radius: 28px;
+  border-radius: var(--radius-lg);
 }
 
 .public-brand-panel h1 {
   margin: 0;
   max-width: 16ch;
-  font-size: clamp(2.2rem, 3vw + 1rem, 4.4rem);
+  font-size: 3.4rem;
   line-height: 0.94;
 }
 
@@ -161,7 +161,7 @@ body.public-home .container {
   display: grid;
   gap: 0.22rem;
   padding: 0.95rem 1rem;
-  border-radius: 18px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-2) 95%, transparent);
 }
@@ -184,13 +184,38 @@ h3,
 .brand-block h2,
 .topbar-page-title {
   font-family: var(--font-display);
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   color: var(--text-strong);
+}
+
+h1 {
+  font-size: 2rem;
+  line-height: 1.08;
+}
+
+h2 {
+  margin: 0 0 0.8rem;
+  font-size: 1.12rem;
+  line-height: 1.22;
+}
+
+h3 {
+  font-size: 1rem;
+  line-height: 1.25;
 }
 
 .layout {
   grid-template-columns: 248px minmax(0, 1fr);
+  min-height: 100svh;
   transition: grid-template-columns 0.22s ease;
+}
+
+.main-column {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: start;
+  background: var(--app-bg);
+  min-width: 0;
 }
 
 body.sidebar-hidden .layout {
@@ -198,7 +223,7 @@ body.sidebar-hidden .layout {
 }
 
 .sidebar {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-1) 96%, transparent), color-mix(in srgb, var(--surface-2) 94%, transparent));
+  background: color-mix(in srgb, var(--surface-1) 96%, transparent);
   border-right: 1px solid var(--border);
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
   padding: 0.85rem 0.85rem 1.2rem;
@@ -244,7 +269,7 @@ body.sidebar-hidden .sidebar {
   margin: 0 0 0.55rem;
   color: var(--text-muted);
   font-size: 0.72rem;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -268,7 +293,7 @@ body.sidebar-hidden .sidebar {
 }
 
 .side-menu a.active {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 20%, var(--surface-1)), color-mix(in srgb, var(--surface-2) 92%, transparent));
+  background: color-mix(in srgb, var(--accent-soft) 88%, var(--surface-1));
   color: var(--text-strong);
   border-color: color-mix(in srgb, var(--accent) 28%, transparent);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
@@ -277,9 +302,10 @@ body.sidebar-hidden .sidebar {
 .topbar {
   background: color-mix(in srgb, var(--surface-1) 88%, transparent);
   border-bottom: 1px solid var(--border);
-  padding: 0.55rem 1.1rem;
-  min-height: 3.3rem;
+  padding: 0.48rem clamp(0.9rem, 1.4vw, 1.6rem);
+  min-height: 3rem;
   backdrop-filter: blur(12px);
+  z-index: 12;
 }
 
 .topbar-page-title {
@@ -293,14 +319,14 @@ body.sidebar-hidden .sidebar {
 
 .context-nav {
   position: sticky;
-  top: 3.3rem;
-  z-index: 4;
+  top: 3rem;
+  z-index: 11;
   display: flex;
   gap: 0.45rem;
   align-items: center;
   min-width: 0;
   overflow-x: auto;
-  padding: 0.55rem 1.1rem;
+  padding: 0.46rem clamp(0.9rem, 1.4vw, 1.6rem);
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-1) 90%, transparent);
   backdrop-filter: blur(12px);
@@ -334,21 +360,22 @@ body.sidebar-hidden .sidebar {
   display: inline-flex;
   align-items: center;
   padding: 0.48rem 0.72rem;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--text);
 }
 
 .container {
+  width: min(100%, 1880px);
   max-width: none;
   margin: 0;
-  padding: 0.8rem 1.25rem 2rem;
+  padding: clamp(0.65rem, 0.9vw, 1.1rem) clamp(0.9rem, 1.4vw, 1.8rem) 2rem;
   gap: 0.85rem;
 }
 
 .page-intro {
-  display: flex;
+  display: none;
   justify-content: space-between;
   align-items: flex-end;
   gap: 1rem;
@@ -362,7 +389,7 @@ body.sidebar-hidden .sidebar {
 .page-intro-eyebrow {
   margin: 0 0 0.25rem;
   color: var(--accent);
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-transform: uppercase;
   font-size: 0.75rem;
   font-weight: 700;
@@ -370,7 +397,7 @@ body.sidebar-hidden .sidebar {
 
 .page-intro h1 {
   margin: 0;
-  font-size: clamp(1.65rem, 1.45vw + 1.15rem, 2.5rem);
+  font-size: 2rem;
   line-height: 1;
 }
 
@@ -394,13 +421,13 @@ button {
   border-radius: var(--radius-sm);
   padding: 0.75rem 1rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 button,
 .page-intro-action {
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  box-shadow: 0 12px 24px color-mix(in srgb, var(--accent) 28%, transparent);
+  background: var(--accent);
+  box-shadow: none;
 }
 
 .page-intro-action,
@@ -419,18 +446,18 @@ button,
 }
 
 .card {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-1) 95%, transparent), color-mix(in srgb, var(--surface-2) 94%, transparent));
+  background: color-mix(in srgb, var(--surface-1) 96%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  padding: 1.3rem;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 65%, transparent);
+  padding: clamp(1rem, 1vw, 1.35rem);
   min-width: 0;
 }
 
 .auth-card,
 .report-header,
 .panel-form {
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 65%, transparent);
 }
 
 .auth-card {
@@ -453,7 +480,7 @@ button,
   color: var(--text-muted);
   font-size: 0.8rem;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0;
 }
 
 input,
@@ -484,7 +511,7 @@ label span,
 }
 
 .app-surface {
-  gap: 1rem;
+  gap: clamp(0.8rem, 1vw, 1.2rem);
   min-width: 0;
 }
 
@@ -508,7 +535,7 @@ body.page-family-profile .panel-table {
 }
 
 .panel-form {
-  width: min(100%, 48rem);
+  width: min(100%, 58rem);
   position: relative;
   top: auto;
 }
@@ -584,7 +611,7 @@ body.page-family-sandy {
 }
 
 .surface-kpi {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-1) 96%, transparent), color-mix(in srgb, var(--surface-2) 96%, transparent));
+  background: color-mix(in srgb, var(--surface-1) 96%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
@@ -658,7 +685,7 @@ table {
 th {
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
   font-size: 0.75rem;
   font-weight: 700;
   background: color-mix(in srgb, var(--surface-2) 92%, transparent);
@@ -682,12 +709,16 @@ tbody tr:hover {
 
 .delete-btn,
 .danger {
-  background: linear-gradient(135deg, var(--danger), color-mix(in srgb, var(--danger) 84%, #7b241c));
-  box-shadow: 0 12px 24px color-mix(in srgb, var(--danger) 24%, transparent);
+  background: var(--danger);
+  box-shadow: none;
 }
 
 .edit-btn {
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  background: var(--accent);
+}
+
+.action-icon-btn {
+  border-radius: var(--radius-sm);
 }
 
 .settings-grid {
@@ -701,7 +732,7 @@ tbody tr:hover {
   gap: 0.55rem;
   padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface-2) 95%, transparent);
 }
 
@@ -815,7 +846,7 @@ tbody tr:hover {
   }
 
   .context-nav {
-    top: 3.3rem;
+    top: 3rem;
     padding-inline: 0.85rem;
   }
 
@@ -832,6 +863,10 @@ tbody tr:hover {
 @media (max-width: 700px) {
   body.auth-locked .container {
     padding: 1rem;
+  }
+
+  .public-brand-panel h1 {
+    font-size: 2.2rem;
   }
 
   .container {
@@ -890,7 +925,7 @@ tbody tr:hover {
     display: block;
     color: var(--text-muted);
     font-size: 0.72rem;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     text-transform: uppercase;
     margin-bottom: 0.12rem;
   }
@@ -902,6 +937,7 @@ tbody tr:hover {
   .action-icon-btn {
     width: 2.4rem;
     height: 2.4rem;
+    border-radius: var(--radius-sm);
   }
 }
 

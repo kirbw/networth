@@ -43,19 +43,48 @@ UPDATES_DIR = Path(__file__).with_name("updates")
 THEME_OPTIONS = {"system", "light", "dark"}
 APP_HEAD_INJECTION = """
   <meta name="color-scheme" content="light dark" />
+  <style>
+    html { background: #f3f5f7; color: #223044; }
+    html[data-resolved-theme="dark"],
+    html[data-resolved-theme="dark"] body,
+    html[data-resolved-theme="dark"] .layout,
+    html[data-resolved-theme="dark"] .main-column {
+      background: #0b1118;
+      color: #d7e0ea;
+      color-scheme: dark;
+    }
+  </style>
   <script>
     (function () {
+      var serverPreference = __INITIAL_THEME_PREFERENCE__;
+      var validTheme = /^(system|light|dark)$/;
+      function normalize(value, fallback) {
+        var candidate = String(value || "").trim().toLowerCase();
+        return validTheme.test(candidate) ? candidate : fallback;
+      }
+      function readCookie(name) {
+        var match = document.cookie.match(new RegExp("(?:^|; )" + name.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&") + "=([^;]*)"));
+        return match ? decodeURIComponent(match[1]) : "";
+      }
       try {
-        var preference = localStorage.getItem("networth.theme") || "system";
-        if (!/^(system|light|dark)$/.test(preference)) preference = "system";
+        var storedPreference = "";
+        try {
+          storedPreference = localStorage.getItem("networth.theme") || "";
+        } catch (storageError) {}
+        var preference = normalize(serverPreference || storedPreference || readCookie("networth_theme"), "system");
         var resolved = preference === "system"
           ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
           : preference;
+        var background = resolved === "dark" ? "#0b1118" : "#f3f5f7";
+        var foreground = resolved === "dark" ? "#d7e0ea" : "#223044";
         document.documentElement.dataset.theme = preference;
         document.documentElement.dataset.resolvedTheme = resolved;
         document.documentElement.style.colorScheme = resolved;
+        document.documentElement.style.backgroundColor = background;
+        document.documentElement.style.color = foreground;
       } catch (error) {
         document.documentElement.dataset.theme = "system";
+        document.documentElement.style.backgroundColor = "#f3f5f7";
       }
     }());
   </script>
@@ -326,6 +355,48 @@ def is_user_setting_enabled(conn: sqlite3.Connection, user_id: int, key: str, de
 def normalize_theme_preference(value: str | None, fallback: str = "system") -> str:
     candidate = (value or "").strip().lower()
     return candidate if candidate in THEME_OPTIONS else fallback
+
+
+def get_initial_theme_preference(user) -> str:
+    if not user:
+        return ""
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            dark_mode = is_user_setting_enabled(conn, user["id"], "dark_mode", False)
+            theme_preference = normalize_theme_preference(get_user_setting(conn, user["id"], "theme_preference", ""))
+            if theme_preference == "system":
+                return "dark" if dark_mode else "system"
+            if theme_preference:
+                return theme_preference
+            return "dark" if dark_mode else ""
+    except (KeyError, sqlite3.Error, TypeError):
+        return ""
+
+
+def render_app_head_injection(user=None) -> str:
+    server_preference = get_initial_theme_preference(user)
+    return APP_HEAD_INJECTION.replace("__INITIAL_THEME_PREFERENCE__", json.dumps(server_preference))
+
+
+def apply_initial_theme_attributes(html: str, user) -> str:
+    preference = get_initial_theme_preference(user)
+    if preference not in ("dark", "light"):
+        return html
+    background = "#0b1118" if preference == "dark" else "#f3f5f7"
+    foreground = "#d7e0ea" if preference == "dark" else "#223044"
+
+    def inject(match: re.Match) -> str:
+        tag = match.group(0)
+        if "data-resolved-theme" in tag:
+            return tag
+        return (
+            tag[:-1]
+            + f' data-theme="{preference}" data-resolved-theme="{preference}"'
+            + f' style="background-color:{background};color:{foreground};color-scheme:{preference}"'
+            + ">"
+        )
+
+    return re.sub(r"<html\b[^>]*>", inject, html, count=1)
 
 
 def init_default_settings(conn: sqlite3.Connection):
@@ -1466,7 +1537,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
 
     def _serve_public_home(self) -> bool:
         html = PUBLIC_HOME_TEMPLATE.format(
-            head=APP_HEAD_INJECTION.strip(),
+            head=render_app_head_injection().strip(),
             auth_card=AUTH_CARD_TEMPLATE.strip(),
             footer=APP_FOOTER_INJECTION.strip(),
         )
@@ -1540,11 +1611,12 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         if file_path == "reset-password.html":
             return False
         html = Path(file_path).read_text(encoding='utf-8')
+        html = apply_initial_theme_attributes(html, user)
         html = re.sub(r'<script src="https://cdn\.tailwindcss\.com"></script><script>.*?</script>', "", html, flags=re.S)
         html = re.sub(r'<script src="https://cdn\.jsdelivr\.net/npm/chart\.js"></script>', "", html)
         html = re.sub(r'<link rel="stylesheet" href="styles\.css"\s*/?>', "", html)
         html = re.sub(r'<script src="app\.js"></script>', "", html)
-        html = html.replace("</head>", f"{APP_HEAD_INJECTION}</head>")
+        html = html.replace("</head>", f"{render_app_head_injection(user)}</head>")
         sidebar = self._render_sidebar(path)
         html = re.sub(r'<aside class="sidebar">.*?</aside>', sidebar, html, flags=re.S)
         html = re.sub(r'<section id="auth-card" class="card auth-card hidden">.*?</section>', AUTH_CARD_TEMPLATE, html, flags=re.S)

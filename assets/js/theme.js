@@ -1,4 +1,5 @@
 const STORAGE_KEY = "networth.theme";
+const COOKIE_KEY = "networth_theme";
 const VALID_THEMES = new Set(["system", "light", "dark"]);
 
 function normalizeThemePreference(value, fallback = "system") {
@@ -20,18 +21,28 @@ export function resolveThemePreference(user) {
 export function applyThemePreference(themePreference) {
   const preference = normalizeThemePreference(themePreference, "system");
   const resolved = preference === "system" ? getSystemTheme() : preference;
+  const background = resolved === "dark" ? "#0b1118" : "#f3f5f7";
+  const foreground = resolved === "dark" ? "#d7e0ea" : "#223044";
   document.documentElement.dataset.theme = preference;
   document.documentElement.dataset.resolvedTheme = resolved;
   document.documentElement.style.colorScheme = resolved;
+  document.documentElement.style.backgroundColor = background;
+  document.documentElement.style.color = foreground;
   if (document.body) {
     document.body.classList.toggle("dark-mode", resolved === "dark");
     document.body.dataset.themePreference = preference;
     document.body.dataset.resolvedTheme = resolved;
+    document.body.style.backgroundColor = background;
   }
   try {
     localStorage.setItem(STORAGE_KEY, preference);
   } catch {
     // Ignore storage failures in restricted contexts.
+  }
+  try {
+    document.cookie = `${COOKIE_KEY}=${encodeURIComponent(preference)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  } catch {
+    // Ignore cookie failures in restricted contexts.
   }
   window.dispatchEvent(new CustomEvent("networth:themechange", {
     detail: { preference, resolved },
