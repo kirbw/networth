@@ -457,6 +457,7 @@ def _run_npm_update_commands(app_root: Path, progress: list[str]):
     if shutil.which("npm") is None:
         raise RuntimeError("npm is not available on this server.")
 
+    progress.append("Starting npm post-update commands")
     lock_path = app_root / "package-lock.json"
     install_command = ["npm", "ci"] if lock_path.exists() else ["npm", "install"]
     _run_update_command(install_command, app_root, progress, timeout=240)
@@ -464,9 +465,28 @@ def _run_npm_update_commands(app_root: Path, progress: list[str]):
     scripts = _package_scripts(app_root)
     for script_name in ("check:frontend", "build:assets"):
         if script_name in scripts:
+            if script_name == "build:assets" and not _build_dir_is_writable(app_root):
+                progress.append("Skipped npm run build:assets because build/ is not writable by this service user")
+                continue
             _run_update_command(["npm", "run", script_name], app_root, progress, timeout=180)
         else:
             progress.append(f"npm script {script_name} not found; skipped")
+    progress.append("Finished npm post-update commands")
+
+
+def _build_dir_is_writable(app_root: Path) -> bool:
+    build_dir = app_root / "build"
+    if not build_dir.exists():
+        return os.access(app_root, os.W_OK)
+    if not os.access(build_dir, os.W_OK):
+        return False
+    probe = build_dir / ".networth-write-test"
+    try:
+        probe.write_text("", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
 
 
 def _restart_process_soon(delay_seconds: float = 0.5):
@@ -4213,7 +4233,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                         rel = src.relative_to(source_root)
                         if any(part.startswith('.') for part in rel.parts):
                             continue
-                        if rel.parts and rel.parts[0] in ("backups", "updates", "__pycache__", "node_modules"):
+                        if rel.parts and rel.parts[0] in ("backups", "updates", "__pycache__", "node_modules", "build"):
                             continue
                         if rel.name in ("finance.db", "AGENTS.md"):
                             continue
