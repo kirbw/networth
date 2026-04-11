@@ -13,6 +13,7 @@ const PRIMARY_NAV_ITEMS = [
   {
     href: "/investments.html",
     label: "Investments",
+    contextLabel: "Stocks",
     section: "Portfolio",
     match: ["investments", "precious-metals", "real-estate", "business-ventures", "retirement-accounts"],
     children: [
@@ -25,6 +26,7 @@ const PRIMARY_NAV_ITEMS = [
   {
     href: "/assets-vehicles.html",
     label: "Assets",
+    contextLabel: "Vehicles",
     section: "Portfolio",
     match: ["assets-bank-accounts", "assets-cash", "assets-vehicles", "assets-guns", "assets-equipment"],
     children: [
@@ -38,6 +40,7 @@ const PRIMARY_NAV_ITEMS = [
   {
     href: "/liabilities-mortgages.html",
     label: "Liabilities",
+    contextLabel: "Mortgages",
     section: "Portfolio",
     match: ["liabilities-mortgages", "liabilities-credit-cards", "liabilities-loans", "liabilities-recurring-expenses"],
     children: [
@@ -50,6 +53,7 @@ const PRIMARY_NAV_ITEMS = [
   {
     href: "/net-worth-report.html",
     label: "Reports",
+    contextLabel: "Net Worth",
     section: "Reports & Alerts",
     match: ["net-worth-report", "monthly-payments-report", "liquid-cash-report", "investment-calculator-report", "loan-amortization-report"],
     children: [
@@ -63,6 +67,7 @@ const PRIMARY_NAV_ITEMS = [
   {
     href: "/sandy-goals.html",
     label: "Sandy Lake",
+    contextLabel: "Goals",
     section: "Projects",
     match: ["sandy-goals", "sandy-deer-harvest", "sandy-food-plots", "sandy-expenses"],
     children: [
@@ -75,6 +80,7 @@ const PRIMARY_NAV_ITEMS = [
   {
     href: "/admin-users.html",
     label: "Admin",
+    contextLabel: "Users",
     section: "Administration",
     match: ["admin-users", "admin-email", "admin-backups", "admin-updates", "admin-notifications"],
     id: "nav-admin",
@@ -122,40 +128,7 @@ function buildShellNavigation() {
       link.textContent = item.label;
       if (item.id) link.id = item.id;
       if (item.match.includes(page)) link.classList.add("active");
-
-      if (Array.isArray(item.children) && item.children.length) {
-        const parentRow = document.createElement("div");
-        parentRow.className = "nav-parent-row";
-        const toggle = document.createElement("button");
-        toggle.type = "button";
-        toggle.className = "nav-submenu-toggle";
-        toggle.setAttribute("aria-label", `Toggle ${item.label} menu`);
-        toggle.setAttribute("aria-expanded", item.match.includes(page) ? "true" : "false");
-        toggle.innerHTML = '<span aria-hidden="true">v</span>';
-        parentRow.appendChild(link);
-        parentRow.appendChild(toggle);
-        itemWrap.appendChild(parentRow);
-
-        const submenu = document.createElement("div");
-        submenu.className = "side-submenu";
-        submenu.id = `submenu-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
-        toggle.setAttribute("aria-controls", submenu.id);
-        item.children.forEach((child) => {
-          const childLink = document.createElement("a");
-          childLink.href = child.href;
-          childLink.textContent = child.label;
-          if (child.match.includes(page)) childLink.classList.add("active");
-          submenu.appendChild(childLink);
-        });
-        if (item.match.includes(page)) itemWrap.classList.add("expanded");
-        itemWrap.appendChild(submenu);
-        toggle.addEventListener("click", () => {
-          const expanded = itemWrap.classList.toggle("expanded");
-          toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
-        });
-      } else {
-        itemWrap.appendChild(link);
-      }
+      itemWrap.appendChild(link);
 
       sectionEl.appendChild(itemWrap);
     });
@@ -175,6 +148,41 @@ function buildShellNavigation() {
     topbar.prepend(titleEl);
   }
   titleEl.textContent = PAGE_META[page]?.title || "Finance Tracker";
+}
+
+function activeNavItem() {
+  return PRIMARY_NAV_ITEMS.find((item) => item.match.includes(page));
+}
+
+function buildContextNavigation() {
+  const existing = document.querySelector(".context-nav");
+  existing?.remove();
+
+  const item = activeNavItem();
+  if (!item || !Array.isArray(item.children) || !item.children.length) return;
+
+  const mainColumn = document.querySelector(".main-column");
+  const topbar = document.querySelector(".topbar");
+  if (!mainColumn || !topbar) return;
+
+  const contextNav = document.createElement("nav");
+  contextNav.className = "context-nav";
+  contextNav.setAttribute("aria-label", `${item.label} sections`);
+
+  const links = [
+    { href: item.href, label: item.contextLabel || item.label, match: [item.match[0]] },
+    ...item.children,
+  ];
+
+  links.forEach((linkItem) => {
+    const link = document.createElement("a");
+    link.href = linkItem.href;
+    link.textContent = linkItem.label;
+    if (linkItem.match.includes(page)) link.classList.add("active");
+    contextNav.appendChild(link);
+  });
+
+  topbar.insertAdjacentElement("afterend", contextNav);
 }
 
 function setupResponsiveTables() {
@@ -200,6 +208,11 @@ function setupResponsiveTables() {
 
 function enhanceSecondaryNavs() {
   document.querySelectorAll(".admin-subnav, .sandy-subnav").forEach((nav) => {
+    const section = nav.closest("#app-content > section");
+    if (section) {
+      section.remove();
+      return;
+    }
     nav.classList.add("subnav-scroller");
     nav.setAttribute("role", "navigation");
     nav.querySelectorAll("a").forEach((anchor) => {
@@ -3816,6 +3829,7 @@ async function initPageData() {
 async function bootstrap() {
   buildShellNavigation();
   decoratePageShell(page);
+  buildContextNavigation();
   applyTailwindUtilityRefresh();
   enhanceSecondaryNavs();
   bindAuthUI();

@@ -43,6 +43,22 @@ UPDATES_DIR = Path(__file__).with_name("updates")
 THEME_OPTIONS = {"system", "light", "dark"}
 APP_HEAD_INJECTION = """
   <meta name="color-scheme" content="light dark" />
+  <script>
+    (function () {
+      try {
+        var preference = localStorage.getItem("networth.theme") || "system";
+        if (!/^(system|light|dark)$/.test(preference)) preference = "system";
+        var resolved = preference === "system"
+          ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : preference;
+        document.documentElement.dataset.theme = preference;
+        document.documentElement.dataset.resolvedTheme = resolved;
+        document.documentElement.style.colorScheme = resolved;
+      } catch (error) {
+        document.documentElement.dataset.theme = "system";
+      }
+    }());
+  </script>
   <link rel="stylesheet" href="/assets/css/legacy.css" />
   <link rel="stylesheet" href="/assets/css/app.css" />
 """
