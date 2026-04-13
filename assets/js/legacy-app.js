@@ -93,6 +93,29 @@ const PRIMARY_NAV_ITEMS = [
   },
 ];
 
+function collectRouteEntries(items) {
+  const entries = [];
+  items.forEach((item) => {
+    entries.push([item.href, item.match[0]]);
+    item.children?.forEach((child) => entries.push([child.href, child.match[0]]));
+  });
+  entries.push(["/index.html", "home"]);
+  entries.push(["/profile.html", "profile"]);
+  return entries;
+}
+
+function normalizeRoutePath(pathname) {
+  return pathname === "/index.html" ? "/" : pathname;
+}
+
+const ROUTE_PAGE_BY_PATH = new Map(collectRouteEntries(PRIMARY_NAV_ITEMS));
+ROUTE_PAGE_BY_PATH.set("/", "home");
+const CLIENT_NAV_PATHS = new Set([...ROUTE_PAGE_BY_PATH.keys()].map(normalizeRoutePath));
+
+function pageFromPath(pathname) {
+  return ROUTE_PAGE_BY_PATH.get(pathname) || ROUTE_PAGE_BY_PATH.get(normalizeRoutePath(pathname)) || "";
+}
+
 function buildShellNavigation() {
   const sidebar = document.querySelector(".sidebar");
   if (!sidebar) return;
@@ -121,13 +144,10 @@ function buildShellNavigation() {
       const itemWrap = document.createElement("div");
       itemWrap.className = "nav-item-wrap";
       if (item.id) itemWrap.id = `${item.id}-wrap`;
-      if (item.match.includes(page)) itemWrap.classList.add("active-group");
-
       const link = document.createElement("a");
       link.href = item.href;
       link.textContent = item.label;
       if (item.id) link.id = item.id;
-      if (item.match.includes(page)) link.classList.add("active");
       itemWrap.appendChild(link);
 
       sectionEl.appendChild(itemWrap);
@@ -147,7 +167,20 @@ function buildShellNavigation() {
     titleEl.className = "topbar-page-title";
     topbar.prepend(titleEl);
   }
-  titleEl.textContent = PAGE_META[page]?.title || "Finance Tracker";
+  updateShellNavigationState();
+}
+
+function updateShellNavigationState() {
+  PRIMARY_NAV_ITEMS.forEach((item) => {
+    const isActive = item.match.includes(page);
+    const link = item.id ? document.getElementById(item.id) : document.querySelector(`.side-menu a[href="${item.href}"]`);
+    const wrap = item.id ? document.getElementById(`${item.id}-wrap`) : link?.closest(".nav-item-wrap");
+    link?.classList.toggle("active", isActive);
+    wrap?.classList.toggle("active-group", isActive);
+  });
+
+  const titleEl = document.querySelector(".topbar-page-title");
+  if (titleEl) titleEl.textContent = PAGE_META[page]?.title || "Finance Tracker";
 }
 
 function activeNavItem() {
@@ -239,8 +272,8 @@ function applyTailwindUtilityRefresh() {
   });
 }
 
-const page = document.body.dataset.page;
-const NEXT_ALLOWED_PATHS = new Set(["/records.html", "/investments.html", "/precious-metals.html", "/real-estate.html", "/business-ventures.html", "/retirement-accounts.html", "/net-worth-report.html", "/monthly-payments-report.html", "/admin-users.html", "/admin-email.html", "/admin-backups.html", "/admin-updates.html", "/admin-notifications.html", "/notifications.html", "/liquid-cash-report.html", "/investment-calculator-report.html", "/loan-amortization-report.html", "/goals.html", "/taxes.html", "/liabilities-recurring-expenses.html", "/sandy-goals.html", "/sandy-deer-harvest.html", "/sandy-food-plots.html", "/sandy-expenses.html", "/solar-electric-usage.html"]);
+let page = pageFromPath(window.location.pathname) || document.body.dataset.page;
+const NEXT_ALLOWED_PATHS = new Set([...CLIENT_NAV_PATHS].filter((path) => path !== "/"));
 
 const authCard = document.getElementById("auth-card");
 const appContent = document.getElementById("app-content");
@@ -273,10 +306,33 @@ let investmentsSummaryChart;
 let liabilitiesSummaryChart;
 let assetsSummaryChart;
 let investmentProjectionChart;
+let navigationSequence = 0;
 
 function apiFetch(url, options = {}) {
   const headers = options.body ? { "Content-Type": "application/json", ...(options.headers || {}) } : (options.headers || {});
   return fetch(url, { ...options, headers });
+}
+
+function destroyChartInstance(chart) {
+  if (!chart) return null;
+  try {
+    chart.destroy();
+  } catch {
+    // Charts may already be detached during fast page swaps.
+  }
+  return null;
+}
+
+function destroyPageArtifacts() {
+  pageController?.destroy?.();
+  pageController = null;
+  incomeGivingChart = destroyChartInstance(incomeGivingChart);
+  netWorthChart = destroyChartInstance(netWorthChart);
+  goalProgressChart = destroyChartInstance(goalProgressChart);
+  investmentsSummaryChart = destroyChartInstance(investmentsSummaryChart);
+  liabilitiesSummaryChart = destroyChartInstance(liabilitiesSummaryChart);
+  assetsSummaryChart = destroyChartInstance(assetsSummaryChart);
+  investmentProjectionChart = destroyChartInstance(investmentProjectionChart);
 }
 
 function currency(value) {
@@ -510,8 +566,8 @@ function bindAuthUI() {
   verifyForm?.addEventListener("submit", handleVerify);
   forgotPasswordForm?.addEventListener("submit", handleForgotPassword);
   logoutBtn?.addEventListener("click", handleLogout);
-  notificationsBtn?.addEventListener("click", () => { if (currentUser) window.location.href = "/notifications.html"; });
-  sessionName?.addEventListener("click", () => { if (currentUser) window.location.href = "/profile.html"; });
+  notificationsBtn?.addEventListener("click", () => { if (currentUser) navigateTo("/notifications.html"); });
+  sessionName?.addEventListener("click", () => { if (currentUser) navigateTo("/profile.html"); });
   toggleSignupBtn?.addEventListener("click", () => showAuthMode("signup"));
   toggleLoginBtn?.addEventListener("click", () => showAuthMode("login"));
   toggleVerifyBtn?.addEventListener("click", () => showAuthMode("verify"));
@@ -598,6 +654,128 @@ function setupMobileNav() {
   } catch {
     setMobileNavOpen(false);
   }
+}
+
+function isSupportedClientRoute(url) {
+  return url.origin === window.location.origin && CLIENT_NAV_PATHS.has(normalizeRoutePath(url.pathname));
+}
+
+function shouldHandleClientNavigation(event, anchor) {
+  if (!anchor || !currentUser) return false;
+  if (event.defaultPrevented || event.button !== 0) return false;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
+  if (anchor.target && anchor.target !== "_self") return false;
+  if (anchor.hasAttribute("download")) return false;
+  const url = new URL(anchor.href, window.location.href);
+  if (!isSupportedClientRoute(url)) return false;
+  if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) return false;
+  return true;
+}
+
+function setPageTransitioning(transitioning) {
+  document.body.classList.toggle("page-transitioning", transitioning);
+  document.body.setAttribute("aria-busy", transitioning ? "true" : "false");
+}
+
+function updateDocumentPageState(nextPage, parsedDocument, targetUrl) {
+  page = nextPage;
+  document.body.dataset.page = nextPage;
+  document.body.classList.remove("public-home", "auth-locked");
+  if (parsedDocument.title) document.title = parsedDocument.title;
+  if (targetUrl) {
+    const canonicalPath = targetUrl.pathname === "/index.html" ? "/" : targetUrl.pathname;
+    document.body.dataset.currentPath = canonicalPath;
+  }
+}
+
+function rehydrateCurrentPage() {
+  decoratePageShell(page);
+  updateShellNavigationState();
+  buildContextNavigation();
+  applyTailwindUtilityRefresh();
+  enhanceSecondaryNavs();
+  setupResponsiveTables();
+  populateYearOptions();
+  renderAuthState();
+}
+
+async function navigateTo(href, options = {}) {
+  const targetUrl = new URL(href, window.location.href);
+  const nextPage = pageFromPath(targetUrl.pathname);
+  const shouldPushState = options.pushState !== false;
+  const shouldFallback = options.fallback !== false;
+
+  if (!nextPage || !isSupportedClientRoute(targetUrl) || !currentUser) {
+    if (shouldFallback) window.location.href = targetUrl.href;
+    return false;
+  }
+
+  if (nextPage === page && targetUrl.pathname === window.location.pathname && targetUrl.search === window.location.search && targetUrl.hash === window.location.hash) {
+    closeMobileNav();
+    return true;
+  }
+
+  const sequence = ++navigationSequence;
+  setPageTransitioning(true);
+
+  try {
+    const response = await fetch(targetUrl.href, {
+      headers: { "X-Requested-With": "NetWorthClientNavigation" },
+      credentials: "same-origin",
+    });
+    if (!response.ok) throw new Error("Navigation request failed.");
+    const html = await response.text();
+    if (sequence !== navigationSequence) return false;
+
+    const parsedDocument = new DOMParser().parseFromString(html, "text/html");
+    const nextAppContent = parsedDocument.getElementById("app-content");
+    const nextBody = parsedDocument.body;
+    if (!nextAppContent || nextBody?.classList.contains("auth-locked") || nextBody?.classList.contains("public-home")) {
+      throw new Error("Navigation response is not an authenticated app page.");
+    }
+
+    destroyPageArtifacts();
+    appContent.innerHTML = nextAppContent.innerHTML;
+    appContent.classList.remove("hidden");
+    updateDocumentPageState(nextPage, parsedDocument, targetUrl);
+    rehydrateCurrentPage();
+    ensureAdminPageAccess();
+
+    if (shouldPushState) {
+      window.history.pushState({ networthPage: nextPage }, "", targetUrl.href);
+    }
+
+    await initPageData();
+    closeMobileNav();
+    window.scrollTo(0, 0);
+    return true;
+  } catch {
+    if (shouldFallback) {
+      window.location.href = targetUrl.href;
+      return false;
+    }
+    window.location.reload();
+    return false;
+  } finally {
+    if (sequence === navigationSequence) {
+      setPageTransitioning(false);
+    }
+  }
+}
+
+function setupClientNavigation() {
+  window.history.replaceState({ networthPage: page }, "", window.location.href);
+
+  document.addEventListener("click", (event) => {
+    const anchor = event.target instanceof Element ? event.target.closest("a") : null;
+    if (!shouldHandleClientNavigation(event, anchor)) return;
+    event.preventDefault();
+    navigateTo(anchor.href);
+  });
+
+  window.addEventListener("popstate", () => {
+    navigateTo(window.location.href, { pushState: false, fallback: false });
+  });
 }
 
 async function loadRecords() {
@@ -3007,7 +3185,10 @@ function initSandyDeerHarvestPage() {
     await render();
   });
 
-  return { render: async () => { await loadRows(); await render(); } };
+  return {
+    render: async () => { await loadRows(); await render(); },
+    destroy: () => { hunterChart = destroyChartInstance(hunterChart); },
+  };
 }
 
 function initSandyFoodPlotsPage() {
@@ -3836,6 +4017,7 @@ async function bootstrap() {
   enhanceSecondaryNavs();
   bindAuthUI();
   setupMobileNav();
+  setupClientNavigation();
   setupResponsiveTables();
   populateYearOptions();
   showAuthMode("login");

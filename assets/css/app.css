@@ -300,12 +300,33 @@ body.sidebar-hidden .sidebar {
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
   background: color-mix(in srgb, var(--surface-1) 88%, transparent);
   border-bottom: 1px solid var(--border);
   padding: 0.48rem clamp(0.9rem, 1.4vw, 1.6rem);
   min-height: 3rem;
   backdrop-filter: blur(12px);
   z-index: 12;
+}
+
+.topbar::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transform: scaleX(0.18);
+  transform-origin: left;
+  transition: opacity 0.16s ease, transform 0.24s ease;
+}
+
+body.page-transitioning .topbar::after {
+  opacity: 1;
+  transform: scaleX(0.86);
 }
 
 .topbar-page-title {
@@ -513,6 +534,15 @@ label span,
 .app-surface {
   gap: clamp(0.8rem, 1vw, 1.2rem);
   min-width: 0;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+body.page-transitioning #app-content {
+  opacity: 0.58;
+  pointer-events: none;
+  transform: translateY(4px);
 }
 
 body.page-family-workspace #app-content,
@@ -946,8 +976,11 @@ tbody tr:hover {
   .card,
   .surface-kpi,
   .sidebar,
-  .topbar {
+  .topbar,
+  .topbar::after,
+  #app-content {
     animation: none !important;
     transition: none !important;
+    transform: none !important;
   }
 }

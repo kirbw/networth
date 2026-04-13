@@ -3,6 +3,7 @@ import { getPageMeta } from "./page-meta.js";
 function classifySections(page, family) {
   const appContent = document.getElementById("app-content");
   if (!appContent) return;
+  appContent.classList.remove("dashboard-surface", "report-surface", "profile-surface", "admin-surface", "sandy-surface");
   appContent.classList.add("app-surface");
   appContent.querySelectorAll(":scope > section").forEach((section) => {
     section.classList.remove("panel-subnav", "panel-form", "panel-table", "panel-report-header", "panel-full");
@@ -34,10 +35,18 @@ function classifySections(page, family) {
 
 export function decoratePageShell(page) {
   const meta = getPageMeta(page);
+  Array.from(document.body.classList).forEach((className) => {
+    if (className.startsWith("page-family-") || className.startsWith("page-id-")) {
+      document.body.classList.remove(className);
+    }
+  });
   document.body.classList.add(`page-family-${meta.family}`);
   document.body.classList.add(`page-id-${page}`);
 
   const container = document.querySelector(".container");
+  if (page !== "home") {
+    document.getElementById("home-kpi-strip")?.remove();
+  }
   if (page === "home" && container && !document.getElementById("home-kpi-strip")) {
     const kpis = document.createElement("section");
     kpis.className = "surface-kpi-strip";
