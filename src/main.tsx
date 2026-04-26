@@ -196,6 +196,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
         label: "Assets",
         icon: WalletCards,
         children: [
+          { path: "/assets/bank-accounts", label: "Bank Accounts" },
           { path: "/assets/cash", label: "Cash" },
           { path: "/assets/vehicles", label: "Vehicles" },
           { path: "/assets/guns", label: "Guns" },
@@ -207,6 +208,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
         label: "Liabilities",
         icon: CircleDollarSign,
         children: [
+          { path: "/liabilities/mortgages", label: "Mortgages" },
           { path: "/liabilities/credit-cards", label: "Credit Cards" },
           { path: "/liabilities/loans", label: "Loans" },
           { path: "/liabilities/recurring-expenses", label: "Recurring Expenses" },
@@ -222,6 +224,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
         label: "Reports",
         icon: FileText,
         children: [
+          { path: "/reports/net-worth", label: "Net Worth" },
           { path: "/reports/monthly-payments", label: "Monthly Payments" },
           { path: "/reports/liquid-cash", label: "Liquid Cash" },
           { path: "/reports/investment-calculator", label: "Investment Projection" },
@@ -239,6 +242,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
         label: "Sandy Lake",
         icon: Home,
         children: [
+          { path: "/sandy/goals", label: "Goals" },
           { path: "/sandy/deer-harvest", label: "Deer Harvest" },
           { path: "/sandy/food-plots", label: "Food Plots" },
           { path: "/sandy/expenses", label: "Expenses" },
@@ -257,6 +261,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
         icon: Shield,
         adminOnly: true,
         children: [
+          { path: "/admin/users", label: "Users" },
           { path: "/admin/email", label: "Email" },
           { path: "/admin/backups", label: "Backups" },
           { path: "/admin/updates", label: "Updates" },
