@@ -623,7 +623,7 @@ type CrudConfig = {
 };
 
 function initialForm(fields: FieldConfig[]) {
-  return fields.reduce((acc, field) => ({ ...acc, [field.name]: field.defaultValue ?? "" }), {});
+  return fields.reduce((acc, field) => ({ ...acc, [field.name]: field.defaultValue ?? (field.options?.[0]?.value ?? "") }), {});
 }
 
 function CrudPage({ config }: { config: CrudConfig }) {
