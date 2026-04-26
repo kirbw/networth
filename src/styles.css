@@ -558,6 +558,10 @@ a {
   border-top: 1px solid var(--border);
 }
 
+.giving-chart-legend.mix-legend {
+  grid-template-columns: 1fr;
+}
+
 .giving-legend-item {
   display: flex;
   align-items: center;

@@ -1071,14 +1071,35 @@ function Dashboard() {
       </section>
       <section className="panel chart-panel">
         <h2>Investment Mix</h2>
-        <Doughnut data={{ labels: investments.map((x) => x.label || x.category), datasets: [{ data: investments.map((x) => Number(x.total || x.value || 0)), backgroundColor: ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed"] }] }} options={{ responsive: true, maintainAspectRatio: false }} />
+        {(() => {
+          const mixColors = ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed"];
+          return (
+            <>
+              <div className="giving-chart-wrap">
+                <Doughnut
+                  data={{ labels: investments.map((x) => x.label || x.category), datasets: [{ data: investments.map((x) => Number(x.total || x.value || 0)), backgroundColor: mixColors, borderWidth: 0, hoverOffset: 4 }] }}
+                  options={{ responsive: true, maintainAspectRatio: false, cutout: "72%", plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ` ${wholeMoney(ctx.parsed)}` } } } }}
+                />
+              </div>
+              <div className="giving-chart-legend mix-legend">
+                {investments.map((x, i) => (
+                  <div key={x.label} className="giving-legend-item">
+                    <span className="giving-legend-dot" style={{ background: mixColors[i] }} />
+                    <span>{x.label}</span>
+                    <strong>{wholeMoney(x.total)}</strong>
+                  </div>
+                ))}
+              </div>
+            </>
+          );
+        })()}
       </section>
       <section className="panel chart-panel">
         <h2>Lifetime Giving</h2>
         <div className="giving-chart-wrap">
           <Doughnut
             data={{ labels: ["Giving", "Remaining income"], datasets: [{ data: [totalGiving, Math.max(0, totalIncome - totalGiving)], backgroundColor: ["#16a34a", "#2563eb"], borderWidth: 0, hoverOffset: 4 }] }}
-            options={{ responsive: true, maintainAspectRatio: false, cutout: "72%", plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ` ${money(ctx.parsed)}` } } } }}
+            options={{ responsive: true, maintainAspectRatio: false, cutout: "72%", plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ` ${wholeMoney(ctx.parsed)}` } } } }}
           />
           <div className="giving-chart-center">
             <span>{givingRate.toFixed(1)}%</span>
@@ -1089,12 +1110,12 @@ function Dashboard() {
           <div className="giving-legend-item">
             <span className="giving-legend-dot" style={{ background: "#16a34a" }} />
             <span>Total giving</span>
-            <strong>{money(totalGiving)}</strong>
+            <strong>{wholeMoney(totalGiving)}</strong>
           </div>
           <div className="giving-legend-item">
             <span className="giving-legend-dot" style={{ background: "#2563eb" }} />
             <span>Total income</span>
-            <strong>{money(totalIncome)}</strong>
+            <strong>{wholeMoney(totalIncome)}</strong>
           </div>
         </div>
       </section>
