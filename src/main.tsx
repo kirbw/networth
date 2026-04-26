@@ -66,6 +66,8 @@ const DEFAULT_GOAL_PERCENT = 10;
 
 const money = (value: any) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(Number(value || 0));
+const wholeMoney = (value: any) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(Number(value || 0));
 const compactMoney = (value: any) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(Number(value || 0));
 const pct = (value: any) => `${Number(value || 0).toFixed(2)}%`;
@@ -834,6 +836,7 @@ const crudConfigs: Record<string, CrudConfig> = {
       { name: "year", from: "model_year", label: "Model year", type: "number" },
       { name: "make", label: "Make", required: true },
       { name: "model", label: "Model", required: true },
+      { name: "vin", label: "VIN number" },
       { name: "datePurchased", from: "date_purchased", label: "Date purchased", type: "date" },
       { name: "inspectionExpiresOn", from: "inspection_expires_on", label: "Inspection expires", type: "date" },
       { name: "value", label: "Value", type: "number", step: "0.01", required: true },
@@ -843,6 +846,7 @@ const crudConfigs: Record<string, CrudConfig> = {
       { key: "model_year", label: "Year" },
       { key: "make", label: "Make" },
       { key: "model", label: "Model" },
+      { key: "vin", label: "VIN" },
       { key: "inspection_expires_on", label: "Inspection" },
       { key: "value", label: "Value", render: (r) => money(r.value) },
     ],
@@ -1047,10 +1051,10 @@ function Dashboard() {
   return (
     <div className="dashboard-grid">
       <section className="kpi-strip">
-        <Kpi label="Latest income" value={money(latest?.income || 0)} note={latest ? `Tax year ${latest.year}` : "No records yet"} />
-        <Kpi label="Latest net worth" value={money(latest?.netWorth || latest?.net_worth || 0)} note="Most recent annual record" />
+        <Kpi label="Latest income" value={wholeMoney(latest?.income || 0)} note={latest ? `Tax year ${latest.year}` : "No records yet"} />
+        <Kpi label="Latest net worth" value={wholeMoney(latest?.netWorth || latest?.net_worth || 0)} note="Most recent annual record" />
         <Kpi label="Giving rate" value={`${givingRate.toFixed(1)}%`} note={`Goal ${Number(user?.givingGoalPercent || DEFAULT_GOAL_PERCENT)}%`} />
-        <Kpi label="Tracked balance sheet" value={money(assets - liabilities)} note="Investments + assets minus liabilities" />
+        <Kpi label="Tracked balance sheet" value={wholeMoney(assets - liabilities)} note="Investments + assets minus liabilities" />
       </section>
       <section className="panel chart-panel">
         <h2>Income & Giving</h2>

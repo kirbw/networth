@@ -856,6 +856,7 @@ def init_db():
                 description TEXT NOT NULL,
                 make TEXT NOT NULL,
                 model TEXT NOT NULL,
+                vin TEXT,
                 model_year INTEGER,
                 value REAL NOT NULL,
                 created_at TEXT NOT NULL,
@@ -1276,6 +1277,8 @@ def init_db():
             conn.execute("ALTER TABLE asset_vehicles ADD COLUMN date_purchased TEXT")
         if table_info_asset_vehicles and "inspection_expires_on" not in vehicle_cols:
             conn.execute("ALTER TABLE asset_vehicles ADD COLUMN inspection_expires_on TEXT")
+        if table_info_asset_vehicles and "vin" not in vehicle_cols:
+            conn.execute("ALTER TABLE asset_vehicles ADD COLUMN vin TEXT")
 
         table_info_asset_guns = conn.execute("PRAGMA table_info(asset_guns)").fetchall()
         gun_cols = {col[1] for col in table_info_asset_guns}
@@ -1499,7 +1502,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(address,'')) + LENGTH(CAST(percentage_owned AS TEXT)) + LENGTH(CAST(purchase_price AS TEXT)) + LENGTH(CAST(current_value AS TEXT)) + 64), 0) FROM real_estate WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(business_name,'')) + LENGTH(CAST(percentage_owned AS TEXT)) + LENGTH(CAST(business_value AS TEXT)) + 48), 0) FROM business_ventures WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(account_type,'')) + LENGTH(COALESCE(broker,'')) + LENGTH(CAST(taxable AS TEXT)) + LENGTH(CAST(value AS TEXT)) + 48), 0) FROM retirement_accounts WHERE user_id = ?", (user_id,))
-        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(make,'')) + LENGTH(COALESCE(model,'')) + LENGTH(COALESCE(CAST(model_year AS TEXT), '')) + LENGTH(CAST(value AS TEXT)) + 48), 0) FROM asset_vehicles WHERE user_id = ?", (user_id,))
+        add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(make,'')) + LENGTH(COALESCE(model,'')) + LENGTH(COALESCE(vin,'')) + LENGTH(COALESCE(CAST(model_year AS TEXT), '')) + LENGTH(CAST(value AS TEXT)) + 48), 0) FROM asset_vehicles WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(equipment_type,'')) + LENGTH(COALESCE(make,'')) + LENGTH(COALESCE(model,'')) + LENGTH(COALESCE(CAST(model_year AS TEXT), '')) + LENGTH(COALESCE(CAST(year_purchased AS TEXT), '')) + LENGTH(CAST(value AS TEXT)) + 64), 0) FROM asset_equipment WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(gun_type,'')) + LENGTH(COALESCE(manufacturer,'')) + LENGTH(COALESCE(model,'')) + LENGTH(COALESCE(CAST(year_acquired AS TEXT), '')) + LENGTH(COALESCE(notes,'')) + LENGTH(CAST(value AS TEXT)) + 72), 0) FROM asset_guns WHERE user_id = ?", (user_id,))
         add("SELECT COALESCE(SUM(LENGTH(COALESCE(description,'')) + LENGTH(COALESCE(institution,'')) + LENGTH(COALESCE(account_type,'')) + LENGTH(CAST(balance AS TEXT)) + 48), 0) FROM asset_bank_accounts WHERE user_id = ?", (user_id,))
@@ -1900,7 +1903,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
-                rows = conn.execute("SELECT id, description, make, model, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at FROM asset_vehicles WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+                rows = conn.execute("SELECT id, description, make, model, vin, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at FROM asset_vehicles WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
             self._send_json(200, [dict(row) for row in rows])
             return
 
@@ -2386,6 +2389,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 description = str(data.get("description", "")).strip()
                 make = str(data.get("make", "")).strip()
                 model = str(data.get("model", "")).strip()
+                vin = str(data.get("vin", "")).strip() or None
                 model_year_raw = data.get("year")
                 model_year = None if model_year_raw in (None, "") else int(model_year_raw)
                 date_purchased = str(data.get("datePurchased", "")).strip() or None
@@ -2399,9 +2403,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
                 if record_id is None:
-                    conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, model_year, date_purchased, inspection_expires_on, value, now, now))
+                    conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, vin, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, vin, model_year, date_purchased, inspection_expires_on, value, now, now))
                 else:
-                    cursor = conn.execute("UPDATE asset_vehicles SET description = ?, make = ?, model = ?, model_year = ?, date_purchased = ?, inspection_expires_on = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, make, model, model_year, date_purchased, inspection_expires_on, value, now, record_id, user["id"]))
+                    cursor = conn.execute("UPDATE asset_vehicles SET description = ?, make = ?, model = ?, vin = ?, model_year = ?, date_purchased = ?, inspection_expires_on = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, make, model, vin, model_year, date_purchased, inspection_expires_on, value, now, record_id, user["id"]))
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Vehicle not found."})
                         return
@@ -3609,6 +3613,7 @@ class FinanceHandler(SimpleHTTPRequestHandler):
                 description = str(data.get("description", "")).strip()
                 make = str(data.get("make", "")).strip()
                 model = str(data.get("model", "")).strip()
+                vin = str(data.get("vin", "")).strip() or None
                 model_year_raw = data.get("year")
                 model_year = None if model_year_raw in (None, "") else int(model_year_raw)
                 date_purchased = str(data.get("datePurchased", "")).strip() or None
@@ -3622,9 +3627,9 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             now = utc_now_iso()
             with sqlite3.connect(DB_PATH) as conn:
                 if record_id is None:
-                    conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, model_year, date_purchased, inspection_expires_on, value, now, now))
+                    conn.execute("INSERT INTO asset_vehicles (user_id, description, make, model, vin, model_year, date_purchased, inspection_expires_on, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], description, make, model, vin, model_year, date_purchased, inspection_expires_on, value, now, now))
                 else:
-                    cursor = conn.execute("UPDATE asset_vehicles SET description = ?, make = ?, model = ?, model_year = ?, date_purchased = ?, inspection_expires_on = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, make, model, model_year, date_purchased, inspection_expires_on, value, now, record_id, user["id"]))
+                    cursor = conn.execute("UPDATE asset_vehicles SET description = ?, make = ?, model = ?, vin = ?, model_year = ?, date_purchased = ?, inspection_expires_on = ?, value = ?, updated_at = ? WHERE id = ? AND user_id = ?", (description, make, model, vin, model_year, date_purchased, inspection_expires_on, value, now, record_id, user["id"]))
                     if cursor.rowcount == 0:
                         self._send_json(404, {"error": "Vehicle not found."})
                         return
