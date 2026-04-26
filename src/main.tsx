@@ -69,6 +69,14 @@ const money = (value: any) =>
 const compactMoney = (value: any) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(Number(value || 0));
 const pct = (value: any) => `${Number(value || 0).toFixed(2)}%`;
+const asArray = <T,>(value: unknown): T[] => Array.isArray(value) ? value : [];
+const summaryToChartRows = (summary: AnyRow) => [
+  { label: "Stocks", total: Number(summary?.stocks || 0) },
+  { label: "Precious metals", total: Number(summary?.preciousMetals || 0) },
+  { label: "Real estate", total: Number(summary?.realEstateMyValue || 0) },
+  { label: "Business", total: Number(summary?.businessVenturesMyValue || 0) },
+  { label: "Retirement", total: Number(summary?.retirementAccounts || 0) },
+].filter((row) => row.total > 0);
 const todayMonth = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -1005,14 +1013,14 @@ function Dashboard() {
   const load = useCallback(async () => {
     const [recordsPayload, investmentsSummary, assetsPayload, liabilitiesPayload] = await Promise.all([
       api<any[]>("/api/records"),
-      api("/api/investments/summary").catch(() => []),
+      api<AnyRow>("/api/investments/summary").catch((): AnyRow => ({})),
       Promise.all(["vehicles", "equipment", "guns", "bank-accounts", "cash"].map((x) => api<any[]>(`/api/assets/${x}`).catch(() => []))),
-      api<any[]>("/api/liabilities/summary").catch(() => []),
+      api<AnyRow>("/api/liabilities/summary").catch((): AnyRow => ({})),
     ]);
-    setRecords(recordsPayload);
-    setInvestments(Array.isArray(investmentsSummary) ? investmentsSummary : []);
+    setRecords(asArray<AnyRow>(recordsPayload));
+    setInvestments(summaryToChartRows(investmentsSummary));
     setAssets((assetsPayload as any[][]).flat().reduce((sum, row) => sum + Number(row.value ?? row.balance ?? row.amount ?? 0), 0));
-    setLiabilities((liabilitiesPayload as any[]).reduce((sum, row) => sum + Number(row.total || 0), 0));
+    setLiabilities(Number(liabilitiesPayload?.combinedTotal || 0));
   }, []);
 
   useEffect(() => { load().catch((error) => setMessage(error.message)); }, [load]);
