@@ -721,17 +721,6 @@ td {
   color: var(--muted);
 }
 
-.action-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.action-panel h2 {
-  margin-bottom: 0.25rem;
-}
-
 .thumb-image {
   width: 3.2rem;
   height: 3.2rem;

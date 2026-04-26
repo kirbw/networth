@@ -1021,9 +1021,6 @@ function Dashboard() {
   const [investments, setInvestments] = useState<AnyRow[]>([]);
   const [assets, setAssets] = useState(0);
   const [liabilities, setLiabilities] = useState(0);
-  const [form, setForm] = useState<AnyRow>({ year: new Date().getFullYear(), income: "", donation: "", netWorth: "" });
-  const [showForm, setShowForm] = useState(false);
-  const [message, setMessage] = useState("");
 
   const load = useCallback(async () => {
     const [recordsPayload, investmentsSummary, assetsPayload, liabilitiesPayload] = await Promise.all([
@@ -1040,21 +1037,12 @@ function Dashboard() {
     setLiabilities(Number(liabilitiesPayload?.combinedTotal || 0));
   }, []);
 
-  useEffect(() => { load().catch((error) => setMessage(error.message)); }, [load]);
+  useEffect(() => { load().catch(() => undefined); }, [load]);
   const sorted = [...records].sort((a, b) => Number(a.year) - Number(b.year));
   const latest = sorted[sorted.length - 1];
   const totalIncome = records.reduce((sum, row) => sum + Number(row.income || 0), 0);
   const totalGiving = records.reduce((sum, row) => sum + Number(row.donation || 0), 0);
   const givingRate = totalIncome > 0 ? (totalGiving / totalIncome) * 100 : 0;
-
-  async function save(event: React.FormEvent) {
-    event.preventDefault();
-    await api("/api/records", { method: "POST", body: JSON.stringify({ year: Number(form.year), income: Number(form.income), donation: Number(form.donation), netWorth: form.netWorth === "" ? null : Number(form.netWorth) }) });
-    setForm({ year: new Date().getFullYear(), income: "", donation: "", netWorth: "" });
-    await load();
-    setShowForm(false);
-    setMessage("Annual record saved.");
-  }
 
   return (
     <div className="dashboard-grid">
@@ -1076,24 +1064,6 @@ function Dashboard() {
         <h2>Investment Mix</h2>
         <Doughnut data={{ labels: investments.map((x) => x.label || x.category), datasets: [{ data: investments.map((x) => Number(x.total || x.value || 0)), backgroundColor: ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed"] }] }} options={{ responsive: true, maintainAspectRatio: false }} />
       </section>
-      <section className="panel chart-panel action-panel">
-        <div>
-          <h2>Annual Data</h2>
-          <p className="muted">Keep the dashboard focused, then open the entry form only when you need it.</p>
-        </div>
-        <button className="primary-btn" type="button" onClick={() => setShowForm((value) => !value)}>{showForm ? "Hide form" : "Add annual data"}</button>
-      </section>
-      {showForm && <section className="panel form-panel reveal-panel">
-        <div className="panel-heading"><h2>Add Annual Data</h2><button className="ghost-btn" type="button" onClick={() => setShowForm(false)}>Close</button></div>
-        <form className="form-grid" onSubmit={save}>
-          <Field label="Tax year" type="number" value={form.year} onChange={(v) => setForm((f) => ({ ...f, year: v }))} required />
-          <Field label="Total income" type="number" step="0.01" value={form.income} onChange={(v) => setForm((f) => ({ ...f, income: v }))} required />
-          <Field label="Donations" type="number" step="0.01" value={form.donation} onChange={(v) => setForm((f) => ({ ...f, donation: v }))} required />
-          <Field label="Net worth" type="number" step="0.01" value={form.netWorth} onChange={(v) => setForm((f) => ({ ...f, netWorth: v }))} />
-          <button className="primary-btn">Save year</button>
-        </form>
-        {message && <p className="form-message">{message}</p>}
-      </section>}
     </div>
   );
 }
