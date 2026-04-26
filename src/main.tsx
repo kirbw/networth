@@ -1034,7 +1034,9 @@ function Dashboard() {
     ]);
     setRecords(asArray<AnyRow>(recordsPayload));
     setInvestments(summaryToChartRows(investmentsSummary));
-    setAssets((assetsPayload as any[][]).flat().reduce((sum, row) => sum + Number(row.value ?? row.balance ?? row.amount ?? 0), 0));
+    const directAssetTotal = (assetsPayload as any[][]).flat().reduce((sum, row) => sum + Number(row.value ?? row.balance ?? row.amount ?? 0), 0);
+    const investmentTotal = Number(investmentsSummary?.combinedTotal || 0);
+    setAssets(directAssetTotal + investmentTotal);
     setLiabilities(Number(liabilitiesPayload?.combinedTotal || 0));
   }, []);
 
@@ -1060,7 +1062,7 @@ function Dashboard() {
         <Kpi label="Latest income" value={money(latest?.income || 0)} note={latest ? `Tax year ${latest.year}` : "No records yet"} />
         <Kpi label="Latest net worth" value={money(latest?.netWorth || latest?.net_worth || 0)} note="Most recent annual record" />
         <Kpi label="Giving rate" value={`${givingRate.toFixed(1)}%`} note={`Goal ${Number(user?.givingGoalPercent || DEFAULT_GOAL_PERCENT)}%`} />
-        <Kpi label="Tracked balance sheet" value={money(assets - liabilities)} note="Assets minus liabilities" />
+        <Kpi label="Tracked balance sheet" value={money(assets - liabilities)} note="Investments + assets minus liabilities" />
       </section>
       <section className="panel chart-panel">
         <h2>Income & Giving</h2>
