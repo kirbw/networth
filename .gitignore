@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 finance.db
 build/
+dist/
+node_modules/
+.codex

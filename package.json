@@ -3,7 +3,25 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:assets": "node tools/build-assets.mjs",
-    "check:frontend": "node --check assets/js/main.js && node --check assets/js/legacy-app.js && node --check assets/js/charts.js && node --check assets/js/page-meta.js && node --check assets/js/shell.js && node --check assets/js/theme.js"
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "check:frontend": "tsc --noEmit && vite build",
+    "build:assets": "vite build"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "chart.js": "^4.4.2",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "react": "^18.2.0",
+    "react-chartjs-2": "^5.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.21.1",
+    "vite": "^5.0.11"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.3.3"
   }
 }

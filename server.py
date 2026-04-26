@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import io
 import json
+import mimetypes
 import os
 import re
 import secrets
@@ -94,6 +95,33 @@ APP_HEAD_INJECTION = """
 APP_FOOTER_INJECTION = """
   <footer class="version-footer"><span id="version-info">Version ...</span></footer>
   <script type="module" src="/assets/js/main.js"></script>
+"""
+REACT_APP_TEMPLATE = """<!doctype html>
+<html lang="en" data-theme="system" data-resolved-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <title>NetWorth OS</title>
+  <script>
+    (function () {
+      try {
+        var preference = localStorage.getItem("networth.theme") || "__INITIAL_THEME_PREFERENCE__" || "system";
+        var resolved = preference === "system" ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : preference;
+        document.documentElement.dataset.theme = preference;
+        document.documentElement.dataset.resolvedTheme = resolved;
+      } catch (error) {
+        document.documentElement.dataset.theme = "system";
+        document.documentElement.dataset.resolvedTheme = "light";
+      }
+    }());
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  __REACT_ASSETS__
+</body>
+</html>
 """
 AUTH_CARD_TEMPLATE = """
 <section id="auth-card" class="card auth-card hidden">
@@ -376,6 +404,21 @@ def get_initial_theme_preference(user) -> str:
 def render_app_head_injection(user=None) -> str:
     server_preference = get_initial_theme_preference(user)
     return APP_HEAD_INJECTION.replace("__INITIAL_THEME_PREFERENCE__", json.dumps(server_preference))
+
+
+def render_initial_theme_script(preference: str) -> str:
+    return """
+  <script>
+    (function () {
+      try {
+        var preference = __INITIAL_THEME_PREFERENCE__ || "system";
+        var resolved = preference === "system" ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : preference;
+        document.documentElement.dataset.theme = preference;
+        document.documentElement.dataset.resolvedTheme = resolved;
+      } catch (error) {}
+    }());
+  </script>
+""".replace("__INITIAL_THEME_PREFERENCE__", json.dumps(preference))
 
 
 def apply_initial_theme_attributes(html: str, user) -> str:
@@ -1541,6 +1584,38 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             auth_card=AUTH_CARD_TEMPLATE.strip(),
             footer=APP_FOOTER_INJECTION.strip(),
         )
+        body = html.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_static_file(self, file_path: Path) -> bool:
+        if not file_path.exists() or not file_path.is_file():
+            return False
+        body = file_path.read_bytes()
+        content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_react_app(self) -> bool:
+        user = self._get_current_user()
+        theme_preference = "system"
+        if user:
+            with sqlite3.connect(DB_PATH) as conn:
+                theme_preference = normalize_theme_preference(get_user_setting(conn, user["id"], "theme_preference", "system"))
+        dist_index = Path("dist/index.html")
+        if dist_index.exists():
+            html = dist_index.read_text(encoding="utf-8")
+        else:
+            assets = '<script type="module" src="/src/main.tsx"></script>'
+            html = REACT_APP_TEMPLATE.replace("__REACT_ASSETS__", assets).replace("__INITIAL_THEME_PREFERENCE__", theme_preference)
         body = html.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -3027,6 +3102,17 @@ class FinanceHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+
+        dist_file = Path("dist") / parsed.path.lstrip("/")
+        if self._serve_static_file(dist_file):
+            return
+
+        local_file = Path(parsed.path.lstrip("/"))
+        if local_file.exists() and local_file.is_file() and local_file.suffix != ".html":
+            return super().do_GET()
+
+        if not parsed.path.startswith("/api/"):
+            return self._serve_react_app()
 
         if self._serve_templated_html(parsed.path):
             return

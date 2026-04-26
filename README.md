@@ -96,13 +96,22 @@ python3 server.py
 
 Then open: `http://localhost:3000`
 
+The frontend is now a Vite/React SPA. For active frontend development, run the Python API server and Vite dev server separately:
+
+```bash
+python3 server.py
+npm run dev
+```
+
+Vite serves the React app with `/api/*` proxied to `http://localhost:3000`. Production builds are served by `server.py` from `dist/`.
+
 ## Frontend release checks
 
 Use these before cutting a release:
 
 ```bash
 npm run check:frontend
-npm run build:assets
+npm run build
 python3 -m py_compile server.py
 ```
 
