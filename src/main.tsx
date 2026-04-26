@@ -1130,11 +1130,16 @@ function InvestmentsPage() {
   useEffect(() => { load().catch((e) => setMessage(e.message)); }, [load]);
   async function save(event: React.FormEvent) {
     event.preventDefault();
-    await api("/api/investments", { method: "POST", body: JSON.stringify({ id: editingId, ...form, ticker: String(form.ticker).toUpperCase(), shares: Number(form.shares), purchasePrice: Number(form.purchasePrice), currentPrice: form.currentPrice === "" ? "" : Number(form.currentPrice) }) });
-    setForm({ ticker: "", broker: "", companyName: "", currentPrice: "", manualQuote: false, shares: "", purchasePrice: "", purchaseDate: "" });
-    setEditingId(null);
-    await load();
-    setMessage("Stock saved.");
+    setMessage("");
+    try {
+      await api("/api/investments", { method: "POST", body: JSON.stringify({ id: editingId, ...form, ticker: String(form.ticker).toUpperCase(), shares: Number(form.shares), purchasePrice: Number(form.purchasePrice), currentPrice: form.currentPrice === "" ? "" : Number(form.currentPrice) }) });
+      setForm({ ticker: "", broker: "", companyName: "", currentPrice: "", manualQuote: false, shares: "", purchasePrice: "", purchaseDate: "" });
+      setEditingId(null);
+      await load();
+      setMessage("Stock saved.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to save stock.");
+    }
   }
   async function refresh() {
     const payload = await api<any>("/api/investments/refresh", { method: "POST", body: JSON.stringify({}) });
