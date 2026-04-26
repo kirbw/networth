@@ -1177,6 +1177,27 @@ td {
 }
 
 @media print {
+  /* Reset CSS variables to light theme so dark-mode users get clean print output */
+  :root,
+  html[data-resolved-theme="dark"] {
+    color-scheme: light;
+    --bg: #f4f6f8;
+    --panel: rgba(255, 255, 255, 0.92);
+    --panel-solid: #ffffff;
+    --text: #172033;
+    --muted: #66758d;
+    --faint: #8b98aa;
+    --border: rgba(46, 64, 91, 0.12);
+    --border-strong: rgba(46, 64, 91, 0.22);
+    --accent: #2563eb;
+    --accent-strong: #1746aa;
+    --accent-soft: rgba(37, 99, 235, 0.1);
+    --good: #16845f;
+    --bad: #c24135;
+    --shadow: none;
+    --shadow-soft: none;
+  }
+
   .sidebar,
   .topbar,
   .context-nav,
@@ -1201,7 +1222,7 @@ td {
   #root {
     min-height: auto;
     background: #fff !important;
-    color: #111827 !important;
+    color: #172033 !important;
   }
 
   .report-surface,
@@ -1213,35 +1234,27 @@ td {
   .statement-paper {
     max-width: none;
     margin: 0;
-    padding: 0;
+    padding: 1.5rem;
     border: 0;
     border-radius: 0;
     box-shadow: none;
     background: #fff;
-    color: #111827;
+    color: #172033;
   }
 
-  .statement-header {
-    border-bottom-color: #111827;
-  }
-
-  .statement-eyebrow,
-  .statement-header p,
-  .statement-meta dt,
-  .statement-summary span,
-  .statement-grand-total span,
-  .statement-subtotal span,
-  .signature-label {
-    color: #4b5563 !important;
+  /* Ensure summary card backgrounds actually print */
+  .statement-summary,
+  .statement-net {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   .statement-summary {
     break-inside: avoid;
-    border-color: #9ca3af;
   }
 
   .statement-net {
-    background: #eef2ff !important;
+    background: rgba(37, 99, 235, 0.08) !important;
   }
 
   .statement-section,
@@ -1252,24 +1265,8 @@ td {
     break-inside: avoid;
   }
 
-  .statement-table td,
-  .statement-section h3,
-  .statement-subtotal,
-  .statement-certification {
-    border-color: #d1d5db;
-  }
-
-  .statement-grand-total {
-    border-color: #111827;
-  }
-
-  .signature-line {
-    border-bottom-color: #111827;
-  }
-
   .panel {
     box-shadow: none;
-    border-color: #ddd;
     break-inside: avoid;
   }
 }
