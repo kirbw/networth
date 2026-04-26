@@ -1210,11 +1210,18 @@ td {
     display: none !important;
   }
 
-  .app-shell,
+  .app-shell {
+    display: block !important;
+    grid-template-columns: 1fr !important;
+    width: 100% !important;
+  }
+
   .main-shell,
   .page {
-    display: block;
-    padding: 0;
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
   }
 
   html,
