@@ -14,6 +14,7 @@ import {
   Menu,
   Moon,
   Pencil,
+  Printer,
   Settings,
   Shield,
   Sun,
@@ -72,6 +73,10 @@ const compactMoney = (value: any) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(Number(value || 0));
 const pct = (value: any) => `${Number(value || 0).toFixed(2)}%`;
 const asArray = <T,>(value: unknown): T[] => Array.isArray(value) ? value : [];
+type StatementItem = { description: string; value: number | null };
+type StatementCategory = { title: string; items: StatementItem[] };
+const statementTotal = (items: StatementItem[]) =>
+  items.reduce((sum, item) => sum + (item.value == null || Number.isNaN(item.value) ? 0 : item.value), 0);
 const summaryToChartRows = (summary: AnyRow) => [
   { label: "Stocks", total: Number(summary?.stocks || 0) },
   { label: "Precious metals", total: Number(summary?.preciousMetals || 0) },
@@ -1364,31 +1369,169 @@ function TaxesPage() {
 }
 
 function NetWorthReport() {
+  const { user } = useAuth();
   const [data, setData] = useState<Record<string, AnyRow[]>>({});
+  const [condensed, setCondensed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+  const reportDate = useMemo(() => new Date(), []);
+
   useEffect(() => {
     Promise.all([
       api<any[]>("/api/investments"), api<any[]>("/api/precious-metals"), api<any[]>("/api/real-estate"), api<any[]>("/api/business-ventures"), api<any[]>("/api/retirement-accounts"),
       api<any[]>("/api/assets/vehicles"), api<any[]>("/api/assets/equipment"), api<any[]>("/api/assets/guns"), api<any[]>("/api/assets/bank-accounts"), api<any[]>("/api/assets/cash"),
       api<any[]>("/api/liabilities/mortgages"), api<any[]>("/api/liabilities/credit-cards"), api<any[]>("/api/liabilities/loans"),
     ]).then(([stocks, metals, realEstate, business, retirement, vehicles, equipment, guns, bank, cash, mortgages, creditCards, loans]) =>
-      setData({ stocks, metals, realEstate, business, retirement, vehicles, equipment, guns, bank, cash, mortgages, creditCards, loans }));
+      setData({ stocks, metals, realEstate, business, retirement, vehicles, equipment, guns, bank, cash, mortgages, creditCards, loans }))
+      .catch((error) => setMessage(error instanceof Error ? error.message : "Unable to load net worth statement."))
+      .finally(() => setLoading(false));
   }, []);
-  const assetTotal = (data.stocks || []).reduce((s, r) => s + Number(r.shares || 0) * Number(r.current_price || 0), 0)
-    + (data.metals || []).reduce((s, r) => s + Number(r.current_value || 0), 0)
-    + (data.realEstate || []).reduce((s, r) => s + Number(r.current_value || 0) * Number(r.percentage_owned || 0) / 100, 0)
-    + (data.business || []).reduce((s, r) => s + Number(r.business_value || 0) * Number(r.percentage_owned || 0) / 100, 0)
-    + ["retirement", "vehicles", "equipment", "guns", "bank", "cash"].reduce((s, key) => s + (data[key] || []).reduce((x, r) => x + Number(r.value ?? r.balance ?? r.amount ?? 0), 0), 0);
-  const liabilityTotal = ["mortgages", "creditCards", "loans"].reduce((s, key) => s + (data[key] || []).reduce((x, r) => x + Number(r.current_balance || 0), 0), 0);
+
+  const assetCategories = useMemo<StatementCategory[]>(() => [
+    {
+      title: "Stocks",
+      items: (data.stocks || []).map((x) => ({
+        description: [x.ticker, x.company_name].filter(Boolean).join(" - "),
+        value: x.current_price == null ? null : Number(x.shares || 0) * Number(x.current_price || 0),
+      })),
+    },
+    { title: "Precious Metals", items: (data.metals || []).map((x) => ({ description: [x.metal_type, x.description].filter(Boolean).join(" - "), value: Number(x.current_value || 0) })) },
+    {
+      title: "Real Estate",
+      items: (data.realEstate || []).map((x) => ({
+        description: `${x.description || x.address}${x.address && x.description ? ` (${x.address})` : ""}${Number(x.percentage_owned) < 100 ? ` (${Number(x.percentage_owned).toFixed(0)}% owned)` : ""}`,
+        value: Number(x.current_value || 0) * (Number(x.percentage_owned || 0) / 100),
+      })),
+    },
+    { title: "Business Ventures", items: (data.business || []).map((x) => ({ description: String(x.business_name || "Business venture"), value: Number(x.business_value || 0) * (Number(x.percentage_owned || 0) / 100) })) },
+    { title: "Retirement Accounts", items: (data.retirement || []).map((x) => ({ description: [x.description, x.account_type, x.broker].filter(Boolean).join(" - "), value: Number(x.value || 0) })) },
+    { title: "Vehicles", items: (data.vehicles || []).map((x) => ({ description: [`${x.description || "Vehicle"}${x.model_year ? ` (${x.model_year})` : ""}`, [x.make, x.model].filter(Boolean).join(" "), x.vin ? `VIN: ${x.vin}` : ""].filter(Boolean).join(" - "), value: Number(x.value || 0) })) },
+    { title: "Equipment", items: (data.equipment || []).map((x) => ({ description: [`${x.description || "Equipment"}${x.model_year ? ` (${x.model_year})` : ""}`, x.equipment_type, [x.make, x.model].filter(Boolean).join(" ")].filter(Boolean).join(" - "), value: Number(x.value || 0) })) },
+    { title: "Firearms", items: (data.guns || []).map((x) => ({ description: [x.description, x.gun_type, x.manufacturer, x.model].filter(Boolean).join(" - "), value: Number(x.value || 0) })) },
+    { title: "Bank Accounts", items: (data.bank || []).map((x) => ({ description: [x.description, x.institution, x.account_type].filter(Boolean).join(" - "), value: Number(x.balance || 0) })) },
+    { title: "Cash", items: (data.cash || []).map((x) => ({ description: String(x.description || "Cash"), value: Number(x.amount || 0) })) },
+  ], [data]);
+
+  const liabilityCategories = useMemo<StatementCategory[]>(() => [
+    {
+      title: "Mortgages",
+      items: (data.mortgages || []).map((x) => {
+        const ownedPct = x.real_estate_percentage_owned == null ? 100 : Number(x.real_estate_percentage_owned);
+        const effectivePct = Number.isNaN(ownedPct) ? 100 : ownedPct;
+        const ownershipNote = x.real_estate_percentage_owned == null ? "" : ` (${effectivePct.toFixed(0)}% owned)`;
+        return {
+          description: `${x.description || "Mortgage"}${x.real_estate_address ? ` (${x.real_estate_address})` : ""}${ownershipNote}`,
+          value: Number(x.current_balance || 0) * (effectivePct / 100),
+        };
+      }),
+    },
+    { title: "Credit Cards", items: (data.creditCards || []).map((x) => ({ description: String(x.description || "Credit card"), value: Number(x.current_balance || 0) })) },
+    { title: "Loans", items: (data.loans || []).map((x) => ({ description: [x.description, x.loan_type].filter(Boolean).join(" - "), value: Number(x.current_balance || 0) })) },
+  ], [data]);
+
+  const visibleAssetCategories = assetCategories.filter((category) => category.items.length || statementTotal(category.items) !== 0);
+  const visibleLiabilityCategories = liabilityCategories.filter((category) => category.items.length || statementTotal(category.items) !== 0);
+  const assetTotal = visibleAssetCategories.reduce((sum, category) => sum + statementTotal(category.items), 0);
+  const liabilityTotal = visibleLiabilityCategories.reduce((sum, category) => sum + statementTotal(category.items), 0);
+  const netWorth = assetTotal - liabilityTotal;
+  const ownerName = user?.fullName || user?.username || "Account holder";
+  const generatedLabel = reportDate.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+
   return (
-    <ReportSurface title="Net Worth Statement">
-      <section className="kpi-strip report-kpis">
-        <Kpi label="Assets + investments" value={money(assetTotal)} note="Tracked current value" />
-        <Kpi label="Liabilities" value={money(liabilityTotal)} note="Current balances" />
-        <Kpi label="Net worth" value={money(assetTotal - liabilityTotal)} note={`Generated ${new Date().toLocaleDateString()}`} />
+    <div className="net-worth-statement">
+      <section className="panel statement-toolbar">
+        <div>
+          <h2>Net Worth Statement</h2>
+          <p className="muted">Print a detailed statement or a condensed totals-only version for lender review.</p>
+        </div>
+        <div className="statement-actions">
+          <label className="toggle-row statement-toggle"><input type="checkbox" checked={condensed} onChange={(event) => setCondensed(event.target.checked)} /> Condensed report</label>
+          <button className="primary-btn compact icon-text-btn" type="button" onClick={() => window.print()}><Printer size={16} /> Print / Save PDF</button>
+        </div>
       </section>
-      {Object.entries(data).map(([key, rows]) => <ReportTable key={key} title={key.replace(/([A-Z])/g, " $1")} rows={rows} />)}
-    </ReportSurface>
+
+      <section className={clsx("statement-paper", condensed && "is-condensed")}>
+        <header className="statement-header">
+          <div>
+            <p className="statement-eyebrow">Personal Financial Statement</p>
+            <h2>Net Worth Statement</h2>
+            <p>Prepared for {ownerName}</p>
+          </div>
+          <dl className="statement-meta">
+            <div><dt>As Of</dt><dd>{generatedLabel}</dd></div>
+            <div><dt>Report Type</dt><dd>{condensed ? "Condensed" : "Detailed"}</dd></div>
+          </dl>
+        </header>
+
+        {message && <p className="form-message">{message}</p>}
+        {loading ? <EmptyState text="Loading statement..." /> : (
+          <>
+            <section className="statement-summary">
+              <div><span>Assets and Investments</span><strong>{money(assetTotal)}</strong></div>
+              <div><span>Liabilities</span><strong>{money(liabilityTotal)}</strong></div>
+              <div className="statement-net"><span>Total Net Worth</span><strong>{money(netWorth)}</strong></div>
+            </section>
+
+            <StatementGroup title="Assets and Investments" categories={visibleAssetCategories} condensed={condensed} empty="No assets or investments are currently tracked." />
+            <StatementSubtotal label="Assets and Investments Subtotal" value={assetTotal} />
+            <StatementGroup title="Liabilities" categories={visibleLiabilityCategories} condensed={condensed} empty="No liabilities are currently tracked." />
+            <StatementSubtotal label="Liabilities Subtotal" value={liabilityTotal} />
+
+            <section className="statement-grand-total">
+              <span>Total Net Worth</span>
+              <strong>{money(netWorth)}</strong>
+            </section>
+
+            <section className="statement-certification">
+              <p>The information in this financial statement is accurate and complete to the best of my knowledge.</p>
+              <div className="signature-row">
+                <div className="signature-field"><span className="signature-line" /><span className="signature-label">Signature</span></div>
+                <div className="signature-field signature-date"><span className="signature-line" /><span className="signature-label">Date</span></div>
+              </div>
+            </section>
+          </>
+        )}
+      </section>
+    </div>
   );
+}
+
+function StatementGroup({ title, categories, condensed, empty }: { title: string; categories: StatementCategory[]; condensed: boolean; empty: string }) {
+  return (
+    <section className="statement-section">
+      <h3>{title}</h3>
+      {categories.length === 0 ? <p className="statement-empty">{empty}</p> : categories.map((category) => (
+        <StatementCategoryTable key={category.title} category={category} condensed={condensed} />
+      ))}
+    </section>
+  );
+}
+
+function StatementCategoryTable({ category, condensed }: { category: StatementCategory; condensed: boolean }) {
+  const total = statementTotal(category.items);
+  return (
+    <section className={clsx("statement-category", condensed && "is-condensed")}>
+      {!condensed && <h4>{category.title}</h4>}
+      <table className="statement-table">
+        <tbody>
+          {!condensed && category.items.map((item, index) => (
+            <tr key={`${item.description}-${index}`}>
+              <td>{item.description || "Unlabeled item"}</td>
+              <td>{item.value == null ? "N/A" : money(item.value)}</td>
+            </tr>
+          ))}
+          <tr className="statement-total-row">
+            <td>{condensed ? category.title : `${category.title} Total`}</td>
+            <td>{money(total)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function StatementSubtotal({ label, value }: { label: string; value: number }) {
+  return <section className="statement-subtotal"><span>{label}</span><strong>{money(value)}</strong></section>;
 }
 
 function ReportTable({ title, rows }: { title: string; rows: AnyRow[] }) {
