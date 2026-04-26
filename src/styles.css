@@ -329,6 +329,8 @@ a {
 
 .session-pill,
 .total-pill {
+  display: flex;
+  align-items: center;
   min-height: 2.35rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
