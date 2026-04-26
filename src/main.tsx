@@ -184,6 +184,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
         label: "Investments",
         icon: Landmark,
         children: [
+          { path: "/portfolio/investments", label: "Stocks" },
           { path: "/portfolio/precious-metals", label: "Precious Metals" },
           { path: "/portfolio/real-estate", label: "Real Estate" },
           { path: "/portfolio/business-ventures", label: "Business Ventures" },
@@ -617,6 +618,7 @@ function CrudPage({ config }: { config: CrudConfig }) {
   const [rows, setRows] = useState<AnyRow[]>([]);
   const [form, setForm] = useState<AnyRow>(() => initialForm(config.fields));
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [dynamicOptions, setDynamicOptions] = useState<Record<string, { value: string; label: string }[]>>({});
@@ -639,6 +641,7 @@ function CrudPage({ config }: { config: CrudConfig }) {
       await api(config.endpoint, { method: "POST", body: JSON.stringify(payload) });
       setForm(initialForm(config.fields));
       setEditingId(null);
+      setShowForm(false);
       await load();
       setMessage(config.saveText || "Saved.");
     } catch (error) {
@@ -657,16 +660,17 @@ function CrudPage({ config }: { config: CrudConfig }) {
   function edit(row: AnyRow) {
     setEditingId(Number(row.id));
     setForm(Object.fromEntries(config.fields.map((field) => [field.name, row[field.from || field.name] ?? field.defaultValue ?? ""])));
+    setShowForm(true);
   }
 
   const total = config.total ? rows.reduce((sum, row) => sum + config.total!.value(row), 0) : null;
 
   return (
-    <div className="workspace-grid">
-      <section className="panel form-panel">
+    <div className={clsx("workspace-grid", !showForm && "form-collapsed")}>
+      {showForm && <section className="panel form-panel reveal-panel">
         <div className="panel-heading">
           <h2>{editingId ? `Update ${config.title}` : `Add ${config.title}`}</h2>
-          {editingId && <button className="ghost-btn" type="button" onClick={() => { setEditingId(null); setForm(initialForm(config.fields)); }}>Cancel edit</button>}
+          <button className="ghost-btn" type="button" onClick={() => { setEditingId(null); setForm(initialForm(config.fields)); setShowForm(false); }}>Close</button>
         </div>
         <form className="form-grid" onSubmit={save}>
           {config.fields.map((field) => (
@@ -686,11 +690,16 @@ function CrudPage({ config }: { config: CrudConfig }) {
           <button className="primary-btn" disabled={busy}>{busy ? "Saving..." : editingId ? "Update" : "Save"}</button>
         </form>
         {message && <p className="form-message">{message}</p>}
-      </section>
+      </section>}
       <section className="panel table-panel">
         <div className="panel-heading">
           <h2>{config.title}</h2>
-          {config.total && <span className="total-pill">{config.total.label}: {money(total)}</span>}
+          <div className="panel-actions">
+            {config.total && <span className="total-pill">{config.total.label}: {money(total)}</span>}
+            <button className="primary-btn compact" type="button" onClick={() => { setEditingId(null); setForm(initialForm(config.fields)); setShowForm((value) => !value); }}>
+              {showForm ? "Hide form" : `Add ${config.title}`}
+            </button>
+          </div>
         </div>
         <DataTable rows={rows} columns={config.columns} empty={config.empty} actions={(row) => <Actions onEdit={() => edit(row)} onDelete={() => remove(row)} />} />
       </section>
@@ -1008,6 +1017,7 @@ function Dashboard() {
   const [assets, setAssets] = useState(0);
   const [liabilities, setLiabilities] = useState(0);
   const [form, setForm] = useState<AnyRow>({ year: new Date().getFullYear(), income: "", donation: "", netWorth: "" });
+  const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState("");
 
   const load = useCallback(async () => {
@@ -1035,6 +1045,7 @@ function Dashboard() {
     await api("/api/records", { method: "POST", body: JSON.stringify({ year: Number(form.year), income: Number(form.income), donation: Number(form.donation), netWorth: form.netWorth === "" ? null : Number(form.netWorth) }) });
     setForm({ year: new Date().getFullYear(), income: "", donation: "", netWorth: "" });
     await load();
+    setShowForm(false);
     setMessage("Annual record saved.");
   }
 
@@ -1058,8 +1069,15 @@ function Dashboard() {
         <h2>Investment Mix</h2>
         <Doughnut data={{ labels: investments.map((x) => x.label || x.category), datasets: [{ data: investments.map((x) => Number(x.total || x.value || 0)), backgroundColor: ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed"] }] }} options={{ responsive: true, maintainAspectRatio: false }} />
       </section>
-      <section className="panel form-panel">
-        <h2>Add Annual Data</h2>
+      <section className="panel chart-panel action-panel">
+        <div>
+          <h2>Annual Data</h2>
+          <p className="muted">Keep the dashboard focused, then open the entry form only when you need it.</p>
+        </div>
+        <button className="primary-btn" type="button" onClick={() => setShowForm((value) => !value)}>{showForm ? "Hide form" : "Add annual data"}</button>
+      </section>
+      {showForm && <section className="panel form-panel reveal-panel">
+        <div className="panel-heading"><h2>Add Annual Data</h2><button className="ghost-btn" type="button" onClick={() => setShowForm(false)}>Close</button></div>
         <form className="form-grid" onSubmit={save}>
           <Field label="Tax year" type="number" value={form.year} onChange={(v) => setForm((f) => ({ ...f, year: v }))} required />
           <Field label="Total income" type="number" step="0.01" value={form.income} onChange={(v) => setForm((f) => ({ ...f, income: v }))} required />
@@ -1068,7 +1086,7 @@ function Dashboard() {
           <button className="primary-btn">Save year</button>
         </form>
         {message && <p className="form-message">{message}</p>}
-      </section>
+      </section>}
     </div>
   );
 }
@@ -1081,6 +1099,7 @@ function RecordsPage() {
   const [records, setRecords] = useState<AnyRow[]>([]);
   const [form, setForm] = useState<AnyRow>({ year: "", income: "", donation: "", netWorth: "" });
   const [editingYear, setEditingYear] = useState<number | null>(null);
+  const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState("");
   const load = useCallback(async () => setRecords((await api<any[]>("/api/records")).sort((a, b) => Number(b.year) - Number(a.year))), []);
   useEffect(() => { load().catch((e) => setMessage(e.message)); }, [load]);
@@ -1091,13 +1110,17 @@ function RecordsPage() {
     if (editingYear !== null && editingYear !== year) await api(`/api/records/${editingYear}`, { method: "DELETE" });
     setEditingYear(null);
     setForm({ year: "", income: "", donation: "", netWorth: "" });
+    setShowForm(false);
     await load();
     setMessage("Record saved.");
   }
   return (
-    <div className="workspace-grid">
-      <section className="panel form-panel">
-        <h2>{editingYear ? "Update Annual Record" : "Add Annual Record"}</h2>
+    <div className={clsx("workspace-grid", !showForm && "form-collapsed")}>
+      {showForm && <section className="panel form-panel reveal-panel">
+        <div className="panel-heading">
+          <h2>{editingYear ? "Update Annual Record" : "Add Annual Record"}</h2>
+          <button className="ghost-btn" type="button" onClick={() => { setEditingYear(null); setForm({ year: "", income: "", donation: "", netWorth: "" }); setShowForm(false); }}>Close</button>
+        </div>
         <form className="form-grid" onSubmit={save}>
           <Field label="Tax year" type="number" value={form.year} onChange={(v) => setForm((f) => ({ ...f, year: v }))} required />
           <Field label="Income" type="number" step="0.01" value={form.income} onChange={(v) => setForm((f) => ({ ...f, income: v }))} required />
@@ -1106,16 +1129,19 @@ function RecordsPage() {
           <button className="primary-btn">Save record</button>
         </form>
         {message && <p className="form-message">{message}</p>}
-      </section>
+      </section>}
       <section className="panel table-panel">
-        <h2>Annual Records</h2>
+        <div className="panel-heading">
+          <h2>Annual Records</h2>
+          <button className="primary-btn compact" type="button" onClick={() => { setEditingYear(null); setForm({ year: "", income: "", donation: "", netWorth: "" }); setShowForm((value) => !value); }}>{showForm ? "Hide form" : "Add record"}</button>
+        </div>
         <DataTable rows={records} columns={[
           { key: "year", label: "Year" },
           { key: "income", label: "Income", render: (r) => money(r.income) },
           { key: "donation", label: "Donations", render: (r) => money(r.donation) },
           { key: "giving", label: "Giving Rate", render: (r) => `${(Number(r.income) ? Number(r.donation) / Number(r.income) * 100 : 0).toFixed(2)}%` },
           { key: "netWorth", label: "Net Worth", render: (r) => r.netWorth == null ? "—" : money(r.netWorth) },
-        ]} actions={(row) => <Actions onEdit={() => { setEditingYear(Number(row.year)); setForm({ year: row.year, income: row.income, donation: row.donation, netWorth: row.netWorth ?? "" }); }} onDelete={async () => { await api(`/api/records/${row.year}`, { method: "DELETE" }); await load(); }} />} />
+        ]} actions={(row) => <Actions onEdit={() => { setEditingYear(Number(row.year)); setForm({ year: row.year, income: row.income, donation: row.donation, netWorth: row.netWorth ?? "" }); setShowForm(true); }} onDelete={async () => { await api(`/api/records/${row.year}`, { method: "DELETE" }); await load(); }} />} />
       </section>
     </div>
   );
@@ -1125,6 +1151,7 @@ function InvestmentsPage() {
   const [rows, setRows] = useState<AnyRow[]>([]);
   const [form, setForm] = useState<AnyRow>({ ticker: "", broker: "", companyName: "", currentPrice: "", manualQuote: false, shares: "", purchasePrice: "", purchaseDate: "" });
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState("");
   const load = useCallback(async () => setRows(await api("/api/investments")), []);
   useEffect(() => { load().catch((e) => setMessage(e.message)); }, [load]);
@@ -1135,6 +1162,7 @@ function InvestmentsPage() {
       await api("/api/investments", { method: "POST", body: JSON.stringify({ id: editingId, ...form, ticker: String(form.ticker).toUpperCase(), shares: Number(form.shares), purchasePrice: Number(form.purchasePrice), currentPrice: form.currentPrice === "" ? "" : Number(form.currentPrice) }) });
       setForm({ ticker: "", broker: "", companyName: "", currentPrice: "", manualQuote: false, shares: "", purchasePrice: "", purchaseDate: "" });
       setEditingId(null);
+      setShowForm(false);
       await load();
       setMessage("Stock saved.");
     } catch (error) {
@@ -1147,9 +1175,12 @@ function InvestmentsPage() {
     setMessage(`Prices refreshed (${payload.updated || 0} updated${payload.failed ? `, ${payload.failed} failed` : ""}).`);
   }
   return (
-    <div className="workspace-grid">
-      <section className="panel form-panel">
-        <div className="panel-heading"><h2>{editingId ? "Update Stock" : "Add Stock"}</h2><button className="ghost-btn" type="button" onClick={refresh}>Refresh prices</button></div>
+    <div className={clsx("workspace-grid", !showForm && "form-collapsed")}>
+      {showForm && <section className="panel form-panel reveal-panel">
+        <div className="panel-heading">
+          <h2>{editingId ? "Update Stock" : "Add Stock"}</h2>
+          <button className="ghost-btn" type="button" onClick={() => { setEditingId(null); setForm({ ticker: "", broker: "", companyName: "", currentPrice: "", manualQuote: false, shares: "", purchasePrice: "", purchaseDate: "" }); setShowForm(false); }}>Close</button>
+        </div>
         <form className="form-grid" onSubmit={save}>
           <Field label="Ticker" value={form.ticker} onChange={(v) => setForm((f) => ({ ...f, ticker: v }))} required />
           <Field label="Broker" value={form.broker} onChange={(v) => setForm((f) => ({ ...f, broker: v }))} />
@@ -1161,9 +1192,15 @@ function InvestmentsPage() {
           <button className="primary-btn">Save stock</button>
         </form>
         {message && <p className="form-message">{message}</p>}
-      </section>
+      </section>}
       <section className="panel table-panel">
-        <h2>Stocks</h2>
+        <div className="panel-heading">
+          <h2>Stocks</h2>
+          <div className="panel-actions">
+            <button className="ghost-btn compact" type="button" onClick={refresh}>Refresh prices</button>
+            <button className="primary-btn compact" type="button" onClick={() => { setEditingId(null); setForm({ ticker: "", broker: "", companyName: "", currentPrice: "", manualQuote: false, shares: "", purchasePrice: "", purchaseDate: "" }); setShowForm((value) => !value); }}>{showForm ? "Hide form" : "Add stock"}</button>
+          </div>
+        </div>
         <DataTable rows={rows} columns={[
           { key: "ticker", label: "Ticker" },
           { key: "broker", label: "Broker" },
@@ -1176,7 +1213,7 @@ function InvestmentsPage() {
             const value = Number(r.shares) * Number(r.current_price || 0);
             return r.current_price == null ? "—" : <span className={value - basis >= 0 ? "gain" : "loss"}>{money(value - basis)}</span>;
           } },
-        ]} actions={(row) => <Actions onEdit={() => { setEditingId(row.id); setForm({ ticker: row.ticker, broker: row.broker || "", companyName: row.company_name || "", currentPrice: row.current_price ?? "", manualQuote: Boolean(row.manual_quote), shares: row.shares, purchasePrice: row.purchase_price, purchaseDate: row.purchase_date }); }} onDelete={async () => { await api(`/api/investments/${row.id}`, { method: "DELETE" }); await load(); }} />} />
+        ]} actions={(row) => <Actions onEdit={() => { setEditingId(row.id); setForm({ ticker: row.ticker, broker: row.broker || "", companyName: row.company_name || "", currentPrice: row.current_price ?? "", manualQuote: Boolean(row.manual_quote), shares: row.shares, purchasePrice: row.purchase_price, purchaseDate: row.purchase_date }); setShowForm(true); }} onDelete={async () => { await api(`/api/investments/${row.id}`, { method: "DELETE" }); await load(); }} />} />
       </section>
     </div>
   );
@@ -1246,6 +1283,7 @@ function GoalsPage() {
   };
   const [rows, setRows] = useState<AnyRow[]>([]);
   const [form, setForm] = useState<AnyRow>({ name: "", goalType: "save-up", targetAmount: "", targetCategory: "investment", targetSubtype: "stocks", goalDate: "" });
+  const [showForm, setShowForm] = useState(false);
   const load = useCallback(async () => setRows(await api("/api/goals")), []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -1256,12 +1294,13 @@ function GoalsPage() {
     event.preventDefault();
     await api("/api/goals", { method: "POST", body: JSON.stringify({ ...form, targetAmount: Number(form.targetAmount) }) });
     setForm({ name: "", goalType: "save-up", targetAmount: "", targetCategory: "investment", targetSubtype: "stocks", goalDate: "" });
+    setShowForm(false);
     await load();
   }
   return (
-    <div className="workspace-grid">
-      <section className="panel form-panel">
-        <h2>Add Goal</h2>
+    <div className={clsx("workspace-grid", !showForm && "form-collapsed")}>
+      {showForm && <section className="panel form-panel reveal-panel">
+        <div className="panel-heading"><h2>Add Goal</h2><button className="ghost-btn" type="button" onClick={() => setShowForm(false)}>Close</button></div>
         <form className="form-grid" onSubmit={save}>
           <Field label="Goal name" value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} required />
           <Field label="Goal type" value={form.goalType} onChange={(v) => setForm((f) => ({ ...f, goalType: v }))} options={[{ value: "save-up", label: "Save up" }, { value: "pay-down", label: "Pay down" }]} />
@@ -1271,9 +1310,9 @@ function GoalsPage() {
           <Field label="Goal date" type="date" value={form.goalDate} onChange={(v) => setForm((f) => ({ ...f, goalDate: v }))} />
           <button className="primary-btn">Save goal</button>
         </form>
-      </section>
+      </section>}
       <section className="panel table-panel">
-        <h2>Goals</h2>
+        <div className="panel-heading"><h2>Goals</h2><button className="primary-btn compact" type="button" onClick={() => setShowForm((value) => !value)}>{showForm ? "Hide form" : "Add goal"}</button></div>
         <DataTable rows={rows} columns={[
           { key: "name", label: "Name" },
           { key: "goal_type", label: "Type" },
@@ -1289,6 +1328,7 @@ function GoalsPage() {
 function TaxesPage() {
   const [rows, setRows] = useState<AnyRow[]>([]);
   const [form, setForm] = useState<AnyRow>({ taxYear: "", federalTax: "", stateTax: "", localTax: "", notes: "", file: null });
+  const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState("");
   const load = useCallback(async () => setRows(await api("/api/taxes")), []);
   useEffect(() => { load(); }, [load]);
@@ -1309,13 +1349,14 @@ function TaxesPage() {
       }),
     });
     setForm({ taxYear: "", federalTax: "", stateTax: "", localTax: "", notes: "", file: null });
+    setShowForm(false);
     await load();
     setMessage("Tax year saved.");
   }
   return (
-    <div className="workspace-grid">
-      <section className="panel form-panel">
-        <h2>Add Tax Year</h2>
+    <div className={clsx("workspace-grid", !showForm && "form-collapsed")}>
+      {showForm && <section className="panel form-panel reveal-panel">
+        <div className="panel-heading"><h2>Add Tax Year</h2><button className="ghost-btn" type="button" onClick={() => setShowForm(false)}>Close</button></div>
         <form className="form-grid" onSubmit={save}>
           <Field label="Tax year" type="number" value={form.taxYear} onChange={(v) => setForm((f) => ({ ...f, taxYear: v }))} required />
           <Field label="Federal tax" type="number" step="0.01" value={form.federalTax} onChange={(v) => setForm((f) => ({ ...f, federalTax: v }))} />
@@ -1326,9 +1367,9 @@ function TaxesPage() {
           <button className="primary-btn">Save tax year</button>
         </form>
         {message && <p className="form-message">{message}</p>}
-      </section>
+      </section>}
       <section className="panel table-panel">
-        <h2>Taxes</h2>
+        <div className="panel-heading"><h2>Taxes</h2><button className="primary-btn compact" type="button" onClick={() => setShowForm((value) => !value)}>{showForm ? "Hide form" : "Add tax year"}</button></div>
         <DataTable rows={rows} columns={[
           { key: "tax_year", label: "Year" },
           { key: "federal_tax", label: "Federal", render: (r) => money(r.federal_tax) },
